@@ -1,0 +1,58 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isMasterAdmin() {
+      return isSignedIn() && 
+        (request.auth.token.email.lower() == 'khevineoliveira@gmail.com' ||
+         (request.auth.uid != null && 
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'));
+    }
+
+    // Public read and admin write for products, coupons and settings
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isMasterAdmin();
+    }
+
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isMasterAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isMasterAdmin();
+    }
+
+    // User profiles - strict isolation (prevent IDOR/BOLA)
+    match /users/{userId} {
+      allow read, write: if isSignedIn() && (request.auth.uid == userId || isMasterAdmin());
+    }
+
+    // Customer orders - creation, reading, updating and deletion
+    match /orders/{orderId} {
+      allow read, write: if true;
+    }
+
+    // Employees and staff credentials - strictly admin only
+    match /employees/{employeeId} {
+      allow read, write: if isMasterAdmin();
+    }
+
+    // Financial transactions & DRE ledger
+    match /financialTransactions/{txId} {
+      allow read, write: if true;
+    }
+
+    // Fallback: Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

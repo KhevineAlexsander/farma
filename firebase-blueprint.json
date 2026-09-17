@@ -1,0 +1,121 @@
+{
+  "entities": {
+    "users": {
+      "title": "Users",
+      "description": "User profiles for clients, staff and admins",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["CLIENTE", "ADMIN", "STAFF"] },
+        "staffRole": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "email", "role"]
+    },
+    "products": {
+      "title": "Products",
+      "description": "Store products catalogue",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "dosage": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" }
+      },
+      "required": ["name", "price", "stock"]
+    },
+    "orders": {
+      "title": "Orders",
+      "description": "Customer purchase orders",
+      "type": "object",
+      "properties": {
+        "orderNumber": { "type": "string" },
+        "total": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["orderNumber", "total", "status"]
+    },
+    "employees": {
+      "title": "Employees",
+      "description": "Staff and internal administrator records",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["name", "email", "role"]
+    },
+    "coupons": {
+      "title": "Coupons",
+      "description": "Discount coupons",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "type": { "type": "string" },
+        "value": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["code", "type", "value"]
+    },
+    "settings": {
+      "title": "Store Settings",
+      "description": "Global store configuration",
+      "type": "object",
+      "properties": {
+        "storeName": { "type": "string" },
+        "freeShippingMinAmount": { "type": "number" }
+      }
+    },
+    "financialTransactions": {
+      "title": "Financial Transactions",
+      "description": "Financial ledger transactions and DRE accounting records",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["ENTRADA", "SAIDA"] },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "orderId": { "type": "string" }
+      },
+      "required": ["date", "type", "description", "category", "amount"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "products",
+      "description": "Public store product catalogue"
+    },
+    "/settings/{settingId}": {
+      "schema": "settings",
+      "description": "Store configuration parameters"
+    },
+    "/coupons/{couponId}": {
+      "schema": "coupons",
+      "description": "Store promotional coupons"
+    },
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "Isolated customer and user profiles"
+    },
+    "/orders/{orderId}": {
+      "schema": "orders",
+      "description": "Customer purchase orders"
+    },
+    "/employees/{employeeId}": {
+      "schema": "employees",
+      "description": "Staff internal management records"
+    },
+    "/financialTransactions/{txId}": {
+      "schema": "financialTransactions",
+      "description": "Protected financial entries and exits"
+    }
+  }
+}

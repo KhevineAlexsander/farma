@@ -1,0 +1,6 @@
+{
+  "name": "Peptide Imports Farma",
+  "description": "E-commerce e sistema de gestão completo para peptídeos importados de alta pureza com catálogo, carrinho e painel administrativo ERP.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
