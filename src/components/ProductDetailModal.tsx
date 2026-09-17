@@ -84,18 +84,7 @@ export const ProductDetailModal: React.FC = () => {
                 {product.description}
               </p>
 
-              {/* Benefits list */}
-              <div className="space-y-1.5 pt-1">
-                <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Benefícios Primários:
-                </p>
-                {product.benefits.map((b, idx) => (
-                  <div key={idx} className="flex items-center gap-2 text-xs text-slate-700 font-medium">
-                    <Check className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>{b}</span>
-                  </div>
-                ))}
-              </div>
+              {/* Benefits section removed */}
 
               {/* Price & Stock info */}
               <div className="pt-2 border-t border-slate-200 flex items-baseline justify-between">

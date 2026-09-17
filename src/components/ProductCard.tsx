@@ -75,15 +75,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 {product.dosage}
               </p>
 
-              {/* 3 Main Benefits with Checkmarks */}
-              <ul className="mt-2.5 space-y-1">
-                {product.benefits.slice(0, 3).map((benefit, idx) => (
-                  <li key={idx} className="flex items-center gap-1.5 text-[11px] sm:text-xs text-slate-600 font-medium">
-                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0 stroke-[2.5]" />
-                    <span className="truncate">{benefit}</span>
-                  </li>
-                ))}
-              </ul>
+              {/* Benefits list removed */}
             </div>
 
             {/* Price in BRL (R$) with strikethrough if on promotion */}

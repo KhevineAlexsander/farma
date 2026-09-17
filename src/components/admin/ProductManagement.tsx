@@ -102,7 +102,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
           stock: 35,
           capColor: category.toLowerCase().includes('emagrecimento') ? '#22C55E' : category.toLowerCase().includes('beleza') ? '#EC4899' : '#0088FF',
           description: `Produto farmacêutico importado de alta pureza (${productName} ${dosageStr}).`,
-          benefits: ['Laudo HPLC certificado', 'Alta biodisponibilidade', 'Cadeia fria garantida'],
+          benefits: ['Laudo HPLC certificado', 'Alta biodisponibilidade'],
           purity: '99.6% HPLC',
           storage: '2°C a 8°C (Refrigerado)',
           reconstitution: 'Reconstituir com água bacteriostática estéril',
@@ -818,31 +818,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                 )}
               </div>
 
-              {/* 3 Main Benefits */}
-              <div className="space-y-2">
-                <label className="block text-slate-300 font-semibold">3 Benefícios Principais (Cards):</label>
-                <input
-                  type="text"
-                  value={benefit1}
-                  onChange={(e) => setBenefit1(e.target.value)}
-                  placeholder="Benefício 1 (ex: Regeneração celular)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white"
-                />
-                <input
-                  type="text"
-                  value={benefit2}
-                  onChange={(e) => setBenefit2(e.target.value)}
-                  placeholder="Benefício 2 (ex: Rejuvenescimento)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white"
-                />
-                <input
-                  type="text"
-                  value={benefit3}
-                  onChange={(e) => setBenefit3(e.target.value)}
-                  placeholder="Benefício 3 (ex: Pele mais firme)"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white"
-                />
-              </div>
+
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Descrição Detalhada</label>
