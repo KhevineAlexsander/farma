@@ -1,11 +1,35 @@
 import React, { useState } from 'react';
-import { Settings, MessageSquare, Type, Bell, Mail, CheckCircle2, RotateCcw, ShieldCheck, Truck, Store, AlertCircle, Tag, UploadCloud, RefreshCw } from 'lucide-react';
+import {
+  Settings,
+  MessageSquare,
+  Type,
+  Bell,
+  Mail,
+  CheckCircle2,
+  RotateCcw,
+  ShieldCheck,
+  Truck,
+  Store,
+  AlertCircle,
+  Tag,
+  UploadCloud,
+  RefreshCw,
+  Globe,
+  ExternalLink,
+  Copy,
+  Check,
+  Database,
+  Layers,
+  Sparkles,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_SETTINGS } from '../../data/mockData';
+import { FIRESTORE_DATABASE_ID, firebaseConfig } from '../../lib/firebase';
 
 export const StoreSettingsTab: React.FC = () => {
   const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast } = useApp();
   const [isSaving, setIsSaving] = useState(false);
+  const [copiedUrl, setCopiedUrl] = useState(false);
 
   const [formData, setFormData] = useState({
     storeName: storeSettings.storeName || 'PEPTIDE IMPORTS FARMA',
@@ -22,10 +46,21 @@ export const StoreSettingsTab: React.FC = () => {
     pickupAddress: storeSettings.pickupAddress || 'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
     pickupEstimatedTime: storeSettings.pickupEstimatedTime || 'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',
     couponsEnabled: storeSettings.couponsEnabled ?? true,
+    siteUrl: storeSettings.siteUrl || 'https://peptideimports.vercel.app',
+    vercelDomain: storeSettings.vercelDomain || 'peptideimports.vercel.app',
+    customDomainNotes: storeSettings.customDomainNotes || '',
   });
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleCopyUrl = () => {
+    const url = formData.siteUrl.startsWith('http') ? formData.siteUrl : `https://${formData.siteUrl}`;
+    navigator.clipboard.writeText(url);
+    setCopiedUrl(true);
+    showToast('URL da loja copiada para a área de transferência!');
+    setTimeout(() => setCopiedUrl(false), 2000);
   };
 
   const handleSave = async (e?: React.FormEvent) => {
@@ -92,6 +127,162 @@ export const StoreSettingsTab: React.FC = () => {
       </div>
 
       <form onSubmit={handleSave} className="space-y-6">
+
+        {/* SECTION: VERCEL DOMAIN & FIREBASE STATUS BANNER */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* Vercel & Store Domain Config */}
+          <div className="lg:col-span-7 bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/40 border border-cyan-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white font-tech flex items-center gap-2">
+                    <span>DOMÍNIO DA VERCEL & URL DA LOJA</span>
+                    <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold">
+                      VERCEL READY
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Defina o link do seu site na Vercel ou domínio próprio (.com.br) para pedidos e links do WhatsApp.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  URL Principal da Loja (Vercel ou Domínio Próprio) *
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="url"
+                      value={formData.siteUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        handleChange('siteUrl', val);
+                        try {
+                          const clean = val.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+                          handleChange('vercelDomain', clean);
+                        } catch {}
+                      }}
+                      placeholder="https://peptideimports.vercel.app ou https://seusite.com.br"
+                      className="w-full pl-3.5 pr-4 py-2.5 bg-slate-950 border border-cyan-500/40 rounded-xl text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/50"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyUrl}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors shrink-0"
+                    title="Copiar URL"
+                  >
+                    {copiedUrl ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    <span>{copiedUrl ? 'Copiado!' : 'Copiar'}</span>
+                  </button>
+
+                  <a
+                    href={formData.siteUrl.startsWith('http') ? formData.siteUrl : `https://${formData.siteUrl}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 text-xs font-semibold flex items-center gap-1.5 border border-cyan-500/30 transition-colors shrink-0"
+                    title="Abrir site em nova aba"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    <span>Abrir</span>
+                  </a>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1.5">
+                  Este link será anexado automaticamente às mensagens de WhatsApp geradas no fechamento de pedidos e comprovantes.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Nome do Domínio (Host)
+                </label>
+                <input
+                  type="text"
+                  value={formData.vercelDomain}
+                  onChange={(e) => handleChange('vercelDomain', e.target.value)}
+                  placeholder="Ex: peptideimports.vercel.app"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 text-xs font-mono focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2 text-[11px] text-slate-400">
+                <div className="flex items-center gap-2 font-semibold text-slate-200">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>Dica de Deploy na Vercel:</span>
+                </div>
+                <p>
+                  O arquivo <code className="text-cyan-300 font-mono">vercel.json</code> já está configurado na raiz para Single Page Application (SPA). Basta conectar o repositório no dashboard da Vercel e fazer o deploy.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Firebase Database Connection Status */}
+          <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-900/90 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white font-tech">FIREBASE FIRESTORE</h3>
+                  <p className="text-[11px] text-slate-400">
+                    Sincronização em tempo real ativa
+                  </p>
+                </div>
+              </div>
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                CONECTADO
+              </span>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
+                <div className="flex items-center justify-between text-slate-400 text-[10px]">
+                  <span>BANCO FIRESTORE ID:</span>
+                  <span className="text-emerald-400 font-mono font-bold">ai-studio-peptideimportsfa</span>
+                </div>
+                <div className="text-xs text-white font-mono break-all font-semibold">
+                  {FIRESTORE_DATABASE_ID}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
+                <div className="flex items-center justify-between text-slate-400 text-[10px]">
+                  <span>PROJETO GOOGLE CLOUD / FIREBASE:</span>
+                </div>
+                <div className="text-xs text-cyan-300 font-mono font-semibold">
+                  {firebaseConfig.projectId}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 text-[11px]">
+                <div className="text-slate-300 font-semibold flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Coleções em Tempo Real:</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {['products', 'orders', 'settings', 'coupons', 'employees', 'financialTransactions'].map((col) => (
+                    <span key={col} className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 font-mono text-[10px]">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
         
         {/* ROW 1: WhatsApp Channel & Shipping Rules */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

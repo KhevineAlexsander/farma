@@ -609,5 +609,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   pickupAddress: 'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
   pickupEstimatedTime: 'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',
   couponsEnabled: true,
+  siteUrl: 'https://peptideimports.vercel.app',
+  vercelDomain: 'peptideimports.vercel.app',
+  customDomainNotes: 'Para configurar seu domínio próprio na Vercel: adicione o registro CNAME apontando para cname.vercel-dns.com e adicione o domínio na aba Authorized Domains do Firebase.',
 };
 

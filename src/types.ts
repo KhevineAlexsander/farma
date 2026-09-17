@@ -144,5 +144,9 @@ export interface StoreSettings {
   pickupAddress: string; // Endereço da sede para retirada
   pickupEstimatedTime: string; // Prazo para retirada (ex: "Pronto em 2 horas úteis")
   couponsEnabled?: boolean; // Habilitar ou desabilitar cupons no site
+  // Domínio da Vercel / Domínio Personalizado
+  siteUrl?: string; // Ex: "https://peptideimports.vercel.app" ou "https://seusite.com.br"
+  vercelDomain?: string; // Ex: "peptideimports.vercel.app"
+  customDomainNotes?: string;
 }
 

@@ -250,23 +250,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }, (err) => console.log('Firestore products sync:', err.message));
 
-      const unsubEmployees = onSnapshot(collection(db, 'employees'), (snapshot) => {
-        if (!snapshot.empty) {
+      // Employees listener (auto-seed if empty)
+      const unsubEmployees = onSnapshot(collection(db, 'employees'), async (snapshot) => {
+        if (snapshot.empty) {
+          for (const emp of INITIAL_EMPLOYEES) {
+            try {
+              await setDoc(doc(db, 'employees', emp.id), emp);
+            } catch (e) {
+              console.log('Error seeding employee:', e);
+            }
+          }
+        } else {
           const list: Employee[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Employee), id: d.id }));
           setEmployees(list);
+          localStorage.setItem('peptide_employees', JSON.stringify(list));
         }
       }, (err) => console.log('Firestore employees sync:', err.message));
 
-      const unsubCoupons = onSnapshot(collection(db, 'coupons'), (snapshot) => {
-        if (!snapshot.empty) {
+      // Coupons listener (auto-seed if empty)
+      const unsubCoupons = onSnapshot(collection(db, 'coupons'), async (snapshot) => {
+        if (snapshot.empty) {
+          for (const coup of INITIAL_COUPONS) {
+            try {
+              await setDoc(doc(db, 'coupons', coup.id), coup);
+            } catch (e) {
+              console.log('Error seeding coupon:', e);
+            }
+          }
+        } else {
           const list: Coupon[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Coupon), id: d.id }));
           setCoupons(list);
+          localStorage.setItem('peptide_coupons', JSON.stringify(list));
         }
       }, (err) => console.log('Firestore coupons sync:', err.message));
 
-      const unsubSettings = onSnapshot(doc(db, 'settings', 'config'), (docSnap) => {
+      // Settings listener (auto-seed if empty)
+      const unsubSettings = onSnapshot(doc(db, 'settings', 'config'), async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data() as StoreSettings;
           setStoreSettings((prev) => {
@@ -279,6 +300,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             localStorage.setItem('peptide_settings', JSON.stringify(merged));
             return merged;
           });
+        } else {
+          try {
+            await setDoc(doc(db, 'settings', 'config'), INITIAL_SETTINGS);
+          } catch (e) {
+            console.log('Error seeding store settings:', e);
+          }
         }
       }, (err) => console.log('Firestore settings sync:', err.message));
 
@@ -297,9 +324,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         snapshot.forEach((d) => list.push({ ...(d.data() as FinancialTransaction), id: d.id }));
         list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setFinancialTransactions(list);
-        if (currentUser?.role === 'ADMIN') {
-          localStorage.setItem('peptide_finances', JSON.stringify(list));
-        }
+        localStorage.setItem('peptide_finances', JSON.stringify(list));
       }, (err) => console.log('Firestore finances sync:', err.message));
 
       return () => {
@@ -311,7 +336,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         unsubFinances();
       };
     } catch (err) {
-      console.log('Firestore realtime listeners disabled in offline/restricted environment');
+      console.log('Firestore realtime listeners fallback mode:', err);
     }
   }, [currentUser?.role]);
 
@@ -322,12 +347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          // Filter out any mock dummy orders
-          return parsed.filter(
-            (o: Order) =>
-              !['ord-01', 'ord-02', 'ord-03', 'ord-04'].includes(o.id) &&
-              !['#PI-88219', '#PI-88218', '#PI-88217', '#PI-88216'].includes(o.orderNumber)
-          );
+          return parsed;
         }
       } catch {
         return [];
@@ -347,11 +367,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          // Filter out any mock dummy transactions
-          return parsed.filter(
-            (t: FinancialTransaction) =>
-              !['tx-01', 'tx-02', 'tx-03', 'tx-04', 'tx-05', 'tx-06', 'tx-07', 'tx-08', 'tx-09'].includes(t.id)
-          );
+          return parsed;
         }
       } catch {
         return [];
@@ -361,42 +377,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   useEffect(() => {
-    if (currentUser?.role === 'ADMIN') {
-      localStorage.setItem('peptide_finances', JSON.stringify(financialTransactions));
-    }
-  }, [financialTransactions, currentUser?.role]);
+    localStorage.setItem('peptide_finances', JSON.stringify(financialTransactions));
+  }, [financialTransactions]);
 
-  // One-time automatic cleanup to zero out mock and old test records for real sales start
-  useEffect(() => {
-    const cleanKey = 'peptide_zero_reset_v3';
-    if (!localStorage.getItem(cleanKey)) {
-      localStorage.setItem('peptide_orders', '[]');
-      localStorage.setItem('peptide_finances', '[]');
-      setOrders([]);
-      setFinancialTransactions([]);
-      localStorage.setItem(cleanKey, 'true');
-
-      (async () => {
-        try {
-          const snapOrders = await getDocs(collection(db, 'orders'));
-          snapOrders.forEach(async (d) => {
-            try { await deleteDoc(doc(db, 'orders', d.id)); } catch {}
-          });
-        } catch (err) {
-          console.log('Reset orders error:', err);
-        }
-
-        try {
-          const snapFin = await getDocs(collection(db, 'financialTransactions'));
-          snapFin.forEach(async (d) => {
-            try { await deleteDoc(doc(db, 'financialTransactions', d.id)); } catch {}
-          });
-        } catch (err) {
-          console.log('Reset finances error:', err);
-        }
-      })();
-    }
-  }, []);
 
   // --- Employees / Staff State ---
   const [employees, setEmployees] = useState<Employee[]>(() => {

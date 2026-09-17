@@ -98,11 +98,14 @@ CEP: ${order.address.zipCode}`;
       ? `🏷️ *Cupom (${appliedCoupon.code}):* -R$ ${currentCouponDiscount.toFixed(2).replace('.', ',')}\n`
       : '';
 
+    const siteUrl = storeSettings.siteUrl || window.location.origin;
+
     const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}*
 ────────────────────────
 Olá! Acabei de finalizar meu pedido no site.
 
 📌 *NÚMERO DO PEDIDO:* ${order.orderNumber}
+🌐 *Loja:* ${siteUrl}
 
 👤 *DADOS DO CLIENTE:*
 • Nome: ${order.customer.name}
@@ -117,11 +120,11 @@ ${itemsList}
 ────────────────────────
 📊 *RESUMO FINANCEIRO:*
 • Subtotal dos Produtos: R$ ${order.subtotal.toFixed(2).replace('.', ',')}
-• Taxa de Importação: R$ 100,00
+• Taxa de Envio/Entrega: R$ ${order.shipping.toFixed(2).replace('.', ',')}
 ${couponLine}💳 *Forma de Pagamento:* A Combinar no WhatsApp
 💰 *TOTAL A PAGAR: R$ ${order.total.toFixed(2).replace('.', ',')}*
 ────────────────────────
-Por favor, confirme os dados do pedido #${order.orderNumber} para liberação e envio!`;
+Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e envio!`;
 
     const cleanNumber = (storeSettings.whatsappNumber || '5511993456789').replace(/\D/g, '');
     return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;

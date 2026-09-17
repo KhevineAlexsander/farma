@@ -24,16 +24,22 @@ import {
 } from 'firebase/firestore';
 import firebaseConfigJson from '../../firebase-applet-config.json';
 
-const firebaseConfig = {
-  apiKey: firebaseConfigJson.apiKey,
-  authDomain: firebaseConfigJson.authDomain,
-  projectId: firebaseConfigJson.projectId,
-  storageBucket: firebaseConfigJson.storageBucket,
-  messagingSenderId: firebaseConfigJson.messagingSenderId,
-  appId: firebaseConfigJson.appId,
+// Support Vercel environment variables or bundled fallback config
+export const firebaseConfig = {
+  apiKey: (import.meta.env.VITE_FIREBASE_API_KEY as string) || firebaseConfigJson.apiKey,
+  authDomain: (import.meta.env.VITE_FIREBASE_AUTH_DOMAIN as string) || firebaseConfigJson.authDomain,
+  projectId: (import.meta.env.VITE_FIREBASE_PROJECT_ID as string) || firebaseConfigJson.projectId,
+  storageBucket: (import.meta.env.VITE_FIREBASE_STORAGE_BUCKET as string) || firebaseConfigJson.storageBucket,
+  messagingSenderId: (import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID as string) || firebaseConfigJson.messagingSenderId,
+  appId: (import.meta.env.VITE_FIREBASE_APP_ID as string) || firebaseConfigJson.appId,
 };
 
-// Initialize Firebase App
+export const FIRESTORE_DATABASE_ID =
+  (import.meta.env.VITE_FIREBASE_DATABASE_ID as string) ||
+  firebaseConfigJson.firestoreDatabaseId ||
+  'ai-studio-peptideimportsfa-920ae734-2f46-4c41-b929-3fd39c736de6';
+
+// Initialize Firebase App singleton
 export const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // Auth with Google Provider
@@ -43,8 +49,8 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// Initialize Firestore
-export const db = getFirestore(app, firebaseConfigJson.firestoreDatabaseId || undefined);
+// Initialize Firestore with specific Database ID
+export const db = getFirestore(app, FIRESTORE_DATABASE_ID || undefined);
 
 export {
   signInWithPopup,
@@ -65,3 +71,4 @@ export {
 };
 
 export type { FirebaseUser };
+
