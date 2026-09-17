@@ -17,10 +17,7 @@ export const ProductCatalog: React.FC = () => {
 
   const categories: ProductCategory[] = [
     'Todos',
-    'Emagrecimento',
-    'Saúde',
-    'Beleza',
-    'Desempenho',
+    ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))
   ];
 
   // Count available promotions and featured items

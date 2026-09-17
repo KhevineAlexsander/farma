@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw, FileText } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
 import { PeptideVial } from '../PeptideVial';
@@ -11,6 +11,119 @@ export const ProductManagement: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingProducts, setIsSavingProducts] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  // CSV Import State
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [csvText, setCsvText] = useState(`categoria,produto,dosagem,unidade,preco
+Emagrecimento & Metabolismo,Tirzepatida,60,mg,175.00
+Emagrecimento & Metabolismo,Tirzepatida,100,mg,230.00
+Emagrecimento & Metabolismo,Retatrutide,30,mg,185.00
+Emagrecimento & Metabolismo,Retatrutide,60,mg,285.00
+Emagrecimento & Metabolismo,Cagrilintide,10,mg,150.00
+Emagrecimento & Metabolismo,AOD-9604,5,mg,80.00
+Emagrecimento & Metabolismo,SLU-PP-322,5,mg,120.00
+Recuperação & Peptídeos,BPC-157 + TB-500,10,mg,110.00
+Recuperação & Peptídeos,GHK-Cu,100,mg,60.00
+Recuperação & Peptídeos,CJC + Ipamorelin,10,mg,110.00
+Recuperação & Peptídeos,Ipamorelin,10,mg,80.00
+Recuperação & Peptídeos,Tesamorelin,10,mg,165.00
+Recuperação & Peptídeos,SS-31,10,mg,80.00
+Neurológicos & Sono,Semax,10,mg,75.00
+Neurológicos & Sono,Selank,5,mg,65.00
+Neurológicos & Sono,DSIP,10,mg,120.00
+Neurológicos & Sono,KPV,10,mg,70.00
+Longevidade & Metabolismo Celular,NAD+,1000,mg,95.00
+Longevidade & Metabolismo Celular,Epithalon,10,mg,65.00
+Longevidade & Metabolismo Celular,GHK-Cu,100,mg,60.00
+Hormonais & Outros,HCG,5000,UI,120.00
+Hormonais & Outros,PT-141,10,mg,65.00
+Hormonais & Outros,Melanotan II,10,mg,65.00
+Hormonais & Outros,VIP,10,mg,135.00
+Hormonais & Outros,KLOW,80,mg,260.00
+Hormonais & Outros,GLOW,70,mg,160.00
+Hormonais & Outros,Most-C,10,mg,80.00`);
+
+  const handleImportCsv = (e: React.FormEvent) => {
+    e.preventDefault();
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let importedCount = 0;
+    let skippedCount = 0;
+    let errorCount = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      // Skip header row if it contains descriptive column names
+      if (i === 0 && (line.toLowerCase().includes('categoria') || line.toLowerCase().includes('produto') || line.toLowerCase().includes('nome'))) {
+        continue;
+      }
+
+      // Detect delimiter: comma, semicolon, or tab
+      const delimiter = line.includes(';') ? ';' : line.includes('\t') ? '\t' : ',';
+      const parts = line.split(delimiter).map(p => p.trim().replace(/^["']|["']$/g, ''));
+
+      if (parts.length >= 5) {
+        const [catRaw, nameRaw, dosVal, unitVal, priceVal] = parts;
+        
+        // Clean price string (remove R$, spaces, replace comma with dot)
+        const cleanPriceStr = priceVal.replace(/[R$\s]/g, '').replace(',', '.');
+        const priceNum = parseFloat(cleanPriceStr);
+
+        if (isNaN(priceNum)) {
+          errorCount++;
+          continue;
+        }
+
+        const category = catRaw || 'Geral';
+        const dosageStr = `${dosVal} ${unitVal}`.toUpperCase();
+        const productName = nameRaw.toUpperCase();
+
+        if (!productName || !dosageStr) {
+          errorCount++;
+          continue;
+        }
+
+        // Check if product already exists with same name and dosage (case-insensitive)
+        const exists = products.some(
+          p => p.name.trim().toUpperCase() === productName && 
+               p.dosage.trim().toUpperCase() === dosageStr
+        );
+
+        if (exists) {
+          skippedCount++;
+          continue;
+        }
+
+        const newProd: Omit<Product, 'id'> = {
+          name: productName,
+          dosage: dosageStr,
+          category,
+          price: priceNum,
+          costPrice: Math.round(priceNum * 0.4 * 100) / 100,
+          stock: 35,
+          capColor: category.toLowerCase().includes('emagrecimento') ? '#22C55E' : category.toLowerCase().includes('beleza') ? '#EC4899' : '#0088FF',
+          description: `Produto farmacêutico importado de alta pureza (${productName} ${dosageStr}).`,
+          benefits: ['Laudo HPLC certificado', 'Alta biodisponibilidade', 'Cadeia fria garantida'],
+          purity: '99.6% HPLC',
+          storage: '2°C a 8°C (Refrigerado)',
+          reconstitution: 'Reconstituir com água bacteriostática estéril',
+          featured: false,
+          isPromotion: false,
+        };
+
+        addProduct(newProd);
+        importedCount++;
+      } else {
+        errorCount++;
+      }
+    }
+
+    let msg = `Importação concluída!\n• ${importedCount} novos produtos adicionados.\n• ${skippedCount} produtos ignorados (já existiam).`;
+    if (errorCount > 0) {
+      msg += `\n• ${errorCount} linhas ignoradas por formatação inválida.`;
+    }
+    alert(msg);
+    setIsImportModalOpen(false);
+  };
 
   const handleSaveToCloud = async () => {
     setIsSavingProducts(true);
@@ -253,6 +366,15 @@ export const ProductManagement: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
             <span className="hidden sm:inline">{isSyncing ? 'Gravando...' : 'Restaurar Catálogo Base'}</span>
             <span className="sm:hidden">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+            title="Importar lista de produtos em lote via CSV"
+          >
+            <FileText className="w-4 h-4 text-emerald-400" />
+            <span>Importar CSV</span>
           </button>
 
           <button
@@ -747,6 +869,61 @@ export const ProductManagement: React.FC = () => {
                 >
                   <UploadCloud className="w-4 h-4" />
                   <span>Salvar no Banco & Atualizar Site</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Import Modal */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl">
+            <div className="px-6 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-white font-bold text-sm">Importar Produtos em Lote (CSV)</h3>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleImportCsv} className="p-6 space-y-4">
+              <div className="space-y-1">
+                <label className="block text-slate-300 font-semibold text-xs">
+                  Cole os dados no formato <code className="text-cyan-400">categoria,produto,dosagem,unidade,preco</code>:
+                </label>
+                <p className="text-[11px] text-slate-400">
+                  Cada linha representa um produto. As colunas são separadas por vírgula.
+                </p>
+              </div>
+
+              <textarea
+                rows={12}
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-mono text-xs focus:border-emerald-500"
+              />
+
+              <div className="pt-4 border-t border-slate-800 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold rounded-xl hover:from-emerald-400 hover:to-teal-500 flex items-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 text-xs"
+                >
+                  <UploadCloud className="w-4 h-4" />
+                  <span>Processar e Importar Produtos</span>
                 </button>
               </div>
             </form>

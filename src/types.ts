@@ -1,10 +1,10 @@
-export type ProductCategory = 'Todos' | 'Emagrecimento' | 'Saúde' | 'Beleza' | 'Desempenho';
+export type ProductCategory = string;
 
 export interface Product {
   id: string;
   name: string;
   dosage: string;
-  category: 'Emagrecimento' | 'Saúde' | 'Beleza' | 'Desempenho';
+  category: string;
   description: string;
   benefits: string[]; // 3 main bullet points
   price: number;
