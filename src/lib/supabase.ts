@@ -1,0 +1,258 @@
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Product, Order, Coupon, Employee, FinancialTransaction, StoreSettings } from '../types';
+
+// Load Supabase credentials from environment or localStorage override
+const getEnvOrStorage = (envKey: string, storageKey: string, fallback = ''): string => {
+  try {
+    const fromStorage = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : null;
+    if (fromStorage && fromStorage.trim()) return fromStorage.trim();
+  } catch {}
+  
+  try {
+    // @ts-ignore
+    const fromEnv = import.meta.env?.[envKey];
+    if (fromEnv && typeof fromEnv === 'string' && fromEnv.trim()) return fromEnv.trim();
+  } catch {}
+
+  return fallback;
+};
+
+export const SUPABASE_URL = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', '');
+export const SUPABASE_ANON_KEY = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'peptide_supabase_anon_key', '');
+
+let clientInstance: SupabaseClient | null = null;
+
+export const getSupabaseClient = (): SupabaseClient | null => {
+  const url = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', '');
+  const key = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'peptide_supabase_anon_key', '');
+
+  if (!url || !key) {
+    return null;
+  }
+
+  if (!clientInstance || clientInstance['supabaseUrl'] !== url) {
+    try {
+      clientInstance = createClient(url, key, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      });
+    } catch (e) {
+      console.error('Failed to create Supabase client:', e);
+      return null;
+    }
+  }
+
+  return clientInstance;
+};
+
+export const isSupabaseConfigured = (): boolean => {
+  const url = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', '');
+  const key = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'peptide_supabase_anon_key', '');
+  return Boolean(url && key && url.startsWith('http'));
+};
+
+// ==========================================
+// DATA MAPPERS (CamelCase <-> SnakeCase)
+// ==========================================
+
+export const mapProductToDB = (p: Product) => ({
+  id: p.id,
+  name: p.name,
+  dosage: p.dosage,
+  category: p.category,
+  description: p.description,
+  benefits: p.benefits || [],
+  price: p.price,
+  original_price: p.originalPrice ?? null,
+  cost_price: p.costPrice ?? 0,
+  stock: p.stock ?? 0,
+  cap_color: p.capColor || '#06b6d4',
+  purity: p.purity || '99.4% HPLC',
+  storage: p.storage || '2°C a 8°C (Refrigerado)',
+  reconstitution: p.reconstitution || 'Água bacteriostática (2ml a 3ml)',
+  image_url: p.imageUrl || null,
+  featured: Boolean(p.featured),
+  is_promotion: Boolean(p.isPromotion),
+  promotion_discount: p.promotionDiscount ?? 0,
+  updated_at: new Date().toISOString(),
+});
+
+export const mapDBToProduct = (d: any): Product => ({
+  id: d.id,
+  name: d.name,
+  dosage: d.dosage,
+  category: d.category,
+  description: d.description,
+  benefits: Array.isArray(d.benefits) ? d.benefits : [],
+  price: Number(d.price),
+  originalPrice: d.original_price != null ? Number(d.original_price) : undefined,
+  costPrice: Number(d.cost_price ?? 0),
+  stock: Number(d.stock ?? 0),
+  capColor: d.cap_color || '#06b6d4',
+  purity: d.purity || '99.4% HPLC',
+  storage: d.storage || '2°C a 8°C (Refrigerado)',
+  reconstitution: d.reconstitution || 'Água bacteriostática (2ml a 3ml)',
+  imageUrl: d.image_url || undefined,
+  featured: Boolean(d.featured),
+  isPromotion: Boolean(d.is_promotion),
+  promotionDiscount: d.promotion_discount != null ? Number(d.promotion_discount) : undefined,
+});
+
+export const mapOrderToDB = (o: Order) => ({
+  id: o.id,
+  order_number: o.orderNumber,
+  customer: o.customer,
+  address: o.address,
+  items: o.items || [],
+  subtotal: o.subtotal,
+  shipping: o.shipping,
+  discount: o.discount,
+  total: o.total,
+  status: o.status,
+  payment_method: o.paymentMethod,
+  tracking_code: o.trackingCode || null,
+  cleared_manually_at: o.clearedManuallyAt || null,
+  cleared_by: o.clearedBy || null,
+  notes: o.notes || null,
+  created_at: o.createdAt || new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
+export const mapDBToOrder = (d: any): Order => ({
+  id: d.id,
+  orderNumber: d.order_number,
+  customer: d.customer,
+  address: d.address,
+  items: d.items || [],
+  subtotal: Number(d.subtotal),
+  shipping: Number(d.shipping ?? 0),
+  discount: Number(d.discount ?? 0),
+  total: Number(d.total),
+  status: d.status,
+  paymentMethod: d.payment_method,
+  trackingCode: d.tracking_code || undefined,
+  clearedManuallyAt: d.cleared_manually_at || undefined,
+  clearedBy: d.cleared_by || undefined,
+  notes: d.notes || undefined,
+  createdAt: d.created_at,
+});
+
+export const mapCouponToDB = (c: Coupon) => ({
+  id: c.id,
+  code: c.code,
+  type: c.type,
+  value: c.value,
+  min_order_amount: c.minOrderAmount ?? 0,
+  status: c.status,
+  usage_count: c.usageCount ?? 0,
+  max_usage: c.maxUsage ?? null,
+  expires_at: c.expiresAt ?? null,
+  description: c.description || null,
+  updated_at: new Date().toISOString(),
+});
+
+export const mapDBToCoupon = (d: any): Coupon => ({
+  id: d.id,
+  code: d.code,
+  type: d.type,
+  value: Number(d.value),
+  minOrderAmount: d.min_order_amount != null ? Number(d.min_order_amount) : undefined,
+  status: d.status,
+  usageCount: Number(d.usage_count ?? 0),
+  maxUsage: d.max_usage != null ? Number(d.max_usage) : undefined,
+  expiresAt: d.expires_at || undefined,
+  description: d.description || undefined,
+});
+
+export const mapEmployeeToDB = (e: Employee) => ({
+  id: e.id,
+  name: e.name,
+  email: e.email,
+  phone: e.phone,
+  password: e.password || null,
+  role: e.role,
+  status: e.status,
+  permissions: e.permissions,
+  created_at: e.createdAt || new Date().toISOString(),
+  updated_at: new Date().toISOString(),
+});
+
+export const mapDBToEmployee = (d: any): Employee => ({
+  id: d.id,
+  name: d.name,
+  email: d.email,
+  phone: d.phone,
+  password: d.password || undefined,
+  role: d.role,
+  status: d.status,
+  permissions: d.permissions,
+  createdAt: d.created_at,
+});
+
+export const mapFinToDB = (t: FinancialTransaction) => ({
+  id: t.id,
+  date: t.date,
+  type: t.type,
+  description: t.description,
+  category: t.category,
+  amount: t.amount,
+  order_id: t.orderId || null,
+});
+
+export const mapDBToFin = (d: any): FinancialTransaction => ({
+  id: d.id,
+  date: d.date,
+  type: d.type,
+  description: d.description,
+  category: d.category,
+  amount: Number(d.amount),
+  orderId: d.order_id || undefined,
+});
+
+export const mapSettingsToDB = (s: StoreSettings) => ({
+  id: 'config',
+  store_name: s.storeName,
+  whatsapp_number: s.whatsappNumber,
+  whatsapp_display: s.whatsappDisplay,
+  support_email: s.supportEmail,
+  hero_badge: s.heroBadge,
+  hero_title: s.heroTitle,
+  hero_subtitle: s.heroSubtitle,
+  hero_tagline: s.heroTagline || null,
+  hero_description: s.heroDescription || null,
+  announcement_bar: s.announcementBar,
+  checkout_notice: s.checkoutNotice,
+  delivery_fee: s.deliveryFee,
+  pickup_enabled: s.pickupEnabled,
+  pickup_address: s.pickupAddress,
+  pickup_estimated_time: s.pickupEstimatedTime,
+  coupons_enabled: s.couponsEnabled ?? true,
+  site_url: s.siteUrl || 'https://peptideimports.vercel.app',
+  vercel_domain: s.vercelDomain || 'peptideimports.vercel.app',
+  custom_domain_notes: s.customDomainNotes || '',
+  updated_at: new Date().toISOString(),
+});
+
+export const mapDBToSettings = (d: any): Partial<StoreSettings> => ({
+  storeName: d.store_name,
+  whatsappNumber: d.whatsapp_number,
+  whatsappDisplay: d.whatsapp_display,
+  supportEmail: d.support_email,
+  heroBadge: d.hero_badge,
+  heroTitle: d.hero_title,
+  heroSubtitle: d.hero_subtitle,
+  heroTagline: d.hero_tagline || undefined,
+  heroDescription: d.hero_description || undefined,
+  announcementBar: d.announcement_bar,
+  checkoutNotice: d.checkout_notice,
+  deliveryFee: d.delivery_fee != null ? Number(d.delivery_fee) : 35,
+  pickupEnabled: Boolean(d.pickup_enabled),
+  pickupAddress: d.pickup_address,
+  pickupEstimatedTime: d.pickup_estimated_time,
+  couponsEnabled: d.coupons_enabled ?? true,
+  siteUrl: d.site_url || 'https://peptideimports.vercel.app',
+  vercelDomain: d.vercel_domain || 'peptideimports.vercel.app',
+  customDomainNotes: d.custom_domain_notes || '',
+});

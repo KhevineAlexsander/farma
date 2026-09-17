@@ -19,6 +19,22 @@ import {
   query,
   where,
 } from '../lib/firebase';
+import {
+  getSupabaseClient,
+  isSupabaseConfigured,
+  mapProductToDB,
+  mapDBToProduct,
+  mapOrderToDB,
+  mapDBToOrder,
+  mapCouponToDB,
+  mapDBToCoupon,
+  mapEmployeeToDB,
+  mapDBToEmployee,
+  mapFinToDB,
+  mapDBToFin,
+  mapSettingsToDB,
+  mapDBToSettings,
+} from '../lib/supabase';
 
 interface AppContextType {
   products: Product[];
@@ -89,6 +105,10 @@ interface AppContextType {
   storeSettings: StoreSettings;
   updateStoreSettings: (settings: Partial<StoreSettings>) => void;
   deliveryFee: number;
+
+  // Supabase & Database State
+  isSupabaseActive: boolean;
+  supabaseConfigured: boolean;
 
   // Real-time Cloud Save & Publish Methods for all tabs
   saveAllProductsToCloud: () => Promise<boolean>;
@@ -230,65 +250,191 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser]);
 
-  // Sync products, orders, employees, coupons, settings, and finances to/from Firestore in real-time
+  // --- Supabase & Database Config State ---
+  const [supabaseConfigured, setSupabaseConfigured] = useState<boolean>(() => isSupabaseConfigured());
+  const [isSupabaseActive, setIsSupabaseActive] = useState<boolean>(() => isSupabaseConfigured());
+
+  // --- Real-time Sync (Supabase PostgreSQL + Firestore Fallback) ---
   useEffect(() => {
-    try {
-      const unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
-        if (snapshot.empty) {
-          // Auto-seed initial products into Firestore so all clients can see them
-          for (const p of INITIAL_PRODUCTS) {
-            try {
-              await setDoc(doc(db, 'products', p.id), p);
-            } catch (e) {
-              console.log('Error seeding product:', e);
+    let supabaseChannel: any = null;
+    const supabase = getSupabaseClient();
+
+    if (supabase && isSupabaseConfigured()) {
+      setIsSupabaseActive(true);
+      setSupabaseConfigured(true);
+
+      // 1. Initial Fetch from Supabase
+      const fetchSupabaseData = async () => {
+        try {
+          // Fetch Products
+          const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
+          if (!prodErr && prodData) {
+            if (prodData.length === 0) {
+              // Auto-seed initial products to Supabase
+              const dbProds = INITIAL_PRODUCTS.map(mapProductToDB);
+              await supabase.from('products').insert(dbProds);
+            } else {
+              const mapped = prodData.map(mapDBToProduct);
+              setProducts(mapped);
+              localStorage.setItem('peptide_products', JSON.stringify(mapped));
             }
           }
-        } else {
+
+          // Fetch Employees
+          const { data: empData, error: empErr } = await supabase.from('employees').select('*');
+          if (!empErr && empData) {
+            if (empData.length === 0) {
+              const dbEmps = INITIAL_EMPLOYEES.map(mapEmployeeToDB);
+              await supabase.from('employees').insert(dbEmps);
+            } else {
+              const mapped = empData.map(mapDBToEmployee);
+              setEmployees(mapped);
+              localStorage.setItem('peptide_employees', JSON.stringify(mapped));
+            }
+          }
+
+          // Fetch Coupons
+          const { data: coupData, error: coupErr } = await supabase.from('coupons').select('*');
+          if (!coupErr && coupData) {
+            if (coupData.length === 0) {
+              const dbCoups = INITIAL_COUPONS.map(mapCouponToDB);
+              await supabase.from('coupons').insert(dbCoups);
+            } else {
+              const mapped = coupData.map(mapDBToCoupon);
+              setCoupons(mapped);
+              localStorage.setItem('peptide_coupons', JSON.stringify(mapped));
+            }
+          }
+
+          // Fetch Store Settings
+          const { data: settData, error: settErr } = await supabase.from('store_settings').select('*').eq('id', 'config').maybeSingle();
+          if (!settErr && settData) {
+            const mapped = mapDBToSettings(settData);
+            setStoreSettings((prev) => ({
+              ...INITIAL_SETTINGS,
+              ...prev,
+              ...mapped,
+            }));
+          } else if (!settData) {
+            await supabase.from('store_settings').upsert(mapSettingsToDB(INITIAL_SETTINGS));
+          }
+
+          // Fetch Orders
+          const { data: ordData, error: ordErr } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+          if (!ordErr && ordData) {
+            const mapped = ordData.map(mapDBToOrder);
+            setOrders(mapped);
+            localStorage.setItem('peptide_orders', JSON.stringify(mapped));
+          }
+
+          // Fetch Financial Transactions
+          const { data: finData, error: finErr } = await supabase.from('financial_transactions').select('*').order('date', { ascending: false });
+          if (!finErr && finData) {
+            const mapped = finData.map(mapDBToFin);
+            setFinancialTransactions(mapped);
+            localStorage.setItem('peptide_finances', JSON.stringify(mapped));
+          }
+        } catch (e) {
+          console.log('Error initializing Supabase sync:', e);
+        }
+      };
+
+      fetchSupabaseData();
+
+      // 2. Real-time Subscriptions with Supabase Channels
+      try {
+        supabaseChannel = supabase
+          .channel('peptide_realtime_channel')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+            const { data } = await supabase.from('products').select('*');
+            if (data && data.length > 0) {
+              const mapped = data.map(mapDBToProduct);
+              setProducts(mapped);
+              localStorage.setItem('peptide_products', JSON.stringify(mapped));
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
+            const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+            if (data) {
+              const mapped = data.map(mapDBToOrder);
+              setOrders(mapped);
+              localStorage.setItem('peptide_orders', JSON.stringify(mapped));
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, async () => {
+            const { data } = await supabase.from('coupons').select('*');
+            if (data) {
+              const mapped = data.map(mapDBToCoupon);
+              setCoupons(mapped);
+              localStorage.setItem('peptide_coupons', JSON.stringify(mapped));
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, async () => {
+            const { data } = await supabase.from('employees').select('*');
+            if (data) {
+              const mapped = data.map(mapDBToEmployee);
+              setEmployees(mapped);
+              localStorage.setItem('peptide_employees', JSON.stringify(mapped));
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'financial_transactions' }, async () => {
+            const { data } = await supabase.from('financial_transactions').select('*').order('date', { ascending: false });
+            if (data) {
+              const mapped = data.map(mapDBToFin);
+              setFinancialTransactions(mapped);
+              localStorage.setItem('peptide_finances', JSON.stringify(mapped));
+            }
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'store_settings' }, async () => {
+            const { data } = await supabase.from('store_settings').select('*').eq('id', 'config').maybeSingle();
+            if (data) {
+              const mapped = mapDBToSettings(data);
+              setStoreSettings((prev) => ({ ...prev, ...mapped }));
+            }
+          })
+          .subscribe();
+      } catch (err) {
+        console.log('Supabase realtime error:', err);
+      }
+    }
+
+    // 3. Firestore fallback sync (keeping backup active)
+    let unsubProducts: any;
+    let unsubEmployees: any;
+    let unsubCoupons: any;
+    let unsubSettings: any;
+    let unsubOrders: any;
+    let unsubFinances: any;
+
+    try {
+      unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
+        if (!snapshot.empty) {
           const list: Product[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Product), id: d.id }));
-          setProducts(list);
+          setProducts((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
           localStorage.setItem('peptide_products', JSON.stringify(list));
         }
-      }, (err) => console.log('Firestore products sync:', err.message));
+      }, () => {});
 
-      // Employees listener (auto-seed if empty)
-      const unsubEmployees = onSnapshot(collection(db, 'employees'), async (snapshot) => {
-        if (snapshot.empty) {
-          for (const emp of INITIAL_EMPLOYEES) {
-            try {
-              await setDoc(doc(db, 'employees', emp.id), emp);
-            } catch (e) {
-              console.log('Error seeding employee:', e);
-            }
-          }
-        } else {
+      unsubEmployees = onSnapshot(collection(db, 'employees'), async (snapshot) => {
+        if (!snapshot.empty) {
           const list: Employee[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Employee), id: d.id }));
-          setEmployees(list);
+          setEmployees((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
           localStorage.setItem('peptide_employees', JSON.stringify(list));
         }
-      }, (err) => console.log('Firestore employees sync:', err.message));
+      }, () => {});
 
-      // Coupons listener (auto-seed if empty)
-      const unsubCoupons = onSnapshot(collection(db, 'coupons'), async (snapshot) => {
-        if (snapshot.empty) {
-          for (const coup of INITIAL_COUPONS) {
-            try {
-              await setDoc(doc(db, 'coupons', coup.id), coup);
-            } catch (e) {
-              console.log('Error seeding coupon:', e);
-            }
-          }
-        } else {
+      unsubCoupons = onSnapshot(collection(db, 'coupons'), async (snapshot) => {
+        if (!snapshot.empty) {
           const list: Coupon[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Coupon), id: d.id }));
-          setCoupons(list);
+          setCoupons((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
           localStorage.setItem('peptide_coupons', JSON.stringify(list));
         }
-      }, (err) => console.log('Firestore coupons sync:', err.message));
+      }, () => {});
 
-      // Settings listener (auto-seed if empty)
-      const unsubSettings = onSnapshot(doc(db, 'settings', 'config'), async (docSnap) => {
+      unsubSettings = onSnapshot(doc(db, 'settings', 'config'), async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data() as StoreSettings;
           setStoreSettings((prev) => {
@@ -301,44 +447,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             localStorage.setItem('peptide_settings', JSON.stringify(merged));
             return merged;
           });
-        } else {
-          try {
-            await setDoc(doc(db, 'settings', 'config'), INITIAL_SETTINGS);
-          } catch (e) {
-            console.log('Error seeding store settings:', e);
-          }
         }
-      }, (err) => console.log('Firestore settings sync:', err.message));
+      }, () => {});
 
-      // Orders listener (connected directly to real database)
-      const unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-        const list: Order[] = [];
-        snapshot.forEach((d) => list.push({ ...(d.data() as Order), id: d.id }));
-        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setOrders(list);
-        localStorage.setItem('peptide_orders', JSON.stringify(list));
-      }, (err) => console.log('Firestore orders sync:', err.message));
+      unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+        if (!snapshot.empty) {
+          const list: Order[] = [];
+          snapshot.forEach((d) => list.push({ ...(d.data() as Order), id: d.id }));
+          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setOrders((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
+          localStorage.setItem('peptide_orders', JSON.stringify(list));
+        }
+      }, () => {});
 
-      // Financial transactions listener (connected directly to real database)
-      const unsubFinances = onSnapshot(collection(db, 'financialTransactions'), (snapshot) => {
-        const list: FinancialTransaction[] = [];
-        snapshot.forEach((d) => list.push({ ...(d.data() as FinancialTransaction), id: d.id }));
-        list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setFinancialTransactions(list);
-        localStorage.setItem('peptide_finances', JSON.stringify(list));
-      }, (err) => console.log('Firestore finances sync:', err.message));
-
-      return () => {
-        unsubProducts();
-        unsubEmployees();
-        unsubCoupons();
-        unsubSettings();
-        unsubOrders();
-        unsubFinances();
-      };
+      unsubFinances = onSnapshot(collection(db, 'financialTransactions'), (snapshot) => {
+        if (!snapshot.empty) {
+          const list: FinancialTransaction[] = [];
+          snapshot.forEach((d) => list.push({ ...(d.data() as FinancialTransaction), id: d.id }));
+          list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setFinancialTransactions((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
+          localStorage.setItem('peptide_finances', JSON.stringify(list));
+        }
+      }, () => {});
     } catch (err) {
       console.log('Firestore realtime listeners fallback mode:', err);
     }
+
+    return () => {
+      if (supabaseChannel) {
+        supabase?.removeChannel(supabaseChannel);
+      }
+      unsubProducts?.();
+      unsubEmployees?.();
+      unsubCoupons?.();
+      unsubSettings?.();
+      unsubOrders?.();
+      unsubFinances?.();
+    };
   }, [currentUser?.role]);
 
   // --- Orders State (Real Data connected to Firestore, starting from zero) ---
@@ -496,7 +641,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     showToast(`Funcionário(a) "${newEmp.name}" cadastrado(a) com sucesso!`);
     
-    // Save to Firestore
+    // Save to Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('employees').upsert(mapEmployeeToDB(newEmp));
+      }
+    } catch (e) {
+      console.log('Error saving employee to Supabase:', e);
+    }
+
+    // Save to Firestore fallback
     try {
       await setDoc(doc(db, 'employees', empId), newEmp);
     } catch (e) {
@@ -505,8 +660,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateEmployee = async (id: string, updates: Partial<Employee>) => {
+    let updatedEmployee: Employee | undefined;
     setEmployees((prev) => {
-      const updated = prev.map((emp) => (emp.id === id ? { ...emp, ...updates } : emp));
+      const updated = prev.map((emp) => {
+        if (emp.id === id) {
+          updatedEmployee = { ...emp, ...updates };
+          return updatedEmployee;
+        }
+        return emp;
+      });
       localStorage.setItem('peptide_employees', JSON.stringify(updated));
       return updated;
     });
@@ -527,6 +689,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast('Dados do funcionário atualizados!');
 
+    // Update in Supabase
+    if (updatedEmployee) {
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('employees').upsert(mapEmployeeToDB(updatedEmployee));
+        }
+      } catch (e) {
+        console.log('Error updating employee in Supabase:', e);
+      }
+    }
+
     // Update in Firestore
     try {
       await updateDoc(doc(db, 'employees', id), updates);
@@ -543,6 +717,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     showToast('Funcionário removido com sucesso.');
 
+    // Remove from Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('employees').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.log('Error deleting employee from Supabase:', e);
+    }
+
     // Remove from Firestore
     try {
       await deleteDoc(doc(db, 'employees', id));
@@ -556,6 +740,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEmployees([]);
     localStorage.removeItem('peptide_employees');
     showToast('Todos os usuários de equipe foram removidos com sucesso.');
+
+    // Clear from Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('employees').delete().neq('id', '');
+      }
+    } catch (e) {
+      console.log('Error clearing employees from Supabase:', e);
+    }
 
     for (const empId of toDeleteIds) {
       try {
@@ -581,6 +775,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
     showToast(`Cupom "${newCoupon.code}" criado com sucesso!`);
+
+    // Save to Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('coupons').upsert(mapCouponToDB(newCoupon));
+      }
+    } catch (e) {
+      console.log('Error adding coupon to Supabase:', e);
+    }
 
     try {
       await setDoc(doc(db, 'coupons', newId), newCoupon);
@@ -609,6 +813,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const target = updatedList.find((c) => c.id === id);
     if (target) {
       try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('coupons').upsert(mapCouponToDB(target));
+        }
+      } catch (e) {
+        console.log('Error updating coupon in Supabase:', e);
+      }
+
+      try {
         await setDoc(doc(db, 'coupons', id), target, { merge: true });
       } catch (e) {
         console.log('Error updating coupon in Firestore:', e);
@@ -626,6 +839,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAppliedCoupon(null);
     }
     showToast('Cupom removido do sistema.');
+
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('coupons').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.log('Error deleting coupon from Supabase:', e);
+    }
 
     try {
       await deleteDoc(doc(db, 'coupons', id));
@@ -649,6 +871,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Status do cupom alterado!');
 
     if (target) {
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('coupons').upsert(mapCouponToDB(target));
+        }
+      } catch (e) {
+        console.log('Error toggling coupon in Supabase:', e);
+      }
+
       try {
         await setDoc(doc(db, 'coupons', id), target, { merge: true });
       } catch (e) {
@@ -728,6 +959,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
     showToast(`Produto "${newProduct.name}" cadastrado com sucesso!`);
 
+    // Save to Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('products').upsert(mapProductToDB(newProduct));
+      }
+    } catch (e) {
+      console.log('Error adding product to Supabase:', e);
+    }
+
     try {
       await setDoc(doc(db, 'products', newId), newProduct);
     } catch (e) {
@@ -747,6 +988,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const target = updatedList.find(p => p.id === id);
     if (target) {
       try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('products').upsert(mapProductToDB(target));
+        }
+      } catch (e) {
+        console.log('Error updating product in Supabase:', e);
+      }
+
+      try {
         await setDoc(doc(db, 'products', id), target, { merge: true });
       } catch (e) {
         console.log('Error updating product in Firestore:', e);
@@ -761,6 +1011,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
     showToast('Produto removido do catálogo.');
+
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('products').delete().eq('id', id);
+      }
+    } catch (e) {
+      console.log('Error deleting product from Supabase:', e);
+    }
 
     try {
       await deleteDoc(doc(db, 'products', id));
@@ -791,6 +1050,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (target) {
       try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('products').upsert(mapProductToDB(target));
+        }
+      } catch (e) {
+        console.log('Error updating promotion in Supabase:', e);
+      }
+
+      try {
         await setDoc(doc(db, 'products', id), target, { merge: true });
       } catch (e) {
         console.log('Error updating promotion in Firestore:', e);
@@ -814,6 +1082,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (target) {
       try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('products').upsert(mapProductToDB(target));
+        }
+      } catch (e) {
+        console.log('Error updating featured in Supabase:', e);
+      }
+
+      try {
         await setDoc(doc(db, 'products', id), target, { merge: true });
       } catch (e) {
         console.log('Error updating featured in Firestore:', e);
@@ -823,7 +1100,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncOfficialCatalog = async () => {
     try {
-      showToast('Sincronizando catálogo oficial com o Firestore...');
+      showToast('Sincronizando catálogo oficial com o banco de dados...');
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const dbProds = INITIAL_PRODUCTS.map(mapProductToDB);
+        await supabase.from('products').upsert(dbProds);
+      }
       for (const product of INITIAL_PRODUCTS) {
         await setDoc(doc(db, 'products', product.id), product, { merge: true });
       }
@@ -840,6 +1122,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveAllProductsToCloud = async (): Promise<boolean> => {
     try {
       showToast('Salvando catálogo de produtos no banco de dados...');
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const dbProds = products.map(mapProductToDB);
+        await supabase.from('products').upsert(dbProds);
+      }
       for (const p of products) {
         await setDoc(doc(db, 'products', p.id), p, { merge: true });
       }
@@ -847,7 +1134,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Todos os ${products.length} produtos foram salvos no banco e atualizados no site!`);
       return true;
     } catch (err) {
-      console.error('Erro ao salvar produtos no Firestore:', err);
+      console.error('Erro ao salvar produtos:', err);
       showToast('Erro ao salvar produtos no banco de dados.');
       return false;
     }
@@ -856,6 +1143,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveAllOrdersToCloud = async (): Promise<boolean> => {
     try {
       showToast('Sincronizando pedidos com o banco de dados...');
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const dbOrders = orders.map(mapOrderToDB);
+        await supabase.from('orders').upsert(dbOrders);
+      }
       for (const o of orders) {
         await setDoc(doc(db, 'orders', o.id), o, { merge: true });
       }
@@ -863,7 +1155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Todos os ${orders.length} pedidos foram sincronizados no banco de dados!`);
       return true;
     } catch (err) {
-      console.error('Erro ao salvar pedidos no Firestore:', err);
+      console.error('Erro ao salvar pedidos:', err);
       showToast('Erro ao salvar pedidos no banco de dados.');
       return false;
     }
@@ -872,6 +1164,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveAllFinancesToCloud = async (): Promise<boolean> => {
     try {
       showToast('Salvando lançamentos contábeis no banco...');
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const dbFins = financialTransactions.map(mapFinToDB);
+        await supabase.from('financial_transactions').upsert(dbFins);
+      }
       for (const tx of financialTransactions) {
         await setDoc(doc(db, 'financialTransactions', tx.id), tx, { merge: true });
       }
@@ -879,7 +1176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Livro caixa (${financialTransactions.length} lançamentos) salvo no banco!`);
       return true;
     } catch (err) {
-      console.error('Erro ao salvar financeiro no Firestore:', err);
+      console.error('Erro ao salvar financeiro:', err);
       showToast('Erro ao salvar financeiro no banco de dados.');
       return false;
     }
@@ -888,6 +1185,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveAllEmployeesToCloud = async (): Promise<boolean> => {
     try {
       showToast('Salvando equipe e permissões no banco...');
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const dbEmps = employees.map(mapEmployeeToDB);
+        await supabase.from('employees').upsert(dbEmps);
+      }
       for (const emp of employees) {
         await setDoc(doc(db, 'employees', emp.id), emp, { merge: true });
       }
@@ -895,7 +1197,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Equipe (${employees.length} colaboradores) salva no banco de dados!`);
       return true;
     } catch (err) {
-      console.error('Erro ao salvar equipe no Firestore:', err);
+      console.error('Erro ao salvar equipe:', err);
       showToast('Erro ao salvar equipe no banco de dados.');
       return false;
     }
@@ -904,6 +1206,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveAllCouponsToCloud = async (): Promise<boolean> => {
     try {
       showToast('Salvando cupons de desconto no banco...');
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const dbCoups = coupons.map(mapCouponToDB);
+        await supabase.from('coupons').upsert(dbCoups);
+      }
       for (const coup of coupons) {
         await setDoc(doc(db, 'coupons', coup.id), coup, { merge: true });
       }
@@ -911,7 +1218,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast(`Cupons (${coupons.length} ativos) salvos e sincronizados com a loja!`);
       return true;
     } catch (err) {
-      console.error('Erro ao salvar cupons no Firestore:', err);
+      console.error('Erro ao salvar cupons:', err);
       showToast('Erro ao salvar cupons no banco de dados.');
       return false;
     }
@@ -925,11 +1232,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       setStoreSettings(merged);
       localStorage.setItem('peptide_settings', JSON.stringify(merged));
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('store_settings').upsert(mapSettingsToDB(merged));
+      }
       await setDoc(doc(db, 'settings', 'config'), merged, { merge: true });
       showToast('Configurações da loja salvas no banco e aplicadas ao site em tempo real!');
       return true;
     } catch (err) {
-      console.error('Erro ao salvar configurações no Firestore:', err);
+      console.error('Erro ao salvar configurações:', err);
       showToast('Erro ao salvar configurações no banco de dados.');
       return false;
     }
@@ -1232,12 +1544,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: orderData.notes,
     };
 
-    // Deduct inventory stock & sync to Firestore
+    const supabase = getSupabaseClient();
+
+    // Deduct inventory stock & sync to Supabase & Firestore
     setProducts((prev) =>
       prev.map((p) => {
         const cartItem = cart.find((item) => item.product.id === p.id);
         if (cartItem) {
           const updatedStock = Math.max(0, p.stock - cartItem.quantity);
+          if (supabase) {
+            supabase.from('products').update({ stock: updatedStock }).eq('id', p.id).then();
+          }
           try {
             setDoc(doc(db, 'products', p.id), { stock: updatedStock }, { merge: true });
           } catch (e) {
@@ -1252,14 +1569,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Save order
     setOrders((prev) => [newOrder, ...prev]);
 
-    // Save to Firestore
+    // Save order to Supabase
+    if (supabase) {
+      supabase.from('orders').insert(mapOrderToDB(newOrder)).then();
+    }
+
+    // Save to Firestore fallback
     try {
       setDoc(doc(db, 'orders', newOrder.id), newOrder);
     } catch (e) {
       console.log('Error saving order to Firestore:', e);
     }
 
-    // If coupon was applied, increment its usage and sync to Firestore
+    // If coupon was applied, increment its usage and sync
     if (orderData.couponCode || appliedCoupon) {
       const codeToUpdate = (orderData.couponCode || appliedCoupon?.code)?.toUpperCase();
       if (codeToUpdate) {
@@ -1271,6 +1593,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               c.code === codeToUpdate ? { ...c, usageCount: newUsage } : c
             )
           );
+          if (supabase) {
+            supabase.from('coupons').update({ usage_count: newUsage }).eq('id', matchedCoupon.id).then();
+          }
           try {
             setDoc(doc(db, 'coupons', matchedCoupon.id), { usageCount: newUsage }, { merge: true });
           } catch (e) {
@@ -1292,6 +1617,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       orderId: newOrder.id,
     };
     setFinancialTransactions((prev) => [newTx, ...prev]);
+
+    if (supabase) {
+      supabase.from('financial_transactions').insert(mapFinToDB(newTx)).then();
+    }
+
     try {
       setDoc(doc(db, 'financialTransactions', newTx.id), newTx);
     } catch (e) {
@@ -1315,6 +1645,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return order;
       })
     );
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      const dbUpdate: Record<string, any> = { status };
+      if (trackingCode !== undefined) dbUpdate.tracking_code = trackingCode;
+      supabase.from('orders').update(dbUpdate).eq('id', orderId).then();
+    }
+
     try {
       const updateData: Record<string, any> = { status };
       if (trackingCode !== undefined) updateData.trackingCode = trackingCode;
@@ -1341,6 +1679,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return order;
       })
     );
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('orders').update({
+        status,
+        cleared_manually_at: timestamp,
+        cleared_by: clearedBy || 'Administrador',
+        notes: notes || 'Baixa manual confirmada pelo operador via WhatsApp.',
+      }).eq('id', orderId).then();
+    }
+
     try {
       setDoc(
         doc(db, 'orders', orderId),
@@ -1364,6 +1713,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `tx-${Date.now()}`,
     };
     setFinancialTransactions((prev) => [newTx, ...prev]);
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('financial_transactions').insert(mapFinToDB(newTx)).then();
+    }
+
     try {
       setDoc(doc(db, 'financialTransactions', newTx.id), newTx);
     } catch (e) {
@@ -1374,6 +1729,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteFinancialTransaction = async (id: string): Promise<void> => {
     setFinancialTransactions((prev) => prev.filter((t) => t.id !== id));
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('financial_transactions').delete().eq('id', id);
+    }
+
     try {
       await deleteDoc(doc(db, 'financialTransactions', id));
     } catch (e) {
@@ -1401,14 +1762,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('Error syncing deletion with localStorage:', e);
     }
 
-    // 4. Delete order document from Firestore
+    // 4. Delete order and linked transaction from Supabase
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('financial_transactions').delete().eq('order_id', orderId);
+      await supabase.from('orders').delete().eq('id', orderId);
+    }
+
+    // 5. Delete order document from Firestore
     try {
       await deleteDoc(doc(db, 'orders', orderId));
     } catch (e) {
       console.log('Error deleting order from Firestore:', e);
     }
 
-    // 5. Delete linked financial transaction in Firestore if any
+    // 6. Delete linked financial transaction in Firestore if any
     try {
       const financesSnap = await getDocs(
         query(collection(db, 'financialTransactions'), where('orderId', '==', orderId))
@@ -1429,6 +1797,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearAllOrders = async (): Promise<void> => {
     setOrders([]);
     localStorage.setItem('peptide_orders', '[]');
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('orders').delete().neq('id', '');
+    }
+
     try {
       const snap = await getDocs(collection(db, 'orders'));
       snap.forEach(async (d) => {
@@ -1445,6 +1819,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const clearAllFinances = async (): Promise<void> => {
     setFinancialTransactions([]);
     localStorage.setItem('peptide_finances', '[]');
+
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.from('financial_transactions').delete().neq('id', '');
+    }
+
     try {
       const snap = await getDocs(collection(db, 'financialTransactions'));
       snap.forEach(async (d) => {
@@ -1500,6 +1880,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addEmployee,
         updateEmployee,
         deleteEmployee,
+        clearAllEmployees,
         coupons,
         addCoupon,
         updateCoupon,
@@ -1513,6 +1894,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         storeSettings,
         updateStoreSettings,
         deliveryFee,
+        isSupabaseActive,
+        supabaseConfigured,
         saveAllProductsToCloud,
         saveAllOrdersToCloud,
         saveAllFinancesToCloud,

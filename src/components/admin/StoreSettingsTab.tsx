@@ -21,15 +21,19 @@ import {
   Database,
   Layers,
   Sparkles,
+  Server,
+  Key,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_SETTINGS } from '../../data/mockData';
-import { FIRESTORE_DATABASE_ID, firebaseConfig } from '../../lib/firebase';
+import { isSupabaseConfigured } from '../../lib/supabase';
 
 export const StoreSettingsTab: React.FC = () => {
-  const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast } = useApp();
+  const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast, isSupabaseActive } = useApp();
   const [isSaving, setIsSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
+  const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedEnv, setCopiedEnv] = useState(false);
 
   const [formData, setFormData] = useState({
     storeName: storeSettings.storeName || 'PEPTIDE IMPORTS FARMA',
@@ -63,6 +67,14 @@ export const StoreSettingsTab: React.FC = () => {
     setTimeout(() => setCopiedUrl(false), 2000);
   };
 
+  const handleCopyEnv = () => {
+    const envContent = `VITE_SUPABASE_URL=https://your-project-id.supabase.co\nVITE_SUPABASE_ANON_KEY=your-supabase-anon-key`;
+    navigator.clipboard.writeText(envContent);
+    setCopiedEnv(true);
+    showToast('Variáveis de ambiente Vercel copiadas!');
+    setTimeout(() => setCopiedEnv(false), 2000);
+  };
+
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setIsSaving(true);
@@ -88,10 +100,10 @@ export const StoreSettingsTab: React.FC = () => {
         <div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-white font-tech flex items-center gap-2.5">
             <Settings className="w-6 h-6 text-cyan-400" />
-            CONFIGURAÇÕES GERAIS, TAXA DE ENTREGA & WHATSAPP
+            CONFIGURAÇÕES GERAIS, TAXA DE ENTREGA & BANCO DE DADOS
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Defina o canal do WhatsApp oficial, frases institucionais, taxa fixa de entrega e opção de retirada presencial.
+            Defina o canal do WhatsApp oficial, frases institucionais, taxa fixa de entrega, integração Supabase PostgreSQL e Vercel.
           </p>
         </div>
 
@@ -109,11 +121,11 @@ export const StoreSettingsTab: React.FC = () => {
 
       <form onSubmit={handleSave} className="space-y-6">
 
-        {/* SECTION: VERCEL DOMAIN & FIREBASE STATUS BANNER */}
+        {/* SECTION: VERCEL DOMAIN & SUPABASE POSTGRESQL STATUS BANNER */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* Vercel & Store Domain Config */}
-          <div className="lg:col-span-7 bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/40 border border-cyan-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="lg:col-span-6 bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/40 border border-cyan-500/30 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
@@ -196,69 +208,90 @@ export const StoreSettingsTab: React.FC = () => {
               </div>
 
               <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-2 text-[11px] text-slate-400">
-                <div className="flex items-center gap-2 font-semibold text-slate-200">
-                  <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>Dica de Deploy na Vercel:</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 font-semibold text-slate-200">
+                    <Key className="w-4 h-4 text-emerald-400" />
+                    <span>Variáveis de Ambiente na Vercel:</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyEnv}
+                    className="text-[10px] text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-mono"
+                  >
+                    {copiedEnv ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedEnv ? 'Copiado!' : 'Copiar Env'}</span>
+                  </button>
                 </div>
-                <p>
-                  O arquivo <code className="text-cyan-300 font-mono">vercel.json</code> já está configurado na raiz para Single Page Application (SPA). Basta conectar o repositório no dashboard da Vercel e fazer o deploy.
-                </p>
+                <div className="p-2 rounded bg-slate-900 border border-slate-800 font-mono text-[10px] text-slate-300 space-y-1">
+                  <div>VITE_SUPABASE_URL = https://&lt;seu-id&gt;.supabase.co</div>
+                  <div>VITE_SUPABASE_ANON_KEY = &lt;sua-chave-anon&gt;</div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Firebase Database Connection Status */}
-          <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 via-slate-900/90 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+          {/* Supabase Database Connection Status */}
+          <div className="lg:col-span-6 bg-gradient-to-br from-slate-900 via-slate-900/90 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   <Database className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-white font-tech">FIREBASE FIRESTORE</h3>
+                  <h3 className="text-sm font-bold text-white font-tech flex items-center gap-2">
+                    <span>BANCO DE DADOS SUPABASE</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold">
+                      POSTGRESQL
+                    </span>
+                  </h3>
                   <p className="text-[11px] text-slate-400">
-                    Sincronização em tempo real ativa
+                    Integração em tempo real e persistência automática
                   </p>
                 </div>
               </div>
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                CONECTADO
+                {isSupabaseConfigured() ? 'SUPABASE ATIVO' : 'SISTEMA PRONTO'}
               </span>
             </div>
 
             <div className="space-y-2.5 text-xs">
               <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                  <span>BANCO FIRESTORE ID:</span>
-                  <span className="text-emerald-400 font-mono font-bold">ai-studio-peptideimportsfa</span>
+                  <span>MOTOR RELACIONAL:</span>
+                  <span className="text-emerald-400 font-mono font-bold">PostgreSQL 15+ (Supabase)</span>
                 </div>
-                <div className="text-xs text-white font-mono break-all font-semibold">
-                  {FIRESTORE_DATABASE_ID}
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1">
-                <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                  <span>PROJETO GOOGLE CLOUD / FIREBASE:</span>
-                </div>
-                <div className="text-xs text-cyan-300 font-mono font-semibold">
-                  {firebaseConfig.projectId}
+                <div className="text-xs text-white font-mono break-all font-semibold flex items-center gap-2">
+                  <Server className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Schema SQL estruturado em /src/db/supabase-schema.sql</span>
                 </div>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 text-[11px]">
                 <div className="text-slate-300 font-semibold flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Coleções em Tempo Real:</span>
+                  <span>Tabelas Sincronizadas no Supabase:</span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {['products', 'orders', 'settings', 'coupons', 'employees', 'financialTransactions'].map((col) => (
-                    <span key={col} className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 font-mono text-[10px]">
-                      {col}
-                    </span>
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  {[
+                    { name: 'products', label: 'Catálogo de Produtos' },
+                    { name: 'orders', label: 'Pedidos & WhatsApp' },
+                    { name: 'coupons', label: 'Cupons de Desconto' },
+                    { name: 'employees', label: 'Equipe & Permissões' },
+                    { name: 'financial_transactions', label: 'Livro Caixa ERP' },
+                    { name: 'store_settings', label: 'Configurações da Loja' },
+                  ].map((table) => (
+                    <div key={table.name} className="px-2 py-1 rounded-lg bg-slate-800/90 border border-slate-700/60 flex items-center justify-between text-slate-300 font-mono text-[10px]">
+                      <span className="text-cyan-300">{table.name}</span>
+                      <span className="text-emerald-400 text-[9px] font-sans font-semibold">Auto-Sync</span>
+                    </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 text-[11px] text-slate-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>Todos os salvamentos são automáticos em tempo real.</span>
               </div>
             </div>
           </div>
