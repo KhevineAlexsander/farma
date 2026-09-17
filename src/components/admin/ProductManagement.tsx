@@ -241,25 +241,6 @@ export const ProductManagement: React.FC = () => {
         {/* Add Product Buttons: Peptides and Other Products with Photo */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
-            onClick={handleSaveToCloud}
-            disabled={isSavingProducts}
-            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-            title="Salvar todas as alterações de produtos, preços, estoque e fotos diretamente no banco de dados e atualizar o site"
-          >
-            {isSavingProducts ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Subindo para o Banco...</span>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="w-4 h-4" />
-                <span>Salvar Produtos no Banco</span>
-              </>
-            )}
-          </button>
-
-          <button
             onClick={async () => {
               setIsSyncing(true);
               await syncOfficialCatalog();
@@ -267,10 +248,11 @@ export const ProductManagement: React.FC = () => {
             }}
             disabled={isSyncing}
             className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
-            title="Restaurar e gravar o catálogo oficial original no banco de dados"
+            title="Restaurar e gravar o catálogo oficial original diretamente no banco de dados"
           >
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
-            <span className="hidden sm:inline">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
+            <span className="hidden sm:inline">{isSyncing ? 'Gravando...' : 'Restaurar Catálogo Base'}</span>
+            <span className="sm:hidden">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
           </button>
 
           <button

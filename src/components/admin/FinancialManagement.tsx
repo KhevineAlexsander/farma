@@ -355,25 +355,6 @@ export const FinancialManagement: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={handleSaveFinancesToCloud}
-              disabled={isSavingFinances}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-              title="Salvar lançamentos contábeis e fluxo de caixa diretamente no banco de dados e atualizar o site"
-            >
-              {isSavingFinances ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Salvando no Banco...</span>
-                </>
-              ) : (
-                <>
-                  <UploadCloud className="w-3.5 h-3.5" />
-                  <span>Salvar Finanças no Banco</span>
-                </>
-              )}
-            </button>
-
             {financialTransactions.length > 0 && (
               <button
                 onClick={() => {

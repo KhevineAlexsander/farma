@@ -98,27 +98,8 @@ export const StoreSettingsTab: React.FC = () => {
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <button
             type="button"
-            onClick={() => handleSave()}
-            disabled={isSaving}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-          >
-            {isSaving ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Salvando no Banco...</span>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="w-4 h-4" />
-                <span>Salvar Configurações no Banco</span>
-              </>
-            )}
-          </button>
-
-          <button
-            type="button"
             onClick={handleResetDefaults}
-            className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             <span>Restaurar Padrão</span>
@@ -585,7 +566,7 @@ export const StoreSettingsTab: React.FC = () => {
         <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col sm:flex-row items-center justify-between gap-4 sticky bottom-4 z-20 backdrop-blur-md">
           <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
             <ShieldCheck className="w-5 h-5 shrink-0" />
-            <span>As configurações têm aplicação em tempo real em todas as sessões e no checkout.</span>
+            <span>Sincronização em tempo real ativa. Todas as alterações são salvas automaticamente no banco de dados.</span>
           </div>
 
           <button
@@ -600,8 +581,8 @@ export const StoreSettingsTab: React.FC = () => {
               </>
             ) : (
               <>
-                <UploadCloud className="w-4 h-4" />
-                <span>Salvar no Banco & Atualizar Site Agora</span>
+                <ShieldCheck className="w-4 h-4" />
+                <span>Salvar Configurações</span>
               </>
             )}
           </button>

@@ -188,25 +188,6 @@ export const EmployeeManagement: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <button
-            onClick={handleSaveStaffToCloud}
-            disabled={isSavingStaff}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-            title="Salvar todos os funcionários e permissões diretamente no banco de dados e atualizar o site"
-          >
-            {isSavingStaff ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Gravando no Banco...</span>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="w-4 h-4" />
-                <span>Salvar Equipe no Banco</span>
-              </>
-            )}
-          </button>
-
           {employees.length > 0 && (
             <button
               onClick={() => setShowWipeConfirm(true)}

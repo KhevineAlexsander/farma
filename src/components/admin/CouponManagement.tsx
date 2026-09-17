@@ -150,25 +150,6 @@ export const CouponManagement: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
-            onClick={handleSaveCouponsToCloud}
-            disabled={isSavingCoupons}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-            title="Salvar todos os cupons e regras de desconto diretamente no banco de dados e atualizar o site"
-          >
-            {isSavingCoupons ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Gravando no Banco...</span>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="w-4 h-4" />
-                <span>Salvar Cupons no Banco</span>
-              </>
-            )}
-          </button>
-
-          <button
             onClick={handleOpenCreate}
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
           >

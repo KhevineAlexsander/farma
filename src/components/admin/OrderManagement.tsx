@@ -192,25 +192,6 @@ export const OrderManagement: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleSaveOrdersToCloud}
-            disabled={isSavingOrders}
-            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50"
-            title="Salvar e sincronizar o status e histórico de todos os pedidos no banco de dados"
-          >
-            {isSavingOrders ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Gravando no Banco...</span>
-              </>
-            ) : (
-              <>
-                <UploadCloud className="w-4 h-4" />
-                <span>Salvar Pedidos no Banco</span>
-              </>
-            )}
-          </button>
-
           <div className="px-4 py-2.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-2 shadow-sm">
             <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
             <span>Aguardando Baixa ({pendingCount})</span>

@@ -67,6 +67,7 @@ interface AppContextType {
 
   financialTransactions: FinancialTransaction[];
   addFinancialTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
+  deleteFinancialTransaction: (id: string) => Promise<void>;
 
   employees: Employee[];
   addEmployee: (emp: Omit<Employee, 'id' | 'createdAt'>) => void;
@@ -1231,12 +1232,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: orderData.notes,
     };
 
-    // Deduct inventory stock
+    // Deduct inventory stock & sync to Firestore
     setProducts((prev) =>
       prev.map((p) => {
         const cartItem = cart.find((item) => item.product.id === p.id);
         if (cartItem) {
-          return { ...p, stock: Math.max(0, p.stock - cartItem.quantity) };
+          const updatedStock = Math.max(0, p.stock - cartItem.quantity);
+          try {
+            setDoc(doc(db, 'products', p.id), { stock: updatedStock }, { merge: true });
+          } catch (e) {
+            console.log('Error updating product stock in Firestore:', e);
+          }
+          return { ...p, stock: updatedStock };
         }
         return p;
       })
@@ -1252,15 +1259,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('Error saving order to Firestore:', e);
     }
 
-    // If coupon was applied, increment its usage
+    // If coupon was applied, increment its usage and sync to Firestore
     if (orderData.couponCode || appliedCoupon) {
       const codeToUpdate = (orderData.couponCode || appliedCoupon?.code)?.toUpperCase();
       if (codeToUpdate) {
-        setCoupons((prev) =>
-          prev.map((c) =>
-            c.code === codeToUpdate ? { ...c, usageCount: c.usageCount + 1 } : c
-          )
-        );
+        const matchedCoupon = coupons.find((c) => c.code === codeToUpdate);
+        if (matchedCoupon) {
+          const newUsage = (matchedCoupon.usageCount || 0) + 1;
+          setCoupons((prev) =>
+            prev.map((c) =>
+              c.code === codeToUpdate ? { ...c, usageCount: newUsage } : c
+            )
+          );
+          try {
+            setDoc(doc(db, 'coupons', matchedCoupon.id), { usageCount: newUsage }, { merge: true });
+          } catch (e) {
+            console.log('Error updating coupon usage in Firestore:', e);
+          }
+        }
       }
       setAppliedCoupon(null);
     }
@@ -1354,6 +1370,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('Error saving financial transaction in Firestore:', e);
     }
     showToast('Lançamento financeiro registrado com sucesso!');
+  };
+
+  const deleteFinancialTransaction = async (id: string): Promise<void> => {
+    setFinancialTransactions((prev) => prev.filter((t) => t.id !== id));
+    try {
+      await deleteDoc(doc(db, 'financialTransactions', id));
+    } catch (e) {
+      console.log('Error deleting financial transaction from Firestore:', e);
+    }
+    showToast('Lançamento financeiro removido com sucesso.');
   };
 
   const deleteOrder = async (orderId: string): Promise<boolean> => {
@@ -1469,6 +1495,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearAllFinances,
         financialTransactions,
         addFinancialTransaction,
+        deleteFinancialTransaction,
         employees,
         addEmployee,
         updateEmployee,

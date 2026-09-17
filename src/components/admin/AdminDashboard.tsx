@@ -159,26 +159,11 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Right Header Actions */}
             <div className="flex items-center gap-2.5">
-              {/* Cloud Quick Sync Button */}
-              <button
-                onClick={handleSaveAll}
-                disabled={isSavingAll}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-50"
-                title={lastSavedTime ? `Último salvamento: ${lastSavedTime}` : 'Salvar todas as abas e subir para o banco agora'}
-              >
-                {isSavingAll ? (
-                  <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Salvando Tudo...</span>
-                  </>
-                ) : (
-                  <>
-                    <UploadCloud className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Salvar Tudo no Banco</span>
-                    <span className="sm:hidden">Salvar Tudo</span>
-                  </>
-                )}
-              </button>
+              {/* Automatic Real-Time Sync Indicator */}
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Firestore Conectado (Tempo Real)</span>
+              </div>
 
               <button
                 onClick={() => setCurrentView('store')}
