@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowRight, SearchX, SlidersHorizontal, Tag, Star, Sparkles } from 'lucide-react';
+import { ArrowRight, SearchX, SlidersHorizontal, Tag, Star, Sparkles, Search, X } from 'lucide-react';
 import { ProductCategory } from '../types';
 import { ProductCard } from './ProductCard';
 import { useApp } from '../context/AppContext';
@@ -86,6 +86,57 @@ export const ProductCatalog: React.FC = () => {
             <button
               onClick={() => setSpecialFilter(specialFilter === 'featured' ? 'all' : 'featured')}
               className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                specialFilter === 'featured'
+                  ? 'bg-cyan-600 text-white border-cyan-600 shadow-md shadow-cyan-600/20'
+                  : 'bg-white text-cyan-700 border-cyan-200 hover:bg-cyan-50 shadow-xs'
+              }`}
+            >
+              <Star className="w-3.5 h-3.5 fill-cyan-600 text-cyan-600" />
+              <span>Destaques ({featuredCount})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Search Bar & Special Filters */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Buscar peptídeo, dosagem ou categoria..."
+              className="w-full pl-10 pr-10 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs sm:text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-cyan-500 shadow-xs transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                title="Limpar busca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Quick special filters: Promotions & Featured */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSpecialFilter(specialFilter === 'promotions' ? 'all' : 'promotions')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                specialFilter === 'promotions'
+                  ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/20'
+                  : 'bg-white text-rose-600 border-rose-200 hover:bg-rose-50 shadow-xs'
+              }`}
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Promoções ({promoCount})</span>
+            </button>
+
+            <button
+              onClick={() => setSpecialFilter(specialFilter === 'featured' ? 'all' : 'featured')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
                 specialFilter === 'featured'
                   ? 'bg-cyan-600 text-white border-cyan-600 shadow-md shadow-cyan-600/20'
                   : 'bg-white text-cyan-700 border-cyan-200 hover:bg-cyan-50 shadow-xs'
