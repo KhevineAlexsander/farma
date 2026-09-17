@@ -98,7 +98,7 @@ export const ProductCatalog: React.FC = () => {
         </div>
 
         {/* Category Filters (Pills) */}
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-2 scrollbar-none mb-8">
+        <div className="flex items-center gap-2.5 overflow-x-auto pb-3 pt-1 px-1 mb-8 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-slate-100">
           {categories.map((cat) => {
             const isSelected = selectedCategory === cat;
             return (
