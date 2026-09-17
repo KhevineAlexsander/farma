@@ -127,8 +127,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // --- Products State ---
   const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('peptide_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+    return INITIAL_PRODUCTS;
   });
 
   useEffect(() => {
