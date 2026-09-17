@@ -69,32 +69,8 @@ export const ProductCatalog: React.FC = () => {
             <div className="hidden sm:block h-[2px] bg-slate-300 flex-1 max-w-xs rounded-full" />
           </div>
 
-          {/* Quick special filters: Promotions & Featured */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSpecialFilter(specialFilter === 'promotions' ? 'all' : 'promotions')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                specialFilter === 'promotions'
-                  ? 'bg-rose-600 text-white border-rose-600 shadow-md shadow-rose-600/20'
-                  : 'bg-white text-rose-600 border-rose-200 hover:bg-rose-50 shadow-xs'
-              }`}
-            >
-              <Tag className="w-3.5 h-3.5" />
-              <span>Promoções ({promoCount})</span>
-            </button>
-
-            <button
-              onClick={() => setSpecialFilter(specialFilter === 'featured' ? 'all' : 'featured')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
-                specialFilter === 'featured'
-                  ? 'bg-cyan-600 text-white border-cyan-600 shadow-md shadow-cyan-600/20'
-                  : 'bg-white text-cyan-700 border-cyan-200 hover:bg-cyan-50 shadow-xs'
-              }`}
-            >
-              <Star className="w-3.5 h-3.5 fill-cyan-600 text-cyan-600" />
-              <span>Destaques ({featuredCount})</span>
-            </button>
-          </div>
+          {/* Quick special filters: Promotions & Featured (Removed duplicate) */}
+          <div className="hidden"></div>
         </div>
 
         {/* Search Bar & Special Filters */}
