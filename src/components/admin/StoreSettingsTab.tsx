@@ -289,6 +289,38 @@ export const StoreSettingsTab: React.FC = () => {
                 </div>
               </div>
 
+              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-[11px]">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Script de Criação e Carga Inicial:</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      fetch('/src/db/supabase-schema.sql')
+                        .then((res) => res.text())
+                        .then((sql) => {
+                          navigator.clipboard.writeText(sql);
+                          setCopiedSql(true);
+                          showToast('Script SQL completo copiado! Cole no SQL Editor do Supabase.');
+                          setTimeout(() => setCopiedSql(false), 2500);
+                        })
+                        .catch(() => {
+                          showToast('Arquivo /src/db/supabase-schema.sql pronto no repositório.');
+                        });
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-mono text-[10px] font-bold flex items-center gap-1 transition-all"
+                  >
+                    {copiedSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    <span>{copiedSql ? 'SQL Copiado!' : 'Copiar Script SQL'}</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400">
+                  Execute o script no <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-cyan-400 underline hover:text-cyan-300">SQL Editor do Supabase</a> para criar todas as 6 tabelas com RLS e dados iniciais instantaneamente.
+                </p>
+              </div>
+
               <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 text-[11px] text-slate-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>Todos os salvamentos são automáticos em tempo real.</span>

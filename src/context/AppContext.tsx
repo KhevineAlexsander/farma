@@ -2,24 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_TRANSACTIONS, CURRENT_CLIENT_USER, ADMIN_USER, INITIAL_EMPLOYEES, INITIAL_SETTINGS, INITIAL_COUPONS } from '../data/mockData';
 import {
-  auth,
-  googleProvider,
-  signInWithPopup,
-  signOut,
-  onAuthStateChanged,
-  db,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  updateDoc,
-  deleteDoc,
-  collection,
-  onSnapshot,
-  query,
-  where,
-} from '../lib/firebase';
-import {
   getSupabaseClient,
   isSupabaseConfigured,
   mapProductToDB,
@@ -187,60 +169,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Security: Brute-force prevention and login rate-limiting refs
   const failedAttemptsRef = useRef<number>(0);
   const lockoutUntilRef = useRef<number | null>(null);
-
-  // Sync auth state with Firebase Auth
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser) {
-        try {
-          const userDocRef = doc(db, 'users', fbUser.uid);
-          const userSnap = await getDoc(userDocRef);
-          if (userSnap.exists()) {
-            const data = userSnap.data() as User;
-            setCurrentUser(data);
-          } else {
-            // New user from Google
-            const newUser: User = {
-              id: fbUser.uid,
-              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Cliente',
-              email: fbUser.email || '',
-              role: 'CLIENTE',
-              phone: fbUser.phoneNumber || '(11) 99999-0000',
-              photoURL: fbUser.photoURL || undefined,
-              addresses: [
-                {
-                  street: 'Av. Paulista',
-                  number: '1000',
-                  neighborhood: 'Bela Vista',
-                  city: 'São Paulo',
-                  state: 'SP',
-                  zipCode: '01310-100',
-                },
-              ],
-            };
-            await setDoc(userDocRef, newUser);
-            setCurrentUser(newUser);
-          }
-        } catch {
-          // If Firestore network error, fallback to user from auth
-          setCurrentUser((prev) => {
-            if (prev && prev.email === fbUser.email) return prev;
-            return {
-              id: fbUser.uid,
-              name: fbUser.displayName || fbUser.email?.split('@')[0] || 'Cliente',
-              email: fbUser.email || '',
-              role: 'CLIENTE',
-              phone: '(11) 99999-0000',
-              photoURL: fbUser.photoURL || undefined,
-              addresses: [],
-            };
-          });
-        }
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -1030,8 +958,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleProductPromotion = async (id: string, isPromotion?: boolean, discount = 15) => {
     let target: Product | undefined;
-    setProducts((prev) =>
-      prev.map((p) => {
+    setProducts((prev) => {
+      const updated = prev.map((p) => {
         if (p.id === id) {
           const nextPromo = isPromotion !== undefined ? isPromotion : !p.isPromotion;
           const origPrice = p.originalPrice || (nextPromo ? Math.round(p.price * 1.25) : undefined);
@@ -1044,8 +972,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return target;
         }
         return p;
-      })
-    );
+      });
+      localStorage.setItem('peptide_products', JSON.stringify(updated));
+      return updated;
+    });
     showToast('Status de promoção atualizado!');
 
     if (target) {
@@ -1068,16 +998,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const toggleProductFeatured = async (id: string) => {
     let target: Product | undefined;
-    setProducts((prev) =>
-      prev.map((p) => {
+    setProducts((prev) => {
+      const updated = prev.map((p) => {
         if (p.id === id) {
           const nextFeatured = !p.featured;
           target = { ...p, featured: nextFeatured };
           return target;
         }
         return p;
-      })
-    );
+      });
+      localStorage.setItem('peptide_products', JSON.stringify(updated));
+      return updated;
+    });
     showToast('Status de destaque atualizado!');
 
     if (target) {
