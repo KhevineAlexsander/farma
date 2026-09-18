@@ -476,13 +476,13 @@ export const FinancialManagement: React.FC = () => {
 
               <div>
                 <label className="block text-slate-300 font-semibold mb-1">Descrição</label>
-                <input
-                  type="text"
+                <textarea
                   required
+                  rows={3}
                   value={txDesc}
                   onChange={(e) => setTxDesc(e.target.value)}
-                  placeholder="Ex: Embalagens isotérmicas Sedex"
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-cyan-500"
+                  placeholder="Ex: Embalagens isotérmicas Sedex, lote de frascos, insumos laboratoriais detalhados..."
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-cyan-500 resize-none"
                 />
               </div>
 
