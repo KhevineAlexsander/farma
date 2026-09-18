@@ -51,7 +51,8 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
     let errorCount = 0;
 
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+      const line = (lines[i] || '').trim();
+      if (!line) continue;
       // Skip header row if it contains descriptive column names
       if (i === 0 && (line.toLowerCase().includes('categoria') || line.toLowerCase().includes('produto') || line.toLowerCase().includes('nome'))) {
         continue;

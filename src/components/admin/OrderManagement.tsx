@@ -331,16 +331,16 @@ export const OrderManagement: React.FC = () => {
                       {/* Payment Method */}
                       <td className="py-4 px-5 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-950 border border-slate-700/80 text-slate-300 whitespace-nowrap shadow-sm">
-                          {order.paymentMethod.includes('WhatsApp') && (
+                          {(order.paymentMethod || '').includes('WhatsApp') && (
                             <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
                           )}
-                          {order.paymentMethod.includes('PIX') && (
+                          {(order.paymentMethod || '').includes('PIX') && (
                             <span className="w-2 h-2 rounded-full bg-cyan-400 shrink-0"></span>
                           )}
-                          {order.paymentMethod.includes('Cartão') && (
+                          {(order.paymentMethod || '').includes('Cartão') && (
                             <CreditCard className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                           )}
-                          <span>{order.paymentMethod}</span>
+                          <span>{order.paymentMethod || 'A Combinar'}</span>
                         </span>
                       </td>
 

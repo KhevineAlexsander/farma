@@ -491,9 +491,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(parsed)) {
           // Remove old mock/demo employees
           const cleaned = parsed.filter(
-            (e: Employee) =>
-              !['emp-1', 'emp-2', 'emp-3'].includes(e.id) &&
-              !['juliana@peptideimports.com.br', 'rafael.estoque@peptideimports.com.br', 'beatriz.vendas@peptideimports.com.br'].includes(e.email?.toLowerCase())
+            (e: Employee) => {
+              if (!e) return false;
+              const empId = e.id || '';
+              const empEmail = (e.email || '').toLowerCase();
+              return (
+                !['emp-1', 'emp-2', 'emp-3'].includes(empId) &&
+                !['juliana@peptideimports.com.br', 'rafael.estoque@peptideimports.com.br', 'beatriz.vendas@peptideimports.com.br'].includes(empEmail)
+              );
+            }
           );
           return cleaned;
         }
