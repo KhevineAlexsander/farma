@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw, FileText } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw, FileText, ChevronDown } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 
 export const ProductManagement: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, toggleProductPromotion, toggleProductFeatured, syncOfficialCatalog, saveAllProductsToCloud } = useApp();
+  const { products, addProduct, updateProduct, deleteProduct, toggleProductPromotion, toggleProductFeatured, syncOfficialCatalog, saveAllProductsToCloud, currentUser } = useApp();
+  const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingProducts, setIsSavingProducts] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -308,29 +310,54 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
             />
           </div>
 
-          {/* Quick Filter Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto text-xs pb-1">
-            {[
-              { id: 'Todos', label: 'Todos' },
-              { id: 'Promoções', label: `Promoções (${promoCount})` },
-              { id: 'Destaques', label: `Destaques (${featuredCount})` },
-              { id: 'Emagrecimento', label: 'Emagrecimento' },
-              { id: 'Saúde', label: 'Saúde' },
-              { id: 'Beleza', label: 'Beleza' },
-              { id: 'Desempenho', label: 'Desempenho' },
-            ].map((f) => (
-              <button
-                key={f.id}
-                onClick={() => setCategoryFilter(f.id)}
-                className={`px-3 py-1.5 rounded-xl font-medium whitespace-nowrap transition-colors ${
-                  categoryFilter === f.id
-                    ? 'bg-cyan-500 text-slate-950 font-bold'
-                    : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* Quick Filter Dropdown */}
+          <div className="relative">
+            {(() => {
+              const filterOptions = [
+                { id: 'Todos', label: 'Todos' },
+                { id: 'Promoções', label: `Promoções (${promoCount})` },
+                { id: 'Destaques', label: `Destaques (${featuredCount})` },
+                { id: 'Emagrecimento', label: 'Emagrecimento' },
+                { id: 'Saúde', label: 'Saúde' },
+                { id: 'Beleza', label: 'Beleza' },
+                { id: 'Desempenho', label: 'Desempenho' },
+              ];
+              const currentLabel = filterOptions.find(f => f.id === categoryFilter)?.label || categoryFilter;
+
+              return (
+                <>
+                  <button
+                    onClick={() => setIsFilterOpen(!isFilterOpen)}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-xs text-white font-medium flex items-center gap-2 hover:border-cyan-500 transition-all cursor-pointer shadow-md"
+                  >
+                    <span>Filtrar: <strong className="text-cyan-400">{currentLabel}</strong></span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isFilterOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isFilterOpen && (
+                    <div className="absolute left-0 mt-2 w-52 bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl z-30 py-2 animate-in fade-in duration-150">
+                      {filterOptions.map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => {
+                            setCategoryFilter(f.id);
+                            setIsFilterOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-2 text-xs font-medium transition-colors flex items-center justify-between ${
+                            categoryFilter === f.id
+                              ? 'bg-cyan-500/20 text-cyan-300 font-bold border-l-2 border-cyan-400'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          <span>{f.label}</span>
+                          {categoryFilter === f.id && <Check className="w-3.5 h-3.5 text-cyan-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
 
@@ -351,14 +378,16 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
             <span className="sm:hidden">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
           </button>
 
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
-            title="Importar lista de produtos em lote via CSV"
-          >
-            <FileText className="w-4 h-4 text-emerald-400" />
-            <span>Importar CSV</span>
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+              title="Importar lista de produtos em lote via CSV"
+            >
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <span>Importar CSV</span>
+            </button>
+          )}
 
           <button
             onClick={openNewPeptideModal}
