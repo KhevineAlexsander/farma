@@ -90,10 +90,11 @@ export interface User {
     canManageFinances: boolean;
     canManageStaff: boolean;
     canManageSettings: boolean;
+    canManageCoupons: boolean;
   };
 }
 
-export type StaffRole = 'Administrador Geral' | 'Gerente de Estoque' | 'Atendente de Vendas' | 'Financeiro';
+export type StaffRole = 'Administrador Geral' | 'Gerente de Produtos' | 'Atendente de Vendas' | 'Financeiro';
 
 export interface Employee {
   id: string;
@@ -110,6 +111,7 @@ export interface Employee {
     canManageFinances: boolean;
     canManageStaff: boolean;
     canManageSettings: boolean;
+    canManageCoupons: boolean;
   };
 }
 

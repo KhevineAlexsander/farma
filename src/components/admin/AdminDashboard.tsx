@@ -41,6 +41,7 @@ export const AdminDashboard: React.FC = () => {
         canManageFinances: true,
         canManageStaff: true,
         canManageSettings: true,
+        canManageCoupons: true,
       }
     : (currentUser?.permissions || staffEmployee?.permissions || {
         canManageOrders: true,
@@ -48,6 +49,7 @@ export const AdminDashboard: React.FC = () => {
         canManageFinances: false,
         canManageStaff: false,
         canManageSettings: false,
+        canManageCoupons: false,
       });
 
   const allTabs = [
@@ -70,7 +72,7 @@ export const AdminDashboard: React.FC = () => {
       label: 'Cupons de Desconto',
       icon: Tag,
       badge: null,
-      visible: permissions.canManageProducts,
+      visible: permissions.canManageCoupons,
     },
     {
       id: 'employees' as const,

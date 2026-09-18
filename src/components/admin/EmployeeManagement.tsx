@@ -43,6 +43,7 @@ export const EmployeeManagement: React.FC = () => {
     canManageFinances: false,
     canManageStaff: false,
     canManageSettings: false,
+    canManageCoupons: false,
   });
 
   const roles = [
@@ -77,6 +78,7 @@ export const EmployeeManagement: React.FC = () => {
       canManageFinances: false,
       canManageStaff: false,
       canManageSettings: false,
+      canManageCoupons: false,
     });
     setIsModalOpen(true);
   };
@@ -408,6 +410,11 @@ export const EmployeeManagement: React.FC = () => {
                         Equipe
                       </span>
                     )}
+                    {emp.permissions.canManageCoupons && (
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-pink-500/15 text-pink-300 border-pink-500/30">
+                        Cupons de Desconto
+                      </span>
+                    )}
                     {emp.permissions.canManageSettings && (
                       <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-amber-500/15 text-amber-300 border-amber-500/30">
                         Loja & WhatsApp
@@ -417,7 +424,8 @@ export const EmployeeManagement: React.FC = () => {
                       !emp.permissions.canManageProducts &&
                       !emp.permissions.canManageFinances &&
                       !emp.permissions.canManageStaff &&
-                      !emp.permissions.canManageSettings && (
+                      !emp.permissions.canManageSettings &&
+                      !emp.permissions.canManageCoupons && (
                         <span className="text-[11px] text-slate-500 italic">
                           Nenhuma aba liberada (acesso restrito)
                         </span>
@@ -718,6 +726,18 @@ export const EmployeeManagement: React.FC = () => {
                       className="accent-cyan-500 rounded"
                     />
                     <span className="text-slate-200">Gerenciar Equipe / Funcionários</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={permissions.canManageCoupons}
+                      onChange={(e) =>
+                        setPermissions({ ...permissions, canManageCoupons: e.target.checked })
+                      }
+                      className="accent-cyan-500 rounded"
+                    />
+                    <span className="text-slate-200">Gestão de Cupons de Desconto</span>
                   </label>
 
                   <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 sm:col-span-2">
