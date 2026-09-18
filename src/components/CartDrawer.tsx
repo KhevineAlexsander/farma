@@ -78,17 +78,17 @@ export const CartDrawer: React.FC = () => {
           {/* Cart Items List */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {cart.length > 0 ? (
-              cart.map((item) => (
+              cart.map((item, idx) => (
                 <div
-                  key={item.product.id}
+                  key={item.product?.id || idx}
                   className="flex items-center gap-4 p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 hover:border-slate-300 transition-colors"
                 >
                   {/* Miniature Vial */}
                   <div className="w-14 h-16 bg-white rounded-xl border border-slate-200 flex items-center justify-center shrink-0">
                     <PeptideVial
-                      capColor={item.product.capColor}
-                      name={item.product.name}
-                      dosage={item.product.dosage}
+                      capColor={item.product?.capColor}
+                      name={item.product?.name || 'Peptídeo'}
+                      dosage={item.product?.dosage || ''}
                       size="sm"
                     />
                   </div>
@@ -96,17 +96,17 @@ export const CartDrawer: React.FC = () => {
                   {/* Info */}
                   <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-bold text-slate-900 truncate">
-                      {item.product.name}
+                      {item.product?.name || 'Produto'}
                     </h4>
                     <p className="text-xs text-slate-500 font-medium">
-                      {item.product.dosage} • R$ {item.product.price.toFixed(2).replace('.', ',')}
+                      {item.product?.dosage || '-'} • R$ {(item.product?.price || 0).toFixed(2).replace('.', ',')}
                     </p>
 
                     {/* Quantity controls */}
                     <div className="flex items-center gap-3 mt-2">
                       <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden text-xs">
                         <button
-                          onClick={() => updateCartQuantity(item.product.id, item.quantity - 1)}
+                          onClick={() => item.product?.id && updateCartQuantity(item.product.id, item.quantity - 1)}
                           className="px-2 py-1 text-slate-600 hover:bg-slate-100"
                           aria-label="Diminuir"
                         >
@@ -114,7 +114,7 @@ export const CartDrawer: React.FC = () => {
                         </button>
                         <span className="px-2.5 font-bold text-slate-900">{item.quantity}</span>
                         <button
-                          onClick={() => updateCartQuantity(item.product.id, item.quantity + 1)}
+                          onClick={() => item.product?.id && updateCartQuantity(item.product.id, item.quantity + 1)}
                           className="px-2 py-1 text-slate-600 hover:bg-slate-100"
                           aria-label="Aumentar"
                         >
@@ -123,14 +123,14 @@ export const CartDrawer: React.FC = () => {
                       </div>
 
                       <span className="text-xs font-bold text-slate-900 ml-auto">
-                        R$ {(item.product.price * item.quantity).toFixed(2).replace('.', ',')}
+                        R$ {((item.product?.price || 0) * (item.quantity || 1)).toFixed(2).replace('.', ',')}
                       </span>
                     </div>
                   </div>
 
                   {/* Delete Item */}
                   <button
-                    onClick={() => removeFromCart(item.product.id)}
+                    onClick={() => item.product?.id && removeFromCart(item.product.id)}
                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                     title="Remover produto"
                   >
@@ -191,7 +191,7 @@ export const CartDrawer: React.FC = () => {
                           <span className="text-[11px] text-emerald-600 block">
                             {appliedCoupon.type === 'PERCENTAGE'
                               ? `${appliedCoupon.value}% de desconto`
-                              : `R$ ${appliedCoupon.value.toFixed(2).replace('.', ',')} de desconto`}
+                              : `R$ ${(appliedCoupon.value || 0).toFixed(2).replace('.', ',')} de desconto`}
                           </span>
                         </div>
                       </div>
@@ -220,13 +220,13 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex justify-between">
                   <span>Subtotal dos produtos</span>
                   <span className="font-semibold text-slate-800">
-                    R$ {cartTotal.toFixed(2).replace('.', ',')}
+                    R$ {(cartTotal || 0).toFixed(2).replace('.', ',')}
                   </span>
                 </div>
                 {storeSettings.couponsEnabled !== false && appliedCoupon && couponDiscount > 0 && (
                   <div className="flex justify-between text-emerald-600 font-semibold">
                     <span>Desconto Cupom ({appliedCoupon.code})</span>
-                    <span>- R$ {couponDiscount.toFixed(2).replace('.', ',')}</span>
+                    <span>- R$ {(couponDiscount || 0).toFixed(2).replace('.', ',')}</span>
                   </div>
                 )}
                 <div className="flex justify-between">
@@ -238,7 +238,7 @@ export const CartDrawer: React.FC = () => {
                 <div className="flex justify-between text-base font-extrabold text-slate-950 pt-2 border-t border-slate-200">
                   <span>Total estimado</span>
                   <span className="text-lg text-slate-900 font-tech">
-                    R$ {estimatedTotal.toFixed(2).replace('.', ',')}
+                    R$ {(estimatedTotal || 0).toFixed(2).replace('.', ',')}
                   </span>
                 </div>
               </div>

@@ -40,8 +40,8 @@ export const FinancialManagement: React.FC = () => {
   const totalCost = orders
     .filter((o) => o.status !== 'Cancelado')
     .reduce((acc, order) => {
-      const orderCost = order.items.reduce(
-        (sum, item) => sum + item.product.costPrice * item.quantity,
+      const orderCost = (order.items || []).reduce(
+        (sum, item) => sum + (item.product?.costPrice || 0) * (item.quantity || 1),
         0
       );
       return acc + orderCost;
@@ -52,7 +52,7 @@ export const FinancialManagement: React.FC = () => {
   
   // Orders today calculated from real order dates
   const todayStr = new Date().toISOString().split('T')[0];
-  const ordersTodayCount = orders.filter((o) => o.createdAt.startsWith(todayStr)).length;
+  const ordersTodayCount = orders.filter((o) => o.createdAt && o.createdAt.startsWith(todayStr)).length;
 
   // Dynamic chart datasets calculated strictly from real orders (starts at zero)
   const dataByDay = [
@@ -84,12 +84,12 @@ export const FinancialManagement: React.FC = () => {
 
   orders.forEach((order) => {
     if (order.status === 'Cancelado') return;
-    const orderCost = order.items.reduce(
-      (sum, item) => sum + item.product.costPrice * item.quantity,
+    const orderCost = (order.items || []).reduce(
+      (sum, item) => sum + (item.product?.costPrice || 0) * (item.quantity || 1),
       0
     );
-    const orderProfit = order.total - orderCost;
-    const d = new Date(order.createdAt);
+    const orderProfit = (order.total || 0) - orderCost;
+    const d = new Date(order.createdAt || Date.now());
 
     // Day hour
     const hour = d.getHours();
@@ -174,7 +174,7 @@ export const FinancialManagement: React.FC = () => {
           </div>
           <div className="mt-3">
             <span className="text-2xl font-extrabold text-white font-tech">
-              R$ {totalRevenue.toFixed(2).replace('.', ',')}
+              R$ {(totalRevenue || 0).toFixed(2).replace('.', ',')}
             </span>
             <span className="flex items-center gap-1 text-[11px] text-emerald-400 mt-1 font-semibold">
               <ArrowUpRight className="w-3.5 h-3.5" /> +18.4% vs mês anterior
@@ -192,10 +192,10 @@ export const FinancialManagement: React.FC = () => {
           </div>
           <div className="mt-3">
             <span className="text-2xl font-extrabold text-emerald-400 font-tech">
-              R$ {netProfit.toFixed(2).replace('.', ',')}
+              R$ {(netProfit || 0).toFixed(2).replace('.', ',')}
             </span>
             <span className="text-[11px] text-slate-400 block mt-1">
-              Margem líquida global: <strong className="text-white">{totalRevenue > 0 ? ((netProfit / totalRevenue) * 100).toFixed(1) : 0}%</strong>
+              Margem líquida global: <strong className="text-white">{totalRevenue > 0 ? (((netProfit / totalRevenue) * 100) || 0).toFixed(1) : 0}%</strong>
             </span>
           </div>
         </div>
@@ -210,7 +210,7 @@ export const FinancialManagement: React.FC = () => {
           </div>
           <div className="mt-3">
             <span className="text-2xl font-extrabold text-white font-tech">
-              R$ {averageTicket.toFixed(2).replace('.', ',')}
+              R$ {(averageTicket || 0).toFixed(2).replace('.', ',')}
             </span>
             <span className="text-[11px] text-slate-400 block mt-1">
               Média de 2.4 frascos por carrinho
@@ -290,7 +290,7 @@ export const FinancialManagement: React.FC = () => {
                   color: '#fff',
                   fontSize: '12px',
                 }}
-                formatter={(value: any) => [`R$ ${Number(value).toFixed(2)}`, '']}
+                formatter={(value: any) => [`R$ ${Number(value || 0).toFixed(2)}`, '']}
               />
               <Area type="monotone" dataKey="vendas" name="Faturamento" stroke="#00E5FF" strokeWidth={2.5} fillOpacity={1} fill="url(#vendasGrad)" />
               <Area type="monotone" dataKey="lucro" name="Lucro Líquido" stroke="#10B981" strokeWidth={2.5} fillOpacity={1} fill="url(#lucroGrad)" />
@@ -320,14 +320,16 @@ export const FinancialManagement: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {products.slice(0, 8).map((p) => {
-                const profit = p.price - p.costPrice;
-                const margin = p.price > 0 ? ((profit / p.price) * 100).toFixed(1) : '0';
+                const price = p.price || 0;
+                const costPrice = p.costPrice || 0;
+                const profit = price - costPrice;
+                const margin = price > 0 ? ((profit / price) * 100).toFixed(1) : '0';
                 return (
                   <tr key={p.id} className="hover:bg-slate-800/30">
-                    <td className="py-2.5 px-3 font-bold text-white">{p.name}</td>
-                    <td className="py-2.5 px-3 text-cyan-400 font-mono">{p.dosage}</td>
-                    <td className="py-2.5 px-3 font-semibold text-white">R$ {p.price.toFixed(2).replace('.', ',')}</td>
-                    <td className="py-2.5 px-3 text-slate-400">R$ {p.costPrice.toFixed(2).replace('.', ',')}</td>
+                    <td className="py-2.5 px-3 font-bold text-white">{p.name || 'Produto'}</td>
+                    <td className="py-2.5 px-3 text-cyan-400 font-mono">{p.dosage || '-'}</td>
+                    <td className="py-2.5 px-3 font-semibold text-white">R$ {price.toFixed(2).replace('.', ',')}</td>
+                    <td className="py-2.5 px-3 text-slate-400">R$ {costPrice.toFixed(2).replace('.', ',')}</td>
                     <td className="py-2.5 px-3 font-bold text-emerald-400">+R$ {profit.toFixed(2).replace('.', ',')}</td>
                     <td className="py-2.5 px-3">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -418,7 +420,7 @@ export const FinancialManagement: React.FC = () => {
                       <td className="py-2.5 px-3 text-white font-medium">{tx.description}</td>
                       <td className="py-2.5 px-3 text-slate-400">{tx.category}</td>
                       <td className={`py-2.5 px-3 text-right font-bold text-sm ${isIncome ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isIncome ? '+' : '-'} R$ {tx.amount.toFixed(2).replace('.', ',')}
+                        {isIncome ? '+' : '-'} R$ {(tx.amount || 0).toFixed(2).replace('.', ',')}
                       </td>
                     </tr>
                   );

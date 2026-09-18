@@ -23,10 +23,14 @@ import {
   Sparkles,
   Server,
   Key,
+  Code,
+  Eye,
+  X,
+  Zap,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_SETTINGS } from '../../data/mockData';
-import { isSupabaseConfigured } from '../../lib/supabase';
+import { isSupabaseConfigured, setSupabaseCredentials, testSupabaseConnection } from '../../lib/supabase';
 
 export const StoreSettingsTab: React.FC = () => {
   const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast, isSupabaseActive } = useApp();
@@ -34,6 +38,25 @@ export const StoreSettingsTab: React.FC = () => {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
+  const [showSqlModal, setShowSqlModal] = useState(false);
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(() => {
+    try {
+      return localStorage.getItem('peptide_supabase_url') || (import.meta as any).env?.VITE_SUPABASE_URL || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const [supabaseAnonKeyInput, setSupabaseAnonKeyInput] = useState(() => {
+    try {
+      return localStorage.getItem('peptide_supabase_anon_key') || (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+    } catch {
+      return '';
+    }
+  });
 
   const [formData, setFormData] = useState({
     storeName: storeSettings.storeName || 'PEPTIDE IMPORTS FARMA',
@@ -57,6 +80,30 @@ export const StoreSettingsTab: React.FC = () => {
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveSupabaseCredentials = async () => {
+    setSupabaseCredentials(supabaseUrlInput, supabaseAnonKeyInput);
+    showToast('Credenciais do Supabase salvas localmente!');
+    handleTestConnection();
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setConnectionStatus(null);
+    try {
+      const res = await testSupabaseConnection();
+      setConnectionStatus(res);
+      if (res.success) {
+        showToast('Conexão com o Supabase estabelecida com sucesso!');
+      } else {
+        showToast('Aviso: Verifique o script SQL e as credenciais do Supabase.');
+      }
+    } catch (e: any) {
+      setConnectionStatus({ success: false, message: e?.message || 'Falha ao conectar' });
+    } finally {
+      setTestingConnection(false);
+    }
   };
 
   const handleCopyUrl = () => {
@@ -230,7 +277,7 @@ export const StoreSettingsTab: React.FC = () => {
             </div>
           </div>
 
-          {/* Supabase Database Connection Status */}
+          {/* Supabase Database Connection Status & Config */}
           <div className="lg:col-span-6 bg-gradient-to-br from-slate-900 via-slate-900/90 to-emerald-950/30 border border-emerald-500/30 rounded-2xl p-6 shadow-xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center gap-2.5">
@@ -251,22 +298,74 @@ export const StoreSettingsTab: React.FC = () => {
               </div>
               <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                {isSupabaseConfigured() ? 'SUPABASE ATIVO' : 'SISTEMA PRONTO'}
+                {isSupabaseConfigured() ? 'SUPABASE CONFIGURADO' : 'AGUARDANDO CHAVES'}
               </span>
             </div>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between text-slate-400 text-[10px]">
-                  <span>MOTOR RELACIONAL:</span>
-                  <span className="text-emerald-400 font-mono font-bold">PostgreSQL 15+ (Supabase)</span>
+            {/* Supabase Credentials Inputs */}
+            <div className="p-3.5 rounded-xl bg-slate-950/90 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300">
+                  <Key className="w-3.5 h-3.5" />
+                  <span>Credenciais de Conexão Supabase</span>
                 </div>
-                <div className="text-xs text-white font-mono break-all font-semibold flex items-center gap-2">
-                  <Server className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Schema SQL estruturado em /src/db/supabase-schema.sql</span>
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testingConnection}
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1 transition-all disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3 h-3 ${testingConnection ? 'animate-spin' : ''}`} />
+                  <span>{testingConnection ? 'Testando...' : 'Testar Conexão'}</span>
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 mb-0.5">
+                    VITE_SUPABASE_URL
+                  </label>
+                  <input
+                    type="text"
+                    value={supabaseUrlInput}
+                    onChange={(e) => setSupabaseUrlInput(e.target.value)}
+                    placeholder="https://xyzproject.supabase.co"
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700/80 rounded-lg text-emerald-300 font-mono text-[11px] focus:outline-none focus:border-emerald-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-mono text-slate-400 mb-0.5">
+                    VITE_SUPABASE_ANON_KEY
+                  </label>
+                  <input
+                    type="password"
+                    value={supabaseAnonKeyInput}
+                    onChange={(e) => setSupabaseAnonKeyInput(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700/80 rounded-lg text-emerald-300 font-mono text-[11px] focus:outline-none focus:border-emerald-400"
+                  />
                 </div>
               </div>
 
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={handleSaveSupabaseCredentials}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[11px] flex items-center gap-1.5 transition-all shadow-sm"
+                >
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Salvar Chaves no Navegador</span>
+                </button>
+                {connectionStatus && (
+                  <span className={`text-[10px] font-semibold ${connectionStatus.success ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {connectionStatus.success ? '✓ Conectado ao Supabase!' : '✗ Verifique credenciais ou tabelas'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2.5 text-xs">
               <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 space-y-1.5 text-[11px]">
                 <div className="text-slate-300 font-semibold flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-cyan-400" />
@@ -293,37 +392,47 @@ export const StoreSettingsTab: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-[11px]">
                     <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Script de Criação e Carga Inicial:</span>
+                    <span>Script de Criação de Tabelas (SQL):</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      fetch('/src/db/supabase-schema.sql')
-                        .then((res) => res.text())
-                        .then((sql) => {
-                          navigator.clipboard.writeText(sql);
-                          setCopiedSql(true);
-                          showToast('Script SQL completo copiado! Cole no SQL Editor do Supabase.');
-                          setTimeout(() => setCopiedSql(false), 2500);
-                        })
-                        .catch(() => {
-                          showToast('Arquivo /src/db/supabase-schema.sql pronto no repositório.');
-                        });
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-mono text-[10px] font-bold flex items-center gap-1 transition-all"
-                  >
-                    {copiedSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    <span>{copiedSql ? 'SQL Copiado!' : 'Copiar Script SQL'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowSqlModal(true)}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-mono text-[10px] font-bold flex items-center gap-1 transition-all"
+                    >
+                      <Eye className="w-3 h-3 text-cyan-400" />
+                      <span>Ver Código SQL</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fetch('/src/db/supabase-schema.sql')
+                          .then((res) => res.text())
+                          .then((sql) => {
+                            navigator.clipboard.writeText(sql);
+                            setCopiedSql(true);
+                            showToast('Script SQL completo copiado! Cole no SQL Editor do Supabase.');
+                            setTimeout(() => setCopiedSql(false), 2500);
+                          })
+                          .catch(() => {
+                            showToast('Arquivo /src/db/supabase-schema.sql pronto no repositório.');
+                          });
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-mono text-[10px] font-bold flex items-center gap-1 transition-all"
+                    >
+                      {copiedSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedSql ? 'SQL Copiado!' : 'Copiar Script'}</span>
+                    </button>
+                  </div>
                 </div>
                 <p className="text-[10px] text-slate-400">
-                  Execute o script no <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-cyan-400 underline hover:text-cyan-300">SQL Editor do Supabase</a> para criar todas as 6 tabelas com RLS e dados iniciais instantaneamente.
+                  Abra o <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-cyan-400 underline hover:text-cyan-300">SQL Editor do Supabase</a> e execute o script para criar todas as 6 tabelas com RLS e dados iniciais com 1 clique.
                 </p>
               </div>
 
               <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 text-[11px] text-slate-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>Todos os salvamentos são automáticos em tempo real.</span>
+                <span>Integração bidirecional com fallback e sincronização em tempo real.</span>
               </div>
             </div>
           </div>
@@ -654,6 +763,224 @@ export const StoreSettingsTab: React.FC = () => {
         </div>
 
       </form>
+
+      {/* SQL Script Viewer Modal */}
+      {showSqlModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 overflow-y-auto animate-fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 bg-slate-950/80">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                  <Code className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-tech">
+                    SCRIPT SQL DE CRIAÇÃO DO BANCO SUPABASE
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Copie e cole este script no <a href="https://supabase.com/dashboard" target="_blank" rel="noreferrer" className="text-cyan-400 underline">SQL Editor do Supabase</a>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSqlModal(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Steps Guide */}
+            <div className="px-5 py-3 bg-cyan-950/20 border-b border-cyan-900/40 text-xs text-slate-300 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 font-bold flex items-center justify-center text-[10px]">1</span>
+                <span>Acesse o <strong>SQL Editor</strong> do seu projeto Supabase</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 font-bold flex items-center justify-center text-[10px]">2</span>
+                <span>Cole o código abaixo e clique em <strong>Run</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-[10px]">3</span>
+                <span>Pronto! 6 tabelas + Realtime + RLS ativos</span>
+              </div>
+            </div>
+
+            {/* Code Body */}
+            <div className="p-5 flex-1 overflow-y-auto bg-slate-950 font-mono text-xs text-slate-300 select-all space-y-1">
+              <pre className="whitespace-pre-wrap text-emerald-300 leading-relaxed font-mono">
+{`-- ==============================================================================
+-- PEPTIDE IMPORTS FARMA - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
+-- ==============================================================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- 1. TABELA DE PRODUTOS
+CREATE TABLE IF NOT EXISTS public.products (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  dosage TEXT NOT NULL,
+  category TEXT NOT NULL,
+  description TEXT NOT NULL,
+  benefits JSONB NOT NULL DEFAULT '[]'::jsonb,
+  price NUMERIC(10, 2) NOT NULL,
+  original_price NUMERIC(10, 2),
+  cost_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  stock INTEGER NOT NULL DEFAULT 0,
+  cap_color TEXT NOT NULL DEFAULT '#06b6d4',
+  purity TEXT NOT NULL DEFAULT '99.4% HPLC',
+  storage TEXT NOT NULL DEFAULT '2°C a 8°C (Refrigerado)',
+  reconstitution TEXT NOT NULL DEFAULT 'Água bacteriostática (2ml a 3ml)',
+  image_url TEXT,
+  featured BOOLEAN NOT NULL DEFAULT false,
+  is_promotion BOOLEAN NOT NULL DEFAULT false,
+  promotion_discount NUMERIC(5, 2) DEFAULT 0.00,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 2. TABELA DE PEDIDOS
+CREATE TABLE IF NOT EXISTS public.orders (
+  id TEXT PRIMARY KEY,
+  order_number TEXT NOT NULL UNIQUE,
+  customer JSONB NOT NULL,
+  address JSONB NOT NULL,
+  items JSONB NOT NULL DEFAULT '[]'::jsonb,
+  subtotal NUMERIC(10, 2) NOT NULL,
+  shipping NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  discount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
+  total NUMERIC(10, 2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Pendente',
+  payment_method TEXT NOT NULL DEFAULT 'WhatsApp / PIX',
+  tracking_code TEXT,
+  cleared_manually_at TIMESTAMPTZ,
+  cleared_by TEXT,
+  notes TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 3. TABELA DE CUPONS DE DESCONTO
+CREATE TABLE IF NOT EXISTS public.coupons (
+  id TEXT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  type TEXT NOT NULL DEFAULT 'PERCENTAGE',
+  value NUMERIC(10, 2) NOT NULL,
+  min_order_amount NUMERIC(10, 2) DEFAULT 0.00,
+  status TEXT NOT NULL DEFAULT 'Ativo',
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  max_usage INTEGER,
+  expires_at TIMESTAMPTZ,
+  description TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4. TABELA DE FUNCIONÁRIOS
+CREATE TABLE IF NOT EXISTS public.employees (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  phone TEXT NOT NULL,
+  password TEXT,
+  role TEXT NOT NULL DEFAULT 'Atendente de Vendas',
+  status TEXT NOT NULL DEFAULT 'Ativo',
+  permissions JSONB NOT NULL DEFAULT '{"canManageProducts": true, "canManageOrders": true, "canManageFinances": false, "canManageStaff": false, "canManageSettings": false}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 5. TABELA DE TRANSAÇÕES FINANCEIRAS
+CREATE TABLE IF NOT EXISTS public.financial_transactions (
+  id TEXT PRIMARY KEY,
+  date TIMESTAMPTZ NOT NULL DEFAULT now(),
+  type TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL,
+  amount NUMERIC(10, 2) NOT NULL,
+  order_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 6. TABELA DE CONFIGURAÇÕES DA LOJA
+CREATE TABLE IF NOT EXISTS public.store_settings (
+  id TEXT PRIMARY KEY DEFAULT 'config',
+  store_name TEXT NOT NULL DEFAULT 'PEPTIDE IMPORTS FARMA',
+  whatsapp_number TEXT NOT NULL DEFAULT '5511993456789',
+  whatsapp_display TEXT NOT NULL DEFAULT '(11) 99345-6789',
+  support_email TEXT NOT NULL DEFAULT 'contato@peptideimports.com.br',
+  hero_badge TEXT NOT NULL DEFAULT 'PEPTÍDEOS IMPORTADOS COM LAUDO HPLC',
+  hero_title TEXT NOT NULL DEFAULT 'PEPTÍDEOS',
+  hero_subtitle TEXT NOT NULL DEFAULT 'IMPORTADOS',
+  hero_tagline TEXT DEFAULT 'QUALIDADE • CONFIANÇA • RESULTADOS',
+  hero_description TEXT DEFAULT 'Mais performance, saúde e bem-estar para a sua melhor versão.',
+  announcement_bar TEXT NOT NULL DEFAULT 'Envio Imediato com Cadeia Fria para Todo o Brasil | Cupom PEPTIDE10 para 10% OFF',
+  checkout_notice TEXT NOT NULL DEFAULT 'Finalize sua compra e envie o resumo detalhado direto para nosso WhatsApp oficial para liberação imediata!',
+  delivery_fee NUMERIC(10, 2) NOT NULL DEFAULT 30.00,
+  pickup_enabled BOOLEAN NOT NULL DEFAULT true,
+  pickup_address TEXT NOT NULL DEFAULT 'Av. Paulista, 1842 - Conjunto 114, Bela Vista, São Paulo - SP',
+  pickup_estimated_time TEXT NOT NULL DEFAULT 'Pronto em 2 horas úteis',
+  coupons_enabled BOOLEAN NOT NULL DEFAULT true,
+  site_url TEXT DEFAULT 'https://peptideimports.vercel.app',
+  vercel_domain TEXT DEFAULT 'peptideimports.vercel.app',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- HABILITAR RLS E ACESSO
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.coupons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.employees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.store_settings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public full access products" ON public.products FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public full access orders" ON public.orders FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public full access coupons" ON public.coupons FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public full access employees" ON public.employees FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public full access financial_transactions" ON public.financial_transactions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Public full access store_settings" ON public.store_settings FOR ALL USING (true) WITH CHECK (true);`}
+              </pre>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+              <span className="text-xs text-slate-400">Arquivo completo disponível em <code>src/db/supabase-schema.sql</code></span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSqlModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetch('/src/db/supabase-schema.sql')
+                      .then((res) => res.text())
+                      .then((sql) => {
+                        navigator.clipboard.writeText(sql);
+                        setCopiedSql(true);
+                        showToast('Script SQL copiado com sucesso!');
+                        setTimeout(() => setCopiedSql(false), 2000);
+                      })
+                      .catch(() => {
+                        showToast('Erro ao ler arquivo SQL');
+                      });
+                  }}
+                  className="px-5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-cyan-500/20"
+                >
+                  {copiedSql ? <Check className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+                  <span>{copiedSql ? 'Copiado para Área de Transferência!' : 'Copiar Script SQL Completo'}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

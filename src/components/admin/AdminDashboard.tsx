@@ -31,7 +31,7 @@ export const AdminDashboard: React.FC = () => {
   const staffEmployee = employees.find(
     (e) =>
       (currentUser?.id && e.id === currentUser.id) ||
-      (currentUser?.email && e.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
+      (currentUser?.email && e.email && e.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim())
   );
 
   const permissions = isMasterAdmin

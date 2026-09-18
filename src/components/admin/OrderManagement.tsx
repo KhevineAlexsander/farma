@@ -60,11 +60,13 @@ export const OrderManagement: React.FC = () => {
       matchesStatus = order.status === statusFilter;
     }
 
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (order.customer.phone && order.customer.phone.includes(searchTerm));
+      !q ||
+      (order.orderNumber || '').toLowerCase().includes(q) ||
+      (order.customer?.name || '').toLowerCase().includes(q) ||
+      (order.customer?.email || '').toLowerCase().includes(q) ||
+      (typeof order.customer?.phone === 'string' && order.customer.phone.includes(q));
     return matchesStatus && matchesSearch;
   });
 
@@ -163,8 +165,9 @@ export const OrderManagement: React.FC = () => {
   };
 
   const getCustomerWhatsappUrl = (order: Order) => {
-    const cleanPhone = (order.customer.phone || '').replace(/\D/g, '');
-    const msg = `Olá ${order.customer.name}, aqui é da equipe ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}. Estamos em contato a respeito do seu pedido ${order.orderNumber}!`;
+    const cleanPhone = (order.customer?.phone || '').replace(/\D/g, '');
+    const customerName = order.customer?.name || 'Cliente';
+    const msg = `Olá ${customerName}, aqui é da equipe ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}. Estamos em contato a respeito do seu pedido ${order.orderNumber}!`;
     return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
   };
 
@@ -293,10 +296,10 @@ export const OrderManagement: React.FC = () => {
 
                       {/* Customer */}
                       <td className="py-4 px-5">
-                        <span className="font-bold text-slate-100 block text-sm">{order.customer.name}</span>
+                        <span className="font-bold text-slate-100 block text-sm">{order.customer?.name || 'Cliente'}</span>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-slate-400">{order.customer.phone}</span>
-                          {order.customer.phone && (
+                          <span className="text-xs text-slate-400">{order.customer?.phone || '-'}</span>
+                          {order.customer?.phone && (
                             <a
                               href={getCustomerWhatsappUrl(order)}
                               target="_blank"
@@ -313,16 +316,16 @@ export const OrderManagement: React.FC = () => {
                       {/* Items Summary */}
                       <td className="py-4 px-5">
                         <span className="font-semibold text-slate-200">
-                          {order.items.reduce((sum, item) => sum + item.quantity, 0)} frasco(s)
+                          {(order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0)} frasco(s)
                         </span>
                         <span className="text-[11px] text-slate-400 block truncate max-w-[160px]">
-                          {order.items.map((i) => i.product.name).join(', ')}
+                          {(order.items || []).map((i) => i.product?.name || 'Item').join(', ')}
                         </span>
                       </td>
 
                       {/* Total Amount */}
                       <td className="py-4 px-5 font-extrabold text-white text-sm whitespace-nowrap">
-                        R$ {order.total.toFixed(2).replace('.', ',')}
+                        R$ {(order.total || 0).toFixed(2).replace('.', ',')}
                       </td>
 
                       {/* Payment Method */}
@@ -430,18 +433,18 @@ export const OrderManagement: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-4 bg-slate-950 rounded-2xl border border-slate-800">
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">CLIENTE</span>
-                  <p className="font-bold text-white text-sm mt-0.5">{clearingOrder.customer.name}</p>
-                  <p className="text-slate-400 text-[11px]">{clearingOrder.customer.phone}</p>
+                  <p className="font-bold text-white text-sm mt-0.5">{clearingOrder.customer?.name || 'Cliente'}</p>
+                  <p className="text-slate-400 text-[11px]">{clearingOrder.customer?.phone || '-'}</p>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">VALOR TOTAL</span>
                   <p className="font-extrabold text-cyan-400 text-sm mt-0.5 font-tech">
-                    R$ {clearingOrder.total.toFixed(2).replace('.', ',')}
+                    R$ {(clearingOrder.total || 0).toFixed(2).replace('.', ',')}
                   </p>
                 </div>
                 <div>
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">PAGAMENTO</span>
-                  <p className="font-bold text-slate-200 text-xs mt-0.5 truncate">{clearingOrder.paymentMethod}</p>
+                  <p className="font-bold text-slate-200 text-xs mt-0.5 truncate">{clearingOrder.paymentMethod || 'A Combinar'}</p>
                 </div>
               </div>
 
@@ -529,16 +532,16 @@ export const OrderManagement: React.FC = () => {
               {/* Items Summary */}
               <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
                 <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block border-b border-slate-800 pb-1.5">
-                  Itens do Pedido ({clearingOrder.items.reduce((s, i) => s + i.quantity, 0)} frascos)
+                  Itens do Pedido ({(clearingOrder.items || []).reduce((s, i) => s + (i.quantity || 0), 0)} frascos)
                 </span>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                  {clearingOrder.items.map((item, idx) => (
+                  {(clearingOrder.items || []).map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between text-xs">
                       <span className="text-slate-300">
-                        {item.quantity} frasco(s) — {item.product.name} ({item.product.dosage})
+                        {item.quantity} frasco(s) — {item.product?.name || 'Produto'} ({item.product?.dosage || '-'})
                       </span>
                       <span className="font-bold text-white">
-                        R$ {(item.product.price * item.quantity).toFixed(2).replace('.', ',')}
+                        R$ {((item.product?.price || 0) * (item.quantity || 1)).toFixed(2).replace('.', ',')}
                       </span>
                     </div>
                   ))}
@@ -551,7 +554,7 @@ export const OrderManagement: React.FC = () => {
                 <div className="text-[11px] text-slate-300 space-y-0.5 font-mono">
                   <p>• Pedido: <strong>{clearingOrder.orderNumber}</strong></p>
                   <p>• Novo status: <strong className="text-cyan-400">{clearStatus}</strong></p>
-                  <p>• Valor total: <strong>R$ {clearingOrder.total.toFixed(2).replace('.', ',')}</strong></p>
+                  <p>• Valor total: <strong>R$ {(clearingOrder.total || 0).toFixed(2).replace('.', ',')}</strong></p>
                 </div>
               </div>
 
@@ -647,7 +650,7 @@ export const OrderManagement: React.FC = () => {
                     <FileText className="w-4 h-4 text-cyan-400" />
                     Dados do Cliente
                   </h4>
-                  {selectedOrder.customer.phone && (
+                  {selectedOrder.customer?.phone && (
                     <a
                       href={getCustomerWhatsappUrl(selectedOrder)}
                       target="_blank"
@@ -659,14 +662,14 @@ export const OrderManagement: React.FC = () => {
                     </a>
                   )}
                 </div>
-                <p className="text-white font-bold text-sm">{selectedOrder.customer.name}</p>
+                <p className="text-white font-bold text-sm">{selectedOrder.customer?.name || 'Cliente'}</p>
                 <p className="text-slate-400 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-slate-500" /> {selectedOrder.customer.email}
+                  <Mail className="w-3.5 h-3.5 text-slate-500" /> {selectedOrder.customer?.email || '-'}
                 </p>
                 <p className="text-slate-400 flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-slate-500" /> {selectedOrder.customer.phone}
+                  <Phone className="w-3.5 h-3.5 text-slate-500" /> {selectedOrder.customer?.phone || '-'}
                 </p>
-                {selectedOrder.customer.cpf && (
+                {selectedOrder.customer?.cpf && (
                   <p className="text-slate-500 font-mono">CPF: {selectedOrder.customer.cpf}</p>
                 )}
               </div>
@@ -678,13 +681,13 @@ export const OrderManagement: React.FC = () => {
                   Endereço de Entrega
                 </h4>
                 <p className="text-white font-medium leading-relaxed">
-                  {selectedOrder.address.street}, {selectedOrder.address.number}
-                  {selectedOrder.address.complement && ` (${selectedOrder.address.complement})`}
+                  {selectedOrder.address?.street || ''}, {selectedOrder.address?.number || ''}
+                  {selectedOrder.address?.complement && ` (${selectedOrder.address.complement})`}
                 </p>
                 <p className="text-slate-400">
-                  {selectedOrder.address.neighborhood} - {selectedOrder.address.city}/{selectedOrder.address.state}
+                  {selectedOrder.address?.neighborhood || ''} - {selectedOrder.address?.city || ''}/{selectedOrder.address?.state || ''}
                 </p>
-                <p className="text-slate-500 font-mono">CEP: {selectedOrder.address.zipCode}</p>
+                <p className="text-slate-500 font-mono">CEP: {selectedOrder.address?.zipCode || '-'}</p>
               </div>
             </div>
 
@@ -714,23 +717,23 @@ export const OrderManagement: React.FC = () => {
             {/* Purchased Items list */}
             <div className="space-y-3 mb-6">
               <h4 className="font-bold text-slate-300 text-xs uppercase tracking-wide">
-                Itens Comprados ({selectedOrder.items.length})
+                Itens Comprados ({(selectedOrder.items || []).length})
               </h4>
               <div className="space-y-2">
-                {selectedOrder.items.map((item, idx) => (
+                {(selectedOrder.items || []).map((item, idx) => (
                   <div key={idx} className="flex items-center justify-between p-3.5 bg-slate-950 rounded-2xl border border-slate-800 text-xs">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-10 bg-slate-900 rounded flex items-center justify-center shrink-0">
-                        <PeptideVial capColor={item.product.capColor} size="sm" />
+                        <PeptideVial capColor={item.product?.capColor} size="sm" />
                       </div>
                       <div>
-                        <span className="font-bold text-white">{item.product.name}</span>
-                        <span className="text-slate-400 text-[11px] block">{item.product.dosage}</span>
+                        <span className="font-bold text-white">{item.product?.name || 'Produto'}</span>
+                        <span className="text-slate-400 text-[11px] block">{item.product?.dosage || '-'}</span>
                       </div>
                     </div>
                     <div className="text-right">
-                      <span className="text-slate-400 block">{item.quantity}x R$ {item.product.price.toFixed(2).replace('.', ',')}</span>
-                      <span className="font-bold text-white">R$ {(item.product.price * item.quantity).toFixed(2).replace('.', ',')}</span>
+                      <span className="text-slate-400 block">{item.quantity}x R$ {(item.product?.price || 0).toFixed(2).replace('.', ',')}</span>
+                      <span className="font-bold text-white">R$ {((item.product?.price || 0) * (item.quantity || 1)).toFixed(2).replace('.', ',')}</span>
                     </div>
                   </div>
                 ))}
@@ -741,23 +744,23 @@ export const OrderManagement: React.FC = () => {
             <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-1.5 text-xs text-slate-400 mb-6">
               <div className="flex justify-between">
                 <span>Subtotal</span>
-                <span className="text-white font-semibold">R$ {selectedOrder.subtotal.toFixed(2).replace('.', ',')}</span>
+                <span className="text-white font-semibold">R$ {(selectedOrder.subtotal ?? (selectedOrder.total || 0)).toFixed(2).replace('.', ',')}</span>
               </div>
               <div className="flex justify-between">
                 <span>Taxa de Importação</span>
                 <span className="text-white font-semibold">
-                  R$ {selectedOrder.shipping.toFixed(2).replace('.', ',')}
+                  R$ {(selectedOrder.shipping || 0).toFixed(2).replace('.', ',')}
                 </span>
               </div>
-              {selectedOrder.discount > 0 && (
+              {(selectedOrder.discount || 0) > 0 && (
                 <div className="flex justify-between text-emerald-400">
                   <span>Desconto Aplicado</span>
-                  <span>- R$ {selectedOrder.discount.toFixed(2).replace('.', ',')}</span>
+                  <span>- R$ {(selectedOrder.discount || 0).toFixed(2).replace('.', ',')}</span>
                 </div>
               )}
               <div className="flex justify-between text-base font-bold text-white border-t border-slate-800 pt-2 mt-1">
                 <span>Total Faturado</span>
-                <span className="text-cyan-400 font-tech">R$ {selectedOrder.total.toFixed(2).replace('.', ',')}</span>
+                <span className="text-cyan-400 font-tech">R$ {(selectedOrder.total || 0).toFixed(2).replace('.', ',')}</span>
               </div>
             </div>
 
@@ -821,11 +824,11 @@ export const OrderManagement: React.FC = () => {
               <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 text-xs space-y-1.5">
                 <div className="flex justify-between">
                   <span className="text-slate-400">Cliente:</span>
-                  <span className="text-white font-semibold">{orderToDelete.customer.name}</span>
+                  <span className="text-white font-semibold">{orderToDelete.customer?.name || 'Cliente'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Total:</span>
-                  <span className="text-emerald-400 font-bold">R$ {orderToDelete.total.toFixed(2).replace('.', ',')}</span>
+                  <span className="text-emerald-400 font-bold">R$ {(orderToDelete.total || 0).toFixed(2).replace('.', ',')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-400">Status Atual:</span>

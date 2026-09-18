@@ -17,6 +17,23 @@ import {
   mapSettingsToDB,
   mapDBToSettings,
 } from '../lib/supabase';
+import {
+  db,
+  auth,
+  googleProvider,
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  onSnapshot,
+  signInWithPopup,
+  signOut,
+} from '../lib/firebase';
 
 interface AppContextType {
   products: Product[];
@@ -137,7 +154,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Cart State ---
   const [cart, setCart] = useState<CartItem[]>(() => {
     const saved = localStorage.getItem('peptide_cart');
-    return saved ? JSON.parse(saved) : [];
+    if (!saved) return [];
+    try {
+      const parsed = JSON.parse(saved);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item) => item && item.product && typeof item.product.price === 'number'
+        );
+      }
+      return [];
+    } catch {
+      return [];
+    }
   });
 
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -382,7 +410,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const list: Order[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Order), id: d.id }));
           list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setOrders((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
+          setOrders(list);
           localStorage.setItem('peptide_orders', JSON.stringify(list));
         }
       }, () => {});
@@ -601,7 +629,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // If currently logged in user is this employee, update their state in real-time
-    if (currentUser && (currentUser.id === id || currentUser.email.toLowerCase() === updates.email?.toLowerCase())) {
+    if (
+      currentUser &&
+      (currentUser.id === id ||
+        (currentUser.email &&
+          updates.email &&
+          currentUser.email.toLowerCase().trim() === updates.email.toLowerCase().trim()))
+    ) {
       setCurrentUser((prev) => {
         if (!prev) return null;
         return {
@@ -845,23 +879,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (found.minOrderAmount && subtotal < found.minOrderAmount) {
       return {
         success: false,
-        message: `Valor mínimo para este cupom é de R$ ${found.minOrderAmount.toFixed(2).replace('.', ',')}.`,
+        message: `Valor mínimo para este cupom é de R$ ${(found.minOrderAmount || 0).toFixed(2).replace('.', ',')}.`,
         discount: 0,
       };
     }
 
     let calculatedDiscount = 0;
     if (found.type === 'PERCENTAGE') {
-      calculatedDiscount = (subtotal * found.value) / 100;
+      calculatedDiscount = (subtotal * (found.value || 0)) / 100;
     } else {
-      calculatedDiscount = Math.min(subtotal, found.value);
+      calculatedDiscount = Math.min(subtotal, found.value || 0);
     }
 
     setAppliedCoupon(found);
     showToast(`Cupom "${found.code}" aplicado com sucesso!`);
     return {
       success: true,
-      message: `Cupom ${found.code} aplicado (-${found.type === 'PERCENTAGE' ? `${found.value}%` : `R$ ${found.value.toFixed(2).replace('.', ',')}`})!`,
+      message: `Cupom ${found.code} aplicado (-${found.type === 'PERCENTAGE' ? `${found.value}%` : `R$ ${(found.value || 0).toFixed(2).replace('.', ',')}`})!`,
       discount: calculatedDiscount,
       coupon: found,
     };
@@ -1234,15 +1268,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCart([]);
   };
 
-  const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
-  const cartTotal = Number(
-    cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0).toFixed(2)
+  const cartCount = (cart || []).reduce((acc, item) => acc + (item.quantity || 1), 0);
+  const rawCartTotal = (cart || []).reduce(
+    (acc, item) => acc + (item.product?.price || 0) * (item.quantity || 1),
+    0
   );
+  const cartTotal = Number((rawCartTotal || 0).toFixed(2));
 
   const couponDiscount = appliedCoupon
     ? appliedCoupon.type === 'PERCENTAGE'
-      ? Number(((cartTotal * appliedCoupon.value) / 100).toFixed(2))
-      : Number(Math.min(cartTotal, appliedCoupon.value).toFixed(2))
+      ? Number((((cartTotal * (appliedCoupon.value || 0)) / 100) || 0).toFixed(2))
+      : Number((Math.min(cartTotal, appliedCoupon.value || 0) || 0).toFixed(2))
     : 0;
 
   const deliveryFee = typeof storeSettings.deliveryFee === 'number' ? storeSettings.deliveryFee : 30.00;
@@ -1344,7 +1380,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Check against registered employees in the system
     const emp = employees.find(
-      (e) => e.email.toLowerCase().trim() === cleanEmail && e.status === 'Ativo'
+      (e) => e.email && e.email.toLowerCase().trim() === cleanEmail && e.status === 'Ativo'
     );
 
     if (emp) {
@@ -1454,9 +1490,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes?: string;
     couponCode?: string;
   }): Order => {
-    const subtotal = Number(cartTotal.toFixed(2));
-    const shipping = Number((orderData.shipping !== undefined ? orderData.shipping : deliveryFee).toFixed(2));
-    const discount = Number((orderData.discount !== undefined ? orderData.discount : couponDiscount).toFixed(2));
+    const subtotal = Number((cartTotal || 0).toFixed(2));
+    const shipping = Number((orderData.shipping !== undefined ? (orderData.shipping || 0) : (deliveryFee || 0)).toFixed(2));
+    const discount = Number((orderData.discount !== undefined ? (orderData.discount || 0) : (couponDiscount || 0)).toFixed(2));
     const total = Number(Math.max(0, subtotal + shipping - discount).toFixed(2));
 
     const newOrder: Order = {
@@ -1563,9 +1599,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newOrder;
   };
 
-  const updateOrderStatus = (orderId: string, status: OrderStatus, trackingCode?: string) => {
-    setOrders((prev) =>
-      prev.map((order) => {
+  const updateOrderStatus = async (orderId: string, status: OrderStatus, trackingCode?: string) => {
+    const isoTimestamp = new Date().toISOString();
+    let updatedList: Order[] = [];
+    setOrders((prev) => {
+      updatedList = prev.map((order) => {
         if (order.id === orderId) {
           return {
             ...order,
@@ -1574,68 +1612,91 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
         return order;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('peptide_orders', JSON.stringify(updatedList));
+      } catch (e) {
+        console.error('Error saving orders to localStorage:', e);
+      }
+      return updatedList;
+    });
 
     const supabase = getSupabaseClient();
     if (supabase) {
-      const dbUpdate: Record<string, any> = { status };
+      const dbUpdate: Record<string, any> = { status, updated_at: isoTimestamp };
       if (trackingCode !== undefined) dbUpdate.tracking_code = trackingCode;
-      supabase.from('orders').update(dbUpdate).eq('id', orderId).then();
+      supabase.from('orders').update(dbUpdate).eq('id', orderId).then((res) => {
+        if (res.error) console.log('Supabase status update info:', res.error.message);
+      });
     }
 
     try {
-      const updateData: Record<string, any> = { status };
+      const updateData: Record<string, any> = { status, updatedAt: isoTimestamp };
       if (trackingCode !== undefined) updateData.trackingCode = trackingCode;
-      setDoc(doc(db, 'orders', orderId), updateData, { merge: true });
+      await setDoc(doc(db, 'orders', orderId), updateData, { merge: true });
     } catch (e) {
       console.log('Error updating order status in Firestore:', e);
     }
     showToast(`Status do pedido atualizado para: ${status}`);
   };
 
-  const clearOrderManually = (orderId: string, status: OrderStatus, clearedBy: string, notes?: string) => {
+  const clearOrderManually = async (orderId: string, status: OrderStatus, clearedBy: string, notes?: string) => {
     const timestamp = new Date().toLocaleString('pt-BR');
-    setOrders((prev) =>
-      prev.map((order) => {
+    const isoTimestamp = new Date().toISOString();
+    const operator = clearedBy || currentUser?.name || 'Administrador';
+    const noteText = notes || 'Baixa manual confirmada pelo operador via WhatsApp.';
+
+    let updatedList: Order[] = [];
+    setOrders((prev) => {
+      updatedList = prev.map((order) => {
         if (order.id === orderId) {
           return {
             ...order,
             status,
             clearedManuallyAt: timestamp,
-            clearedBy: clearedBy || 'Administrador',
-            notes: notes || order.notes || 'Baixa manual confirmada pelo operador via WhatsApp.',
+            clearedBy: operator,
+            notes: noteText,
           };
         }
         return order;
-      })
-    );
+      });
+      try {
+        localStorage.setItem('peptide_orders', JSON.stringify(updatedList));
+      } catch (e) {
+        console.error('Error saving orders to localStorage:', e);
+      }
+      return updatedList;
+    });
 
     const supabase = getSupabaseClient();
     if (supabase) {
       supabase.from('orders').update({
         status,
-        cleared_manually_at: timestamp,
-        cleared_by: clearedBy || 'Administrador',
-        notes: notes || 'Baixa manual confirmada pelo operador via WhatsApp.',
-      }).eq('id', orderId).then();
+        cleared_manually_at: isoTimestamp,
+        cleared_by: operator,
+        notes: noteText,
+        updated_at: isoTimestamp,
+      }).eq('id', orderId).then((res) => {
+        if (res.error) console.log('Supabase clear order info:', res.error.message);
+      });
     }
 
     try {
-      setDoc(
+      await setDoc(
         doc(db, 'orders', orderId),
         {
           status,
           clearedManuallyAt: timestamp,
-          clearedBy: clearedBy || 'Administrador',
-          notes: notes || 'Baixa manual confirmada pelo operador via WhatsApp.',
+          clearedBy: operator,
+          notes: noteText,
+          updatedAt: isoTimestamp,
         },
         { merge: true }
       );
     } catch (e) {
       console.log('Error saving manual clearance in Firestore:', e);
     }
-    showToast(`Baixa manual concluída para o pedido! Status: ${status}`);
+    showToast(`Baixa manual concluída e salva com sucesso! Status: ${status}`);
   };
 
   const addFinancialTransaction = (tx: Omit<FinancialTransaction, 'id'>) => {

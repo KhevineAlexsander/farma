@@ -164,10 +164,12 @@ export const EmployeeManagement: React.FC = () => {
   };
 
   const filteredEmployees = employees.filter((emp) => {
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      emp.role.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      (emp.name || '').toLowerCase().includes(q) ||
+      (emp.email || '').toLowerCase().includes(q) ||
+      (emp.role || '').toLowerCase().includes(q);
     const matchesRole = roleFilter === 'Todos' || emp.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -316,11 +318,11 @@ export const EmployeeManagement: React.FC = () => {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-blue-600/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-extrabold text-sm font-tech">
-                      {emp.name.split(' ').map((n) => n[0]).slice(0, 2).join('')}
+                      {(emp.name || 'F').split(' ').map((n) => n[0]).slice(0, 2).join('')}
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-white leading-tight">{emp.name}</h3>
-                      <span className="text-[11px] text-cyan-400 font-semibold">{emp.role}</span>
+                      <h3 className="text-sm font-bold text-white leading-tight">{emp.name || 'Funcionário'}</h3>
+                      <span className="text-[11px] text-cyan-400 font-semibold">{emp.role || 'Operador'}</span>
                     </div>
                   </div>
 
@@ -456,7 +458,7 @@ export const EmployeeManagement: React.FC = () => {
             <div className="text-center space-y-1.5">
               <h3 className="text-lg font-bold font-tech text-white">REMOVER FUNCIONÁRIO</h3>
               <p className="text-xs text-slate-300">
-                Tem certeza que deseja remover o acesso de <strong className="text-white">"{employeeToDelete.name}"</strong> (<span className="text-cyan-400">{employeeToDelete.email}</span>)?
+                Tem certeza que deseja remover o acesso de <strong className="text-white">"{employeeToDelete.name || 'Funcionário'}"</strong> (<span className="text-cyan-400">{employeeToDelete.email || ''}</span>)?
               </p>
               <p className="text-[11px] text-slate-500">
                 O acesso deste colaborador ao painel administrativo será revogado imediatamente.

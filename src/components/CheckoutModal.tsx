@@ -55,17 +55,17 @@ export const CheckoutModal: React.FC = () => {
   const [whatsappLink, setWhatsappLink] = useState<string>('');
 
   // Shipping & Financial calculations
-  const subtotal = Number(cartTotal.toFixed(2));
+  const subtotal = Number((cartTotal || 0).toFixed(2));
   const currentCouponDiscount = storeSettings.couponsEnabled !== false && appliedCoupon
     ? appliedCoupon.type === 'PERCENTAGE'
-      ? Number(((subtotal * appliedCoupon.value) / 100).toFixed(2))
-      : Number(Math.min(subtotal, appliedCoupon.value).toFixed(2))
+      ? Number((((subtotal * (appliedCoupon.value || 0)) / 100) || 0).toFixed(2))
+      : Number((Math.min(subtotal, appliedCoupon.value || 0) || 0).toFixed(2))
     : 0;
 
   const subtotalAfterCoupon = Math.max(0, subtotal - currentCouponDiscount);
   const importTax = 100.00;
   const pixDiscount = 0;
-  const totalDiscount = Number(currentCouponDiscount.toFixed(2));
+  const totalDiscount = Number((currentCouponDiscount || 0).toFixed(2));
   const grandTotal = Number(Math.max(0, subtotal + importTax - totalDiscount).toFixed(2));
 
   const handleApplyCheckoutCoupon = (e?: React.SyntheticEvent) => {
@@ -81,24 +81,28 @@ export const CheckoutModal: React.FC = () => {
   };
 
   const buildWhatsappMessage = (order: Order) => {
-    const itemsList = order.items
+    const itemsList = (order.items || [])
       .map(
         (item) =>
-          `• ${item.quantity}x ${item.product.name} (${item.product.dosage}) - R$ ${(item.product.price * item.quantity).toFixed(2).replace('.', ',')}`
+          `• ${item.quantity || 1}x ${item.product?.name || 'Item'} (${item.product?.dosage || '-'}) - R$ ${(((item.product?.price || 0) * (item.quantity || 1)) || 0).toFixed(2).replace('.', ',')}`
       )
       .join('\n');
 
     const addressBlock = `📍 *ENDEREÇO DE ENTREGA:*
-${order.address.street}, ${order.address.number}${order.address.complement ? ` (${order.address.complement})` : ''}
-Bairro: ${order.address.neighborhood}
-Cidade/UF: ${order.address.city}/${order.address.state}
-CEP: ${order.address.zipCode}`;
+${order.address?.street || ''}, ${order.address?.number || ''}${order.address?.complement ? ` (${order.address.complement})` : ''}
+Bairro: ${order.address?.neighborhood || ''}
+Cidade/UF: ${order.address?.city || ''}/${order.address?.state || ''}
+CEP: ${order.address?.zipCode || ''}`;
 
     const couponLine = appliedCoupon && currentCouponDiscount > 0
-      ? `🏷️ *Cupom (${appliedCoupon.code}):* -R$ ${currentCouponDiscount.toFixed(2).replace('.', ',')}\n`
+      ? `🏷️ *Cupom (${appliedCoupon.code}):* -R$ ${(currentCouponDiscount || 0).toFixed(2).replace('.', ',')}\n`
       : '';
 
     const siteUrl = storeSettings.siteUrl || window.location.origin;
+
+    const customerName = order.customer?.name || 'Cliente';
+    const customerPhone = order.customer?.phone || '-';
+    const customerEmail = order.customer?.email || '-';
 
     const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}*
 ────────────────────────
@@ -108,9 +112,9 @@ Olá! Acabei de finalizar meu pedido no site.
 🌐 *Loja:* ${siteUrl}
 
 👤 *DADOS DO CLIENTE:*
-• Nome: ${order.customer.name}
-• WhatsApp: ${order.customer.phone}
-• E-mail: ${order.customer.email}
+• Nome: ${customerName}
+• WhatsApp: ${customerPhone}
+• E-mail: ${customerEmail}
 
 ${addressBlock}
 
@@ -119,10 +123,10 @@ ${itemsList}
 
 ────────────────────────
 📊 *RESUMO FINANCEIRO:*
-• Subtotal dos Produtos: R$ ${order.subtotal.toFixed(2).replace('.', ',')}
-• Taxa de Envio/Entrega: R$ ${order.shipping.toFixed(2).replace('.', ',')}
+• Subtotal dos Produtos: R$ ${(order.subtotal ?? (order.total || 0)).toFixed(2).replace('.', ',')}
+• Taxa de Envio/Entrega: R$ ${(order.shipping || 0).toFixed(2).replace('.', ',')}
 ${couponLine}💳 *Forma de Pagamento:* A Combinar no WhatsApp
-💰 *TOTAL A PAGAR: R$ ${order.total.toFixed(2).replace('.', ',')}*
+💰 *TOTAL A PAGAR: R$ ${(order.total || 0).toFixed(2).replace('.', ',')}*
 ────────────────────────
 Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e envio!`;
 
@@ -258,17 +262,17 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
             </div>
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500">Destinatário:</span>
-              <span className="font-semibold text-slate-800">{completedOrder.customer.name}</span>
+              <span className="font-semibold text-slate-800">{completedOrder.customer?.name || 'Cliente'}</span>
             </div>
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500">Endereço de Envio:</span>
               <span className="font-medium text-slate-700 truncate max-w-[280px]">
-                {completedOrder.address.street}, {completedOrder.address.number} - {completedOrder.address.city}/{completedOrder.address.state}
+                {completedOrder.address?.street || ''}, {completedOrder.address?.number || ''} - {completedOrder.address?.city || ''}/{completedOrder.address?.state || ''}
               </span>
             </div>
             <div className="flex justify-between items-center text-base font-bold border-t border-slate-200 pt-2 text-slate-900">
               <span>Valor Total:</span>
-              <span className="text-cyan-700">R$ {completedOrder.total.toFixed(2).replace('.', ',')}</span>
+              <span className="text-cyan-700">R$ {(completedOrder.total || 0).toFixed(2).replace('.', ',')}</span>
             </div>
           </div>
 
@@ -487,20 +491,20 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
 
               {/* Items */}
               <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-                {cart.map((item) => (
-                  <div key={item.product.id} className="flex items-center gap-3 text-xs">
+                {cart.map((item, idx) => (
+                  <div key={item.product?.id || idx} className="flex items-center gap-3 text-xs">
                     <div className="w-10 h-12 bg-slate-50 rounded-lg border border-slate-200 flex items-center justify-center shrink-0">
                       <PeptideVial
-                        capColor={item.product.capColor}
+                        capColor={item.product?.capColor}
                         size="sm"
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900 truncate">{item.product.name}</p>
-                      <p className="text-slate-500">{item.product.dosage} • {item.quantity} un.</p>
+                      <p className="font-bold text-slate-900 truncate">{item.product?.name || 'Produto'}</p>
+                      <p className="text-slate-500">{item.product?.dosage || '-'} • {item.quantity} un.</p>
                     </div>
                     <span className="font-bold text-slate-900 shrink-0">
-                      R$ {(item.product.price * item.quantity).toFixed(2).replace('.', ',')}
+                      R$ {(((item.product?.price || 0)) * (item.quantity || 1)).toFixed(2).replace('.', ',')}
                     </span>
                   </div>
                 ))}
@@ -551,7 +555,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                           <span className="text-[11px] text-emerald-600 block">
                             {appliedCoupon.type === 'PERCENTAGE'
                               ? `${appliedCoupon.value}% de desconto`
-                              : `R$ ${appliedCoupon.value.toFixed(2).replace('.', ',')} OFF`}
+                              : `R$ ${(appliedCoupon.value || 0).toFixed(2).replace('.', ',')} OFF`}
                           </span>
                         </div>
                       </div>
@@ -574,13 +578,13 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               <div className="space-y-2 text-xs text-slate-600 border-t border-slate-200 pt-4">
                 <div className="flex justify-between">
                   <span>Subtotal dos produtos</span>
-                  <span className="font-semibold text-slate-900">R$ {subtotal.toFixed(2).replace('.', ',')}</span>
+                  <span className="font-semibold text-slate-900">R$ {(subtotal || 0).toFixed(2).replace('.', ',')}</span>
                 </div>
 
                 {storeSettings.couponsEnabled !== false && appliedCoupon && currentCouponDiscount > 0 && (
                   <div className="flex justify-between text-emerald-600 font-semibold">
                     <span>Cupom ({appliedCoupon.code})</span>
-                    <span>- R$ {currentCouponDiscount.toFixed(2).replace('.', ',')}</span>
+                    <span>- R$ {(currentCouponDiscount || 0).toFixed(2).replace('.', ',')}</span>
                   </div>
                 )}
 
@@ -591,7 +595,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
 
                 <div className="flex justify-between text-lg font-extrabold text-slate-950 border-t border-slate-200 pt-3">
                   <span>Total a Pagar</span>
-                  <span className="text-cyan-700 font-tech">R$ {grandTotal.toFixed(2).replace('.', ',')}</span>
+                  <span className="text-cyan-700 font-tech">R$ {(grandTotal || 0).toFixed(2).replace('.', ',')}</span>
                 </div>
               </div>
 

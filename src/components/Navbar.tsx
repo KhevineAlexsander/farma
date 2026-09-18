@@ -193,17 +193,17 @@ export const Navbar: React.FC = () => {
                     {currentUser.photoURL ? (
                       <img
                         src={currentUser.photoURL}
-                        alt={currentUser.name}
+                        alt={currentUser.name || 'Usuário'}
                         referrerPolicy="no-referrer"
                         className="w-6 h-6 rounded-full object-cover border border-cyan-400"
                       />
                     ) : (
                       <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-[10px]">
-                        {currentUser.name.charAt(0)}
+                        {(currentUser.name || 'U').charAt(0)}
                       </div>
                     )}
                     <span className="hidden sm:inline text-slate-200 truncate max-w-[100px]">
-                      {currentUser.name.split(' ')[0]}
+                      {(currentUser.name || 'Usuário').split(' ')[0]}
                     </span>
                     <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                   </button>
@@ -212,7 +212,7 @@ export const Navbar: React.FC = () => {
                     <div className="absolute right-0 mt-2 w-56 bg-[#0F172A] border border-slate-700 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                       <div className="px-4 py-2 border-b border-slate-800">
                         <p className="text-xs text-slate-400">Logado como</p>
-                        <p className="text-sm font-semibold text-white truncate">{currentUser.name}</p>
+                        <p className="text-sm font-semibold text-white truncate">{currentUser.name || 'Usuário'}</p>
                         <span className="inline-block mt-1 px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
                           {currentUser.role}
                         </span>

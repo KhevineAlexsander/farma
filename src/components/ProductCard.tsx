@@ -81,17 +81,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             {/* Price in BRL (R$) with strikethrough if on promotion */}
             <div className="mt-3 pt-2 border-t border-slate-100 flex items-end justify-between">
               <div>
-                {product.isPromotion && product.originalPrice && (
+                {product.isPromotion && product.originalPrice ? (
                   <span className="text-[11px] text-slate-400 line-through block leading-none mb-0.5">
-                    De R$ {product.originalPrice.toFixed(2).replace('.', ',')}
+                    De R$ {(product.originalPrice || 0).toFixed(2).replace('.', ',')}
                   </span>
-                )}
+                ) : null}
                 <div className="flex items-baseline">
                   <span className="text-xs text-slate-700 font-semibold mr-1">
                     {product.isPromotion ? 'Por R$' : 'R$'}
                   </span>
                   <span className={`text-lg sm:text-xl font-extrabold ${product.isPromotion ? 'text-rose-600' : 'text-slate-950'}`}>
-                    {product.price.toFixed(2).replace('.', ',')}
+                    {(product.price || 0).toFixed(2).replace('.', ',')}
                   </span>
                 </div>
               </div>

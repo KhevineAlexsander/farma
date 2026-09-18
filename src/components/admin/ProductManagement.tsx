@@ -84,8 +84,8 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
 
         // Check if product already exists with same name and dosage (case-insensitive)
         const exists = products.some(
-          p => p.name.trim().toUpperCase() === productName && 
-               p.dosage.trim().toUpperCase() === dosageStr
+          p => (p.name || '').trim().toUpperCase() === productName && 
+               (p.dosage || '').trim().toUpperCase() === dosageStr
         );
 
         if (exists) {
@@ -100,7 +100,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
           price: priceNum,
           costPrice: Math.round(priceNum * 0.4 * 100) / 100,
           stock: 35,
-          capColor: category.toLowerCase().includes('emagrecimento') ? '#22C55E' : category.toLowerCase().includes('beleza') ? '#EC4899' : '#0088FF',
+          capColor: (category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : (category || '').toLowerCase().includes('beleza') ? '#EC4899' : '#0088FF',
           description: `Produto farmacêutico importado de alta pureza (${productName} ${dosageStr}).`,
           benefits: ['Laudo HPLC certificado', 'Alta biodisponibilidade'],
           purity: '99.6% HPLC',
@@ -283,9 +283,11 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
       matchesCat = p.category === categoryFilter;
     }
 
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.dosage.toLowerCase().includes(searchTerm.toLowerCase());
+      !q ||
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.dosage || '').toLowerCase().includes(q);
     return matchesCat && matchesSearch;
   });
 
@@ -413,9 +415,9 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {filteredProducts.map((product) => {
-                const profit = product.price - product.costPrice;
-                const marginPercent = ((profit / product.price) * 100).toFixed(0);
-                const isLowStock = product.stock < 10;
+                const profit = (product.price || 0) - (product.costPrice || 0);
+                const marginPercent = product.price ? (((profit / product.price) * 100) || 0).toFixed(0) : '0';
+                const isLowStock = (product.stock || 0) < 10;
 
                 return (
                   <tr key={product.id} className="hover:bg-slate-800/40 transition-colors">
@@ -463,13 +465,13 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                     <td className="py-3 px-4">
                       <div className="space-y-0.5">
                         <span className="font-bold text-white block text-sm">
-                          R$ {product.price.toFixed(2).replace('.', ',')}
+                          R$ {(product.price || 0).toFixed(2).replace('.', ',')}
                         </span>
-                        {product.isPromotion && product.originalPrice && (
+                        {product.isPromotion && product.originalPrice ? (
                           <span className="text-[10px] text-slate-500 line-through block">
-                            De R$ {product.originalPrice.toFixed(2).replace('.', ',')}
+                            De R$ {(product.originalPrice || 0).toFixed(2).replace('.', ',')}
                           </span>
-                        )}
+                        ) : null}
                         <span className="text-[10px] text-emerald-400">
                           Margem: {marginPercent}%
                         </span>

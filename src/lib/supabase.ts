@@ -22,6 +22,24 @@ export const SUPABASE_ANON_KEY = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'pept
 
 let clientInstance: SupabaseClient | null = null;
 
+export const setSupabaseCredentials = (url: string, key: string) => {
+  try {
+    if (url.trim()) {
+      localStorage.setItem('peptide_supabase_url', url.trim());
+    } else {
+      localStorage.removeItem('peptide_supabase_url');
+    }
+    if (key.trim()) {
+      localStorage.setItem('peptide_supabase_anon_key', key.trim());
+    } else {
+      localStorage.removeItem('peptide_supabase_anon_key');
+    }
+    clientInstance = null; // Reset cached client instance
+  } catch (e) {
+    console.error('Error storing supabase credentials:', e);
+  }
+};
+
 export const getSupabaseClient = (): SupabaseClient | null => {
   const url = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', '');
   const key = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'peptide_supabase_anon_key', '');
@@ -51,6 +69,23 @@ export const isSupabaseConfigured = (): boolean => {
   const url = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', '');
   const key = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'peptide_supabase_anon_key', '');
   return Boolean(url && key && url.startsWith('http'));
+};
+
+export const testSupabaseConnection = async (): Promise<{ success: boolean; message: string; tablesCount?: number }> => {
+  const client = getSupabaseClient();
+  if (!client) {
+    return { success: false, message: 'URL ou Anon Key do Supabase não configurados.' };
+  }
+
+  try {
+    const { data, error } = await client.from('products').select('id').limit(1);
+    if (error) {
+      return { success: false, message: `Erro ao consultar tabela products: ${error.message}` };
+    }
+    return { success: true, message: 'Conexão com Supabase efetuada com sucesso! Tabelas acessíveis.' };
+  } catch (err: any) {
+    return { success: false, message: `Falha na conexão: ${err?.message || 'Erro desconhecido'}` };
+  }
 };
 
 // ==========================================
@@ -100,25 +135,39 @@ export const mapDBToProduct = (d: any): Product => ({
   promotionDiscount: d.promotion_discount != null ? Number(d.promotion_discount) : undefined,
 });
 
-export const mapOrderToDB = (o: Order) => ({
-  id: o.id,
-  order_number: o.orderNumber,
-  customer: o.customer,
-  address: o.address,
-  items: o.items || [],
-  subtotal: o.subtotal,
-  shipping: o.shipping,
-  discount: o.discount,
-  total: o.total,
-  status: o.status,
-  payment_method: o.paymentMethod,
-  tracking_code: o.trackingCode || null,
-  cleared_manually_at: o.clearedManuallyAt || null,
-  cleared_by: o.clearedBy || null,
-  notes: o.notes || null,
-  created_at: o.createdAt || new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-});
+export const mapOrderToDB = (o: Order) => {
+  let clearedAtISO: string | null = null;
+  if (o.clearedManuallyAt) {
+    const parsed = Date.parse(o.clearedManuallyAt);
+    clearedAtISO = !isNaN(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
+  }
+
+  let createdAtISO = new Date().toISOString();
+  if (o.createdAt) {
+    const parsed = Date.parse(o.createdAt);
+    if (!isNaN(parsed)) createdAtISO = new Date(parsed).toISOString();
+  }
+
+  return {
+    id: o.id,
+    order_number: o.orderNumber,
+    customer: o.customer,
+    address: o.address,
+    items: o.items || [],
+    subtotal: o.subtotal,
+    shipping: o.shipping,
+    discount: o.discount,
+    total: o.total,
+    status: o.status,
+    payment_method: o.paymentMethod,
+    tracking_code: o.trackingCode || null,
+    cleared_manually_at: clearedAtISO,
+    cleared_by: o.clearedBy || null,
+    notes: o.notes || null,
+    created_at: createdAtISO,
+    updated_at: new Date().toISOString(),
+  };
+};
 
 export const mapDBToOrder = (d: any): Order => ({
   id: d.id,
@@ -133,7 +182,11 @@ export const mapDBToOrder = (d: any): Order => ({
   status: d.status,
   paymentMethod: d.payment_method,
   trackingCode: d.tracking_code || undefined,
-  clearedManuallyAt: d.cleared_manually_at || undefined,
+  clearedManuallyAt: d.cleared_manually_at
+    ? (!isNaN(Date.parse(d.cleared_manually_at))
+        ? new Date(d.cleared_manually_at).toLocaleString('pt-BR')
+        : d.cleared_manually_at)
+    : undefined,
   clearedBy: d.cleared_by || undefined,
   notes: d.notes || undefined,
   createdAt: d.created_at,

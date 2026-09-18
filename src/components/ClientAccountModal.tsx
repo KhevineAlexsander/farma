@@ -11,7 +11,9 @@ export const ClientAccountModal: React.FC = () => {
   // Filter orders to only display those belonging to the authenticated client (IDOR/BOLA protection)
   const clientOrders = orders.filter(
     (o) =>
-      (currentUser?.email && o.customer?.email?.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
+      (currentUser?.email &&
+        o.customer?.email &&
+        o.customer.email.toLowerCase().trim() === currentUser.email.toLowerCase().trim()) ||
       (currentUser?.id && (o as any).userId === currentUser.id)
   );
 
@@ -158,7 +160,7 @@ export const ClientAccountModal: React.FC = () => {
                     <div className="text-left sm:text-right">
                       <span className="text-xs text-slate-500 block">Total do Pedido</span>
                       <span className="text-lg font-black text-slate-900">
-                        R$ {order.total.toFixed(2).replace('.', ',')}
+                        R$ {(order.total || 0).toFixed(2).replace('.', ',')}
                       </span>
                     </div>
                   </div>
@@ -210,16 +212,16 @@ export const ClientAccountModal: React.FC = () => {
 
                   {/* Items in Order */}
                   <div className="space-y-2 pt-2 border-t border-slate-100">
-                    <p className="text-xs font-bold text-slate-800">Itens do Pedido ({order.items.length}):</p>
+                    <p className="text-xs font-bold text-slate-800">Itens do Pedido ({(order.items || []).length}):</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {order.items.map((item, idx) => (
+                      {(order.items || []).map((item, idx) => (
                         <div key={idx} className="flex items-center gap-3 p-2 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                           <div className="w-8 h-10 bg-white rounded flex items-center justify-center shrink-0">
-                            <PeptideVial capColor={item.product.capColor} size="sm" />
+                            <PeptideVial capColor={item.product?.capColor} size="sm" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-bold text-slate-900 truncate">{item.product.name} ({item.product.dosage})</p>
-                            <p className="text-slate-500">{item.quantity}x • R$ {item.product.price.toFixed(2).replace('.', ',')}</p>
+                            <p className="font-bold text-slate-900 truncate">{item.product?.name || 'Produto'} ({item.product?.dosage || '-'})</p>
+                            <p className="text-slate-500">{item.quantity}x • R$ {((item.product?.price || 0)).toFixed(2).replace('.', ',')}</p>
                           </div>
                         </div>
                       ))}
@@ -229,7 +231,7 @@ export const ClientAccountModal: React.FC = () => {
                   {/* Destination */}
                   <div className="text-xs text-slate-500 pt-2 border-t border-slate-100 flex items-center gap-1.5">
                     <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                    <span>Entrega: {order.address.street}, {order.address.number} - {order.address.neighborhood}, {order.address.city}/{order.address.state}</span>
+                    <span>Entrega: {order.address?.street || ''}, {order.address?.number || ''} - {order.address?.neighborhood || ''}, {order.address?.city || ''}/{order.address?.state || ''}</span>
                   </div>
                 </div>
               ))

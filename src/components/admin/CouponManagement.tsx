@@ -121,9 +121,11 @@ export const CouponManagement: React.FC = () => {
   };
 
   const filteredCoupons = coupons.filter((c) => {
+    const q = (searchTerm || '').toLowerCase().trim();
     const matchesSearch =
-      c.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (c.description && c.description.toLowerCase().includes(searchTerm.toLowerCase()));
+      !q ||
+      (c.code || '').toLowerCase().includes(q) ||
+      (c.description ? c.description.toLowerCase().includes(q) : false);
     const matchesStatus = statusFilter === 'Todos' || c.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -288,7 +290,7 @@ export const CouponManagement: React.FC = () => {
                   {/* Value / Discount Badge */}
                   <div className="flex items-baseline gap-2 mb-3">
                     <span className="text-2xl font-black font-tech text-white">
-                      {isPercentage ? `${c.value}% OFF` : `R$ ${c.value.toFixed(2).replace('.', ',')} OFF`}
+                      {isPercentage ? `${c.value}% OFF` : `R$ ${(c.value || 0).toFixed(2).replace('.', ',')} OFF`}
                     </span>
                     <span className="text-[11px] text-slate-400">
                       {isPercentage ? 'Desconto percentual' : 'Desconto fixo'}
@@ -300,7 +302,7 @@ export const CouponManagement: React.FC = () => {
                     <p className="flex items-center justify-between text-[11px]">
                       <span className="text-slate-400">Pedido Mínimo:</span>
                       <strong className="text-slate-200">
-                        {c.minOrderAmount ? `R$ ${c.minOrderAmount.toFixed(2).replace('.', ',')}` : 'Sem valor mínimo'}
+                        {c.minOrderAmount ? `R$ ${(c.minOrderAmount || 0).toFixed(2).replace('.', ',')}` : 'Sem valor mínimo'}
                       </strong>
                     </p>
 

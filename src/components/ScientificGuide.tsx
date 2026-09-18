@@ -574,10 +574,12 @@ export const ScientificGuide: React.FC = () => {
   const filteredPeptides = peptideDatabase.filter((p) => {
     const matchesCategory =
       selectedPeptideCategory === 'all' || p.category === selectedPeptideCategory;
+    const q = (searchFilter || '').toLowerCase().trim();
     const matchesSearch =
-      p.name.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      p.headline.toLowerCase().includes(searchFilter.toLowerCase()) ||
-      p.scientificSummary.toLowerCase().includes(searchFilter.toLowerCase());
+      !q ||
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.headline || '').toLowerCase().includes(q) ||
+      (p.scientificSummary || '').toLowerCase().includes(q);
     return matchesCategory && matchesSearch;
   });
 

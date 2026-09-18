@@ -17,7 +17,7 @@ export const ProductCatalog: React.FC = () => {
 
   const categories: ProductCategory[] = [
     'Todos',
-    ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))
+    ...(Array.from(new Set(products.map(p => p.category).filter(Boolean))) as ProductCategory[])
   ];
 
   // Count available promotions and featured items
@@ -37,14 +37,15 @@ export const ProductCatalog: React.FC = () => {
         matchesSpecial = !!product.featured;
       }
 
-      const query = searchQuery.toLowerCase().trim();
+      const query = (searchQuery || '').toLowerCase().trim();
       const matchesQuery =
         !query ||
-        product.name.toLowerCase().includes(query) ||
-        product.dosage.toLowerCase().includes(query) ||
-        product.category.toLowerCase().includes(query) ||
-        product.description.toLowerCase().includes(query) ||
-        product.benefits.some((b) => b.toLowerCase().includes(query));
+        (product.name || '').toLowerCase().includes(query) ||
+        (product.dosage || '').toLowerCase().includes(query) ||
+        (product.category || '').toLowerCase().includes(query) ||
+        (product.description || '').toLowerCase().includes(query) ||
+        (Array.isArray(product.benefits) &&
+          product.benefits.some((b) => typeof b === 'string' && b.toLowerCase().includes(query)));
 
       return matchesCategory && matchesSpecial && matchesQuery;
     })

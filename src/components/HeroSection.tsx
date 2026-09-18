@@ -28,7 +28,7 @@ export const HeroSection: React.FC = () => {
     },
   ];
 
-  const currentShowcase = heroShowcases[activeSlide];
+  const currentShowcase = heroShowcases[activeSlide] || heroShowcases[0];
 
   const scrollToCatalog = () => {
     setSelectedCategory('Todos');
@@ -114,9 +114,9 @@ export const HeroSection: React.FC = () => {
               {/* Left Secondary Vial */}
               <div className="absolute left-4 sm:left-6 bottom-2 opacity-75 scale-90 -rotate-6 transition-all duration-500 hover:opacity-100 hover:scale-95 z-0">
                 <PeptideVial
-                  name={currentShowcase.left.name}
-                  dosage={currentShowcase.left.dosage}
-                  capColor={currentShowcase.left.capColor}
+                  name={currentShowcase?.left?.name || 'Peptídeo'}
+                  dosage={currentShowcase?.left?.dosage || ''}
+                  capColor={currentShowcase?.left?.capColor || '#16A34A'}
                   size="md"
                 />
               </div>
@@ -124,9 +124,9 @@ export const HeroSection: React.FC = () => {
               {/* Right Secondary Vial */}
               <div className="absolute right-4 sm:right-6 bottom-2 opacity-75 scale-90 rotate-6 transition-all duration-500 hover:opacity-100 hover:scale-95 z-0">
                 <PeptideVial
-                  name={currentShowcase.right.name}
-                  dosage={currentShowcase.right.dosage}
-                  capColor={currentShowcase.right.capColor}
+                  name={currentShowcase?.right?.name || 'Peptídeo'}
+                  dosage={currentShowcase?.right?.dosage || ''}
+                  capColor={currentShowcase?.right?.capColor || '#06B6D4'}
                   size="md"
                 />
               </div>
@@ -134,9 +134,9 @@ export const HeroSection: React.FC = () => {
               {/* Primary Center Hero Vial */}
               <div className="relative z-10 scale-110 mb-2 transition-all duration-500 hover:scale-115">
                 <PeptideVial
-                  name={currentShowcase.center.name}
-                  dosage={currentShowcase.center.dosage}
-                  capColor={currentShowcase.center.capColor}
+                  name={currentShowcase?.center?.name || 'GHK-CU'}
+                  dosage={currentShowcase?.center?.dosage || ''}
+                  capColor={currentShowcase?.center?.capColor || '#0088FF'}
                   size="lg"
                   glow={true}
                 />
