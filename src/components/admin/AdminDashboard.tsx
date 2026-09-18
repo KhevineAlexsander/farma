@@ -60,7 +60,7 @@ export const AdminDashboard: React.FC = () => {
     },
     {
       id: 'products' as const,
-      label: 'Produtos, Estoque & Ofertas',
+      label: 'Produtos & Ofertas',
       icon: Package,
       badge: null,
       visible: permissions.canManageProducts,

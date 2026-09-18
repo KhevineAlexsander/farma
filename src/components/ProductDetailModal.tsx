@@ -132,7 +132,7 @@ export const ProductDetailModal: React.FC = () => {
               </button>
               <span className="px-4 py-1 text-sm font-bold text-slate-900">{quantity}</span>
               <button
-                onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
+                onClick={() => setQuantity((q) => Math.min(99, q + 1))}
                 className="px-3 py-2 text-slate-600 hover:bg-slate-100 transition-colors"
                 aria-label="Aumentar quantidade"
               >

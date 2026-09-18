@@ -47,7 +47,7 @@ export const EmployeeManagement: React.FC = () => {
 
   const roles = [
     'Administrador Geral',
-    'Gerente de Estoque',
+    'Gerente de Produtos',
     'Atendente de Vendas',
     'Farmacêutico Responsável',
     'Financeiro',
@@ -395,7 +395,7 @@ export const EmployeeManagement: React.FC = () => {
                     )}
                     {emp.permissions.canManageProducts && (
                       <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-cyan-500/15 text-cyan-300 border-cyan-500/30">
-                        Produtos & Estoque
+                        Produtos & Catálogo
                       </span>
                     )}
                     {emp.permissions.canManageFinances && (

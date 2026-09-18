@@ -1519,26 +1519,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const supabase = getSupabaseClient();
 
-    // Deduct inventory stock & sync to Supabase & Firestore
-    setProducts((prev) =>
-      prev.map((p) => {
-        const cartItem = cart.find((item) => item.product.id === p.id);
-        if (cartItem) {
-          const updatedStock = Math.max(0, p.stock - cartItem.quantity);
-          if (supabase) {
-            supabase.from('products').update({ stock: updatedStock }).eq('id', p.id).then();
-          }
-          try {
-            setDoc(doc(db, 'products', p.id), { stock: updatedStock }, { merge: true });
-          } catch (e) {
-            console.log('Error updating product stock in Firestore:', e);
-          }
-          return { ...p, stock: updatedStock };
-        }
-        return p;
-      })
-    );
-
     // Save order
     setOrders((prev) => [newOrder, ...prev]);
 

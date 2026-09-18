@@ -146,7 +146,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
   const [category, setCategory] = useState<'Emagrecimento' | 'Saúde' | 'Beleza' | 'Desempenho'>('Saúde');
   const [price, setPrice] = useState('');
   const [costPrice, setCostPrice] = useState('');
-  const [stock, setStock] = useState('');
   const [capColor, setCapColor] = useState('#0088FF');
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
@@ -166,7 +165,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
     setCategory('Saúde');
     setPrice('150');
     setCostPrice('60');
-    setStock('25');
     setCapColor('#0088FF');
     setImageUrl('');
     setDescription('');
@@ -188,7 +186,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
     setCategory('Saúde');
     setPrice('120');
     setCostPrice('45');
-    setStock('30');
     setCapColor('#6366F1');
     setImageUrl('https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=80');
     setDescription('Produto especial com certificação e laudo de pureza laboratorial.');
@@ -210,7 +207,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
     setCategory(product.category);
     setPrice(product.price.toString());
     setCostPrice(product.costPrice.toString());
-    setStock(product.stock.toString());
     setCapColor(product.capColor || '#0088FF');
     setImageUrl(product.imageUrl || '');
     setDescription(product.description);
@@ -252,7 +248,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
       category,
       price: parsedPrice,
       costPrice: Math.max(0, parseFloat(costPrice) || 0),
-      stock: Math.max(0, Math.min(100000, parseInt(stock, 10) || 0)),
+      stock: 999,
       capColor: capColor || '#0088FF',
       imageUrl: imageUrl.trim() || undefined,
       description: description.slice(0, 1000) || (isCustomProductMode ? 'Produto farmacêutico importado com controle de qualidade rigoroso.' : 'Peptídeo importado liofilizado com laudo HPLC de pureza superior.'),
@@ -292,27 +288,11 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
     return matchesCat && matchesSearch;
   });
 
-  const lowStockCount = products.filter((p) => p.stock < 10).length;
   const promoCount = products.filter((p) => p.isPromotion).length;
   const featuredCount = products.filter((p) => p.featured).length;
 
   return (
     <div className="space-y-6">
-      {/* Top Banner with Low Stock Alert */}
-      {lowStockCount > 0 && (
-        <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between text-amber-300 text-xs">
-          <div className="flex items-center gap-2.5">
-            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-            <span>
-              Atenção: <strong>{lowStockCount} produto(s)</strong> estão com estoque crítico abaixo de 10 frascos!
-            </span>
-          </div>
-          <span className="font-mono font-bold bg-amber-500/20 px-2.5 py-1 rounded-lg">
-            Reposição urgente sugerida
-          </span>
-        </div>
-      )}
-
       {/* Header Controls: Search, Category Filter, and Add Button */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -408,7 +388,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                 <th className="py-3.5 px-4">Foto / Frasco</th>
                 <th className="py-3.5 px-4">Categoria</th>
                 <th className="py-3.5 px-4">Preço Venda</th>
-                <th className="py-3.5 px-4">Estoque</th>
                 <th className="py-3.5 px-4">Promoção (Oferta)</th>
                 <th className="py-3.5 px-4">Destaque</th>
                 <th className="py-3.5 px-4 text-right">Ações</th>
@@ -418,7 +397,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
               {filteredProducts.map((product) => {
                 const profit = (product.price || 0) - (product.costPrice || 0);
                 const marginPercent = product.price ? (((profit / product.price) * 100) || 0).toFixed(0) : '0';
-                const isLowStock = (product.stock || 0) < 10;
 
                 return (
                   <tr key={product.id} className="hover:bg-slate-800/40 transition-colors">
@@ -477,20 +455,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                           Margem: {marginPercent}%
                         </span>
                       </div>
-                    </td>
-
-                    {/* Stock with Low-Stock Alert */}
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${
-                          isLowStock
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse'
-                            : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                        }`}
-                      >
-                        {isLowStock && <AlertTriangle className="w-3 h-3 text-amber-400" />}
-                        {product.stock} un.
-                      </span>
                     </td>
 
                     {/* Promotion Toggle Button */}
@@ -724,7 +688,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Preço de Venda (R$) *</label>
                   <input
@@ -745,16 +709,6 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                     value={costPrice}
                     onChange={(e) => setCostPrice(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-cyan-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Qtd. em Estoque *</label>
-                  <input
-                    type="number"
-                    required
-                    value={stock}
-                    onChange={(e) => setStock(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold focus:border-cyan-500"
                   />
                 </div>
               </div>
