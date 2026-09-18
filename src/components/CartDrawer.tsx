@@ -75,15 +75,6 @@ export const CartDrawer: React.FC = () => {
             </button>
           </div>
 
-          {/* Safe Shipping Info Badge */}
-          <div className="px-6 py-2.5 bg-slate-900 text-slate-200 text-xs flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span className="font-medium">Envio Térmico com Cadeia de Frio (2°C a 8°C)</span>
-            </div>
-            <span className="text-[11px] font-bold text-cyan-300">Gelo Seco</span>
-          </div>
-
           {/* Cart Items List */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {cart.length > 0 ? (

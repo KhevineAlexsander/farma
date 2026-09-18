@@ -385,7 +385,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               <div className="flex items-center justify-between">
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold">2</span>
-                  Endereço de Entrega (Transporte Climatizado)
+                  Endereço de Entrega
                 </h3>
               </div>
 
