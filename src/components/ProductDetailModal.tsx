@@ -86,21 +86,12 @@ export const ProductDetailModal: React.FC = () => {
 
               {/* Benefits section removed */}
 
-              {/* Price & Stock info */}
-              <div className="pt-2 border-t border-slate-200 flex items-baseline justify-between">
-                <div>
-                  <span className="text-xs text-slate-500 font-bold mr-1">Preço:</span>
-                  <span className="text-2xl font-black text-slate-900">
-                    R$ {product.price.toFixed(2).replace('.', ',')}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    product.stock > 10 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                  }`}>
-                    {product.stock > 10 ? 'Pronta Entrega' : `Apenas ${product.stock} un. em estoque`}
-                  </span>
-                </div>
+              {/* Price info */}
+              <div className="pt-2 border-t border-slate-200">
+                <span className="text-xs text-slate-500 font-bold mr-1">Preço:</span>
+                <span className="text-2xl font-black text-slate-900">
+                  R$ {product.price.toFixed(2).replace('.', ',')}
+                </span>
               </div>
             </div>
 
