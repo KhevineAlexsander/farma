@@ -271,7 +271,7 @@ export const AdminDashboard: React.FC = () => {
       </header>
 
       {/* Main Admin Content View */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {visibleTabs.length === 0 ? (
           <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center text-slate-400 max-w-md mx-auto my-12 shadow-2xl">
             <ShieldAlert className="w-12 h-12 text-amber-400 mx-auto mb-3" />
