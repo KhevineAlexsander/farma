@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Package, ShoppingCart, DollarSign, ArrowLeft, ShieldAlert, Users, Bell, ExternalLink, Settings, Tag, LogOut, Crown, UploadCloud, CheckCircle2, RefreshCw, Database } from 'lucide-react';
+import { LayoutDashboard, Package, ShoppingCart, DollarSign, ArrowLeft, ShieldAlert, Users, Bell, ExternalLink, Settings, Tag, LogOut, Crown, UploadCloud, CheckCircle2, RefreshCw, Database, BarChart3, FilePlus2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DnaLogo } from '../DnaLogo';
 import { ProductManagement } from './ProductManagement';
@@ -8,9 +8,10 @@ import { FinancialManagement } from './FinancialManagement';
 import { EmployeeManagement } from './EmployeeManagement';
 import { StoreSettingsTab } from './StoreSettingsTab';
 import { CouponManagement } from './CouponManagement';
+import { SalesReportsTab } from './SalesReportsTab';
 
 export const AdminDashboard: React.FC = () => {
-  const { currentUser, logoutUser, setCurrentView, orders, employees, saveEverythingToCloud } = useApp();
+  const { currentUser, logoutUser, setCurrentView, orders, employees, saveEverythingToCloud, productRequests } = useApp();
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
 
@@ -25,6 +26,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const pendingOrdersCount = orders.filter((o) => o.status === 'Pendente').length;
+  const pendingProductRequestsCount = (productRequests || []).filter((r) => r.status === 'Pendente').length;
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
 
   // Find corresponding employee record if staff
@@ -42,6 +44,7 @@ export const AdminDashboard: React.FC = () => {
         canManageStaff: true,
         canManageSettings: true,
         canManageCoupons: true,
+        canManageReports: true,
       }
     : (currentUser?.permissions || staffEmployee?.permissions || {
         canManageOrders: true,
@@ -50,6 +53,7 @@ export const AdminDashboard: React.FC = () => {
         canManageStaff: false,
         canManageSettings: false,
         canManageCoupons: false,
+        canManageReports: false,
       });
 
   const allTabs = [
@@ -64,8 +68,15 @@ export const AdminDashboard: React.FC = () => {
       id: 'products' as const,
       label: 'Produtos & Ofertas',
       icon: Package,
-      badge: null,
+      badge: pendingProductRequestsCount > 0 ? `${pendingProductRequestsCount} novo` : null,
       visible: permissions.canManageProducts,
+    },
+    {
+      id: 'reports' as const,
+      label: 'Relatório de Vendas',
+      icon: BarChart3,
+      badge: null,
+      visible: permissions.canManageReports,
     },
     {
       id: 'coupons' as const,
@@ -99,7 +110,7 @@ export const AdminDashboard: React.FC = () => {
 
   const visibleTabs = allTabs.filter((t) => t.visible);
 
-  const [activeTab, setActiveTab] = useState<'finances' | 'products' | 'orders' | 'employees' | 'settings' | 'coupons'>(() => {
+  const [activeTab, setActiveTab] = useState<'finances' | 'products' | 'orders' | 'employees' | 'settings' | 'coupons' | 'reports'>(() => {
     return (visibleTabs[0]?.id as any) || 'orders';
   });
 
@@ -166,6 +177,18 @@ export const AdminDashboard: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Firestore Conectado (Tempo Real)</span>
               </div>
+
+              {isMasterAdmin && (
+                <button
+                  onClick={() => setCurrentView('product-request')}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 hover:text-emerald-200 text-xs font-bold flex items-center gap-1.5 transition-colors border border-emerald-500/30 cursor-pointer"
+                  title="Abrir formulário onde o dono solicita cadastro de produtos"
+                >
+                  <FilePlus2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Pedido de Cadastro (Link)</span>
+                  <span className="sm:hidden">Cadastro</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setCurrentView('store')}
@@ -261,6 +284,7 @@ export const AdminDashboard: React.FC = () => {
           <>
             {activeTab === 'orders' && permissions.canManageOrders && <OrderManagement />}
             {activeTab === 'products' && permissions.canManageProducts && <ProductManagement />}
+            {activeTab === 'reports' && permissions.canManageReports && <SalesReportsTab />}
             {activeTab === 'coupons' && permissions.canManageProducts && <CouponManagement />}
             {activeTab === 'employees' && permissions.canManageStaff && <EmployeeManagement />}
             {activeTab === 'settings' && permissions.canManageSettings && <StoreSettingsTab />}

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon } from '../types';
+import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon, ProductRequest } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_TRANSACTIONS, CURRENT_CLIENT_USER, ADMIN_USER, INITIAL_EMPLOYEES, INITIAL_SETTINGS, INITIAL_COUPONS } from '../data/mockData';
 import {
   getSupabaseClient,
@@ -34,6 +34,29 @@ import {
   signInWithPopup,
   signOut,
 } from '../lib/firebase';
+
+/**
+ * Recursively cleans an object to remove any keys with 'undefined' values,
+ * which Firestore rejects when calling setDoc or updateDoc.
+ */
+function cleanUndefinedForFirestore<T>(data: T): T {
+  if (data === null || data === undefined) {
+    return null as any;
+  }
+  if (Array.isArray(data)) {
+    return data.map((item) => cleanUndefinedForFirestore(item)) as any;
+  }
+  if (typeof data === 'object' && !(data instanceof Date)) {
+    const cleaned: Record<string, any> = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanUndefinedForFirestore(value);
+      }
+    }
+    return cleaned as T;
+  }
+  return data;
+}
 
 interface AppContextType {
   products: Product[];
@@ -126,8 +149,15 @@ interface AppContextType {
   selectedProductDetail: Product | null;
   setSelectedProductDetail: (product: Product | null) => void;
 
-  currentView: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide';
-  setCurrentView: (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide') => void;
+  // Product Requests (Pedidos de cadastro pelo dono)
+  productRequests: ProductRequest[];
+  addProductRequest: (request: Omit<ProductRequest, 'id' | 'createdAt' | 'status'> & { status?: 'Pendente' | 'Aprovado' }) => Promise<ProductRequest>;
+  approveProductRequest: (requestId: string) => Promise<Product | null>;
+  deleteProductRequest: (requestId: string) => Promise<boolean>;
+  getProductRequestShareUrl: () => string;
+
+  currentView: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request';
+  setCurrentView: (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request') => void;
 
   activeNav: string;
   setActiveNav: (nav: string) => void;
@@ -360,8 +390,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let unsubSettings: any;
     let unsubOrders: any;
     let unsubFinances: any;
+    let unsubProductRequests: any;
 
     try {
+      unsubProductRequests = onSnapshot(collection(db, 'productRequests'), (snapshot) => {
+        if (!snapshot.empty) {
+          const list: ProductRequest[] = [];
+          snapshot.forEach((d) => list.push({ ...(d.data() as ProductRequest), id: d.id }));
+          list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          setProductRequests(list);
+          localStorage.setItem('peptide_product_requests', JSON.stringify(list));
+        }
+      }, () => {});
       unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
         if (!snapshot.empty) {
           const list: Product[] = [];
@@ -438,6 +478,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       unsubSettings?.();
       unsubOrders?.();
       unsubFinances?.();
+      unsubProductRequests?.();
     };
   }, [currentUser?.role]);
 
@@ -550,11 +591,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('peptide_coupons', JSON.stringify(coupons));
   }, [coupons]);
 
+  // --- Product Requests State (Solicitações de Cadastro de Produtos pelo Dono) ---
+  const [productRequests, setProductRequests] = useState<ProductRequest[]>(() => {
+    const saved = localStorage.getItem('peptide_product_requests');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('peptide_product_requests', JSON.stringify(productRequests));
+  }, [productRequests]);
+
   // --- Navigation & UI State ---
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
-  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'my-account' | 'checkout' | 'guide'>('store');
+  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const page = (params.get('page') || params.get('view') || params.get('p') || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+      if (
+        page === 'solicitar-produto' ||
+        page === 'cadastro-produto' ||
+        page === 'pedido-cadastro' ||
+        page === 'cadastrar-produto' ||
+        hash.includes('solicitar-produto') ||
+        hash.includes('cadastro-produto')
+      ) {
+        return 'product-request';
+      }
+    }
+    return 'store';
+  });
+
+  // URL query parameters and hash routing listener
+  useEffect(() => {
+    const handleUrlRouting = () => {
+      if (typeof window === 'undefined') return;
+      const params = new URLSearchParams(window.location.search);
+      const page = (params.get('page') || params.get('view') || params.get('p') || '').toLowerCase();
+      const hash = (window.location.hash || '').toLowerCase();
+
+      if (
+        page === 'solicitar-produto' ||
+        page === 'cadastro-produto' ||
+        page === 'pedido-cadastro' ||
+        page === 'cadastrar-produto' ||
+        hash.includes('solicitar-produto') ||
+        hash.includes('cadastro-produto')
+      ) {
+        setCurrentView('product-request');
+      }
+    };
+
+    handleUrlRouting();
+    window.addEventListener('popstate', handleUrlRouting);
+    window.addEventListener('hashchange', handleUrlRouting);
+    return () => {
+      window.removeEventListener('popstate', handleUrlRouting);
+      window.removeEventListener('hashchange', handleUrlRouting);
+    };
+  }, []);
+
+  const getProductRequestShareUrl = (): string => {
+    if (typeof window === 'undefined') return '?page=cadastro-produto';
+    const origin = window.location.origin;
+    const pathname = window.location.pathname;
+    return `${origin}${pathname}?page=cadastro-produto`;
+  };
+
   const [activeNav, setActiveNav] = useState('Início');
   const [infoModal, setInfoModal] = useState<'about' | 'security' | 'contact' | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -581,7 +692,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Configurações da loja atualizadas com sucesso!');
 
     try {
-      await setDoc(doc(db, 'settings', 'config'), updated, { merge: true });
+      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(updated), { merge: true });
     } catch (e) {
       console.log('Error saving settings to Firestore:', e);
     }
@@ -614,7 +725,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Save to Firestore fallback
     try {
-      await setDoc(doc(db, 'employees', empId), newEmp);
+      await setDoc(doc(db, 'employees', empId), cleanUndefinedForFirestore(newEmp));
     } catch (e) {
       console.log('Error saving employee to Firestore:', e);
     }
@@ -670,7 +781,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Update in Firestore
     try {
-      await updateDoc(doc(db, 'employees', id), updates);
+      await updateDoc(doc(db, 'employees', id), cleanUndefinedForFirestore(updates));
     } catch (e) {
       console.log('Error updating employee in Firestore:', e);
     }
@@ -754,7 +865,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await setDoc(doc(db, 'coupons', newId), newCoupon);
+      await setDoc(doc(db, 'coupons', newId), cleanUndefinedForFirestore(newCoupon));
     } catch (e) {
       console.log('Error adding coupon to Firestore:', e);
     }
@@ -848,7 +959,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        await setDoc(doc(db, 'coupons', id), target, { merge: true });
+        await setDoc(doc(db, 'coupons', id), cleanUndefinedForFirestore(target), { merge: true });
       } catch (e) {
         console.log('Error toggling coupon status in Firestore:', e);
       }
@@ -937,7 +1048,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      await setDoc(doc(db, 'products', newId), newProduct);
+      await setDoc(doc(db, 'products', newId), cleanUndefinedForFirestore(newProduct));
     } catch (e) {
       console.log('Error adding product to Firestore:', e);
     }
@@ -1028,7 +1139,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        await setDoc(doc(db, 'products', id), target, { merge: true });
+        await setDoc(doc(db, 'products', id), cleanUndefinedForFirestore(target), { merge: true });
       } catch (e) {
         console.log('Error updating promotion in Firestore:', e);
       }
@@ -1062,7 +1173,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        await setDoc(doc(db, 'products', id), target, { merge: true });
+        await setDoc(doc(db, 'products', id), cleanUndefinedForFirestore(target), { merge: true });
       } catch (e) {
         console.log('Error updating featured in Firestore:', e);
       }
@@ -1078,7 +1189,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('products').upsert(dbProds);
       }
       for (const product of INITIAL_PRODUCTS) {
-        await setDoc(doc(db, 'products', product.id), product, { merge: true });
+        await setDoc(doc(db, 'products', product.id), cleanUndefinedForFirestore(product), { merge: true });
       }
       setProducts(INITIAL_PRODUCTS);
       localStorage.setItem('peptide_products', JSON.stringify(INITIAL_PRODUCTS));
@@ -1099,7 +1210,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('products').upsert(dbProds);
       }
       for (const p of products) {
-        await setDoc(doc(db, 'products', p.id), p, { merge: true });
+        await setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true });
       }
       localStorage.setItem('peptide_products', JSON.stringify(products));
       showToast(`Todos os ${products.length} produtos foram salvos no banco e atualizados no site!`);
@@ -1111,6 +1222,104 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // --- Product Requests (Pedidos de Cadastro de Produto pelo Dono) ---
+  const addProductRequest = async (
+    requestData: Omit<ProductRequest, 'id' | 'createdAt' | 'status'> & { status?: 'Pendente' | 'Aprovado' }
+  ): Promise<ProductRequest> => {
+    const newId = `req-${Date.now()}`;
+    const newReq: ProductRequest = {
+      ...requestData,
+      id: newId,
+      status: requestData.status || 'Pendente',
+      createdAt: new Date().toISOString(),
+      requesterName: currentUser?.name || 'Proprietário da Loja',
+      requesterEmail: currentUser?.email || 'proprietario@peptideimports.com.br',
+    };
+
+    setProductRequests((prev) => {
+      const updated = [newReq, ...prev];
+      localStorage.setItem('peptide_product_requests', JSON.stringify(updated));
+      return updated;
+    });
+
+    try {
+      await setDoc(doc(db, 'productRequests', newId), cleanUndefinedForFirestore(newReq));
+    } catch (e) {
+      console.log('Error saving product request to Firestore:', e);
+    }
+
+    showToast('Pedido de cadastro de produto enviado com sucesso!');
+    return newReq;
+  };
+
+  const approveProductRequest = async (requestId: string): Promise<Product | null> => {
+    const target = productRequests.find((r) => r.id === requestId);
+    if (!target) {
+      showToast('Pedido de cadastro não encontrado.');
+      return null;
+    }
+
+    // Convert request into live Product
+    const newProductData: Omit<Product, 'id'> = {
+      name: target.name.trim().toUpperCase(),
+      dosage: target.dosage.trim().toUpperCase(),
+      category: target.category as any,
+      price: target.price,
+      costPrice: target.costPrice,
+      stock: target.stock || 25,
+      capColor: target.capColor || ((target.category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : '#0088FF'),
+      description: target.description,
+      benefits: ['Laudo laboratorial HPLC certificado', 'Alta pureza e biodisponibilidade', 'Rastreabilidade garantida'],
+      purity: '99.5% HPLC',
+      storage: '2°C a 8°C (Refrigerado)',
+      reconstitution: 'Reconstituir com água bacteriostática estéril',
+      imageUrl: target.imageUrl || undefined,
+      featured: false,
+      isPromotion: false,
+    };
+
+    await addProduct(newProductData);
+
+    // Update request status to 'Aprovado'
+    const updatedStatus: Partial<ProductRequest> = {
+      status: 'Aprovado',
+      approvedAt: new Date().toISOString(),
+      approvedBy: currentUser?.name || 'Administrador Master',
+    };
+
+    setProductRequests((prev) => {
+      const updated = prev.map((r) => (r.id === requestId ? { ...r, ...updatedStatus } : r));
+      localStorage.setItem('peptide_product_requests', JSON.stringify(updated));
+      return updated;
+    });
+
+    try {
+      await setDoc(doc(db, 'productRequests', requestId), cleanUndefinedForFirestore(updatedStatus), { merge: true });
+    } catch (e) {
+      console.log('Error updating product request in Firestore:', e);
+    }
+
+    showToast(`Produto "${target.name}" aprovado e cadastrado na loja virtual!`);
+    return null;
+  };
+
+  const deleteProductRequest = async (requestId: string): Promise<boolean> => {
+    setProductRequests((prev) => {
+      const updated = prev.filter((r) => r.id !== requestId);
+      localStorage.setItem('peptide_product_requests', JSON.stringify(updated));
+      return updated;
+    });
+
+    try {
+      await deleteDoc(doc(db, 'productRequests', requestId));
+    } catch (e) {
+      console.log('Error deleting product request from Firestore:', e);
+    }
+
+    showToast('Pedido de cadastro removido.');
+    return true;
+  };
+
   const saveAllOrdersToCloud = async (): Promise<boolean> => {
     try {
       showToast('Sincronizando pedidos com o banco de dados...');
@@ -1120,7 +1329,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('orders').upsert(dbOrders);
       }
       for (const o of orders) {
-        await setDoc(doc(db, 'orders', o.id), o, { merge: true });
+        await setDoc(doc(db, 'orders', o.id), cleanUndefinedForFirestore(o), { merge: true });
       }
       localStorage.setItem('peptide_orders', JSON.stringify(orders));
       showToast(`Todos os ${orders.length} pedidos foram sincronizados no banco de dados!`);
@@ -1141,7 +1350,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('financial_transactions').upsert(dbFins);
       }
       for (const tx of financialTransactions) {
-        await setDoc(doc(db, 'financialTransactions', tx.id), tx, { merge: true });
+        await setDoc(doc(db, 'financialTransactions', tx.id), cleanUndefinedForFirestore(tx), { merge: true });
       }
       localStorage.setItem('peptide_finances', JSON.stringify(financialTransactions));
       showToast(`Livro caixa (${financialTransactions.length} lançamentos) salvo no banco!`);
@@ -1162,7 +1371,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('employees').upsert(dbEmps);
       }
       for (const emp of employees) {
-        await setDoc(doc(db, 'employees', emp.id), emp, { merge: true });
+        await setDoc(doc(db, 'employees', emp.id), cleanUndefinedForFirestore(emp), { merge: true });
       }
       localStorage.setItem('peptide_employees', JSON.stringify(employees));
       showToast(`Equipe (${employees.length} colaboradores) salva no banco de dados!`);
@@ -1183,7 +1392,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await supabase.from('coupons').upsert(dbCoups);
       }
       for (const coup of coupons) {
-        await setDoc(doc(db, 'coupons', coup.id), coup, { merge: true });
+        await setDoc(doc(db, 'coupons', coup.id), cleanUndefinedForFirestore(coup), { merge: true });
       }
       localStorage.setItem('peptide_coupons', JSON.stringify(coupons));
       showToast(`Cupons (${coupons.length} ativos) salvos e sincronizados com a loja!`);
@@ -1208,7 +1417,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (supabase) {
         await supabase.from('store_settings').upsert(mapSettingsToDB(merged));
       }
-      await setDoc(doc(db, 'settings', 'config'), merged, { merge: true });
+      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(merged), { merge: true });
       showToast('Configurações da loja salvas no banco e aplicadas ao site em tempo real!');
       return true;
     } catch (err) {
@@ -1306,7 +1515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           loggedUser.role = 'ADMIN';
           loggedUser.staffRole = 'Administrador Master';
           loggedUser.isMaster = true;
-          await setDoc(userDocRef, loggedUser, { merge: true });
+          await setDoc(userDocRef, cleanUndefinedForFirestore(loggedUser), { merge: true });
         }
       } else {
         loggedUser = {
@@ -1329,7 +1538,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             },
           ],
         };
-        await setDoc(userDocRef, loggedUser);
+        await setDoc(userDocRef, cleanUndefinedForFirestore(loggedUser));
       }
       
       setCurrentUser(loggedUser);
@@ -1529,7 +1738,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Save to Firestore fallback
     try {
-      setDoc(doc(db, 'orders', newOrder.id), newOrder);
+      setDoc(doc(db, 'orders', newOrder.id), cleanUndefinedForFirestore(newOrder));
     } catch (e) {
       console.log('Error saving order to Firestore:', e);
     }
@@ -1550,7 +1759,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             supabase.from('coupons').update({ usage_count: newUsage }).eq('id', matchedCoupon.id).then();
           }
           try {
-            setDoc(doc(db, 'coupons', matchedCoupon.id), { usageCount: newUsage }, { merge: true });
+            setDoc(doc(db, 'coupons', matchedCoupon.id), cleanUndefinedForFirestore({ usageCount: newUsage }), { merge: true });
           } catch (e) {
             console.log('Error updating coupon usage in Firestore:', e);
           }
@@ -1576,7 +1785,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      setDoc(doc(db, 'financialTransactions', newTx.id), newTx);
+      setDoc(doc(db, 'financialTransactions', newTx.id), cleanUndefinedForFirestore(newTx));
     } catch (e) {
       console.log('Error saving transaction in Firestore:', e);
     }
@@ -1619,7 +1828,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const updateData: Record<string, any> = { status, updatedAt: isoTimestamp };
       if (trackingCode !== undefined) updateData.trackingCode = trackingCode;
-      await setDoc(doc(db, 'orders', orderId), updateData, { merge: true });
+      await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(updateData), { merge: true });
     } catch (e) {
       console.log('Error updating order status in Firestore:', e);
     }
@@ -1670,13 +1879,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await setDoc(
         doc(db, 'orders', orderId),
-        {
+        cleanUndefinedForFirestore({
           status,
           clearedManuallyAt: timestamp,
           clearedBy: operator,
           notes: noteText,
           updatedAt: isoTimestamp,
-        },
+        }),
         { merge: true }
       );
     } catch (e) {
@@ -1698,7 +1907,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      setDoc(doc(db, 'financialTransactions', newTx.id), newTx);
+      setDoc(doc(db, 'financialTransactions', newTx.id), cleanUndefinedForFirestore(newTx));
     } catch (e) {
       console.log('Error saving financial transaction in Firestore:', e);
     }
@@ -1887,6 +2096,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSearchQuery,
         selectedProductDetail,
         setSelectedProductDetail,
+        productRequests,
+        addProductRequest,
+        approveProductRequest,
+        deleteProductRequest,
+        getProductRequestShareUrl,
         currentView,
         setCurrentView,
         activeNav,

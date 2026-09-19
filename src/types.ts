@@ -91,6 +91,7 @@ export interface User {
     canManageStaff: boolean;
     canManageSettings: boolean;
     canManageCoupons: boolean;
+    canManageReports: boolean;
   };
 }
 
@@ -112,6 +113,7 @@ export interface Employee {
     canManageStaff: boolean;
     canManageSettings: boolean;
     canManageCoupons: boolean;
+    canManageReports: boolean;
   };
 }
 
@@ -150,5 +152,28 @@ export interface StoreSettings {
   siteUrl?: string; // Ex: "https://peptideimports.vercel.app" ou "https://seusite.com.br"
   vercelDomain?: string; // Ex: "peptideimports.vercel.app"
   customDomainNotes?: string;
+}
+
+export type ProductRequestStatus = 'Pendente' | 'Aprovado' | 'Rejeitado';
+
+export interface ProductRequest {
+  id: string;
+  category: string;
+  name: string;
+  dosage: string;
+  costPrice: number;
+  price: number; // Preço de venda
+  description: string;
+  // Campos complementares
+  stock?: number;
+  capColor?: string;
+  imageUrl?: string;
+  notes?: string;
+  requesterName?: string;
+  requesterEmail?: string;
+  status: ProductRequestStatus;
+  createdAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
 }
 

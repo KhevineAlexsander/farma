@@ -86,9 +86,30 @@
         "orderId": { "type": "string" }
       },
       "required": ["date", "type", "description", "category", "amount"]
+    },
+    "productRequests": {
+      "title": "Product Requests",
+      "description": "Product registration requests submitted by store owner or administrators",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "type": "string" },
+        "name": { "type": "string" },
+        "dosage": { "type": "string" },
+        "costPrice": { "type": "number" },
+        "price": { "type": "number" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pendente", "Aprovado", "Rejeitado"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["name", "category", "price", "costPrice", "status"]
     }
   },
   "firestore": {
+    "/productRequests/{requestId}": {
+      "schema": "productRequests",
+      "description": "Product registration requests from owner"
+    },
     "/products/{productId}": {
       "schema": "products",
       "description": "Public store product catalogue"

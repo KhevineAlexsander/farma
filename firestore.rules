@@ -19,6 +19,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Product registration requests
+    match /productRequests/{requestId} {
+      allow read, write: if true;
+    }
+
     // Discount Coupons
     match /coupons/{couponId} {
       allow read, write: if true;

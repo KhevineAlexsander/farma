@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ShoppingBag, User, Menu, X, ShieldAlert, LogOut, Package, LayoutDashboard, ChevronDown, BookOpen } from 'lucide-react';
+import { Search, ShoppingBag, User, Menu, X, ShieldAlert, LogOut, Package, LayoutDashboard, ChevronDown, BookOpen, FilePlus2 } from 'lucide-react';
 import { DnaLogo } from './DnaLogo';
 import { useApp } from '../context/AppContext';
 
@@ -25,6 +25,8 @@ export const Navbar: React.FC = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
 
   const handleNavClick = (nav: string) => {
     setActiveNav(nav);
@@ -230,16 +232,30 @@ export const Navbar: React.FC = () => {
                       </button>
 
                       {currentUser.role === 'ADMIN' && (
-                        <button
-                          onClick={() => {
-                            setCurrentView('admin');
-                            setIsUserMenuOpen(false);
-                          }}
-                          className="w-full px-4 py-2.5 text-left text-sm text-cyan-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors font-medium"
-                        >
-                          <LayoutDashboard className="w-4 h-4 text-blue-400" />
-                          Painel Administrador ERP
-                        </button>
+                        <>
+                          <button
+                            onClick={() => {
+                              setCurrentView('admin');
+                              setIsUserMenuOpen(false);
+                            }}
+                            className="w-full px-4 py-2.5 text-left text-sm text-cyan-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors font-medium"
+                          >
+                            <LayoutDashboard className="w-4 h-4 text-blue-400" />
+                            Painel Administrador ERP
+                          </button>
+                          {isMasterAdmin && (
+                            <button
+                              onClick={() => {
+                                setCurrentView('product-request');
+                                setIsUserMenuOpen(false);
+                              }}
+                              className="w-full px-4 py-2.5 text-left text-sm text-emerald-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors font-medium"
+                            >
+                              <FilePlus2 className="w-4 h-4 text-emerald-400" />
+                              Pedir Cadastro de Produto
+                            </button>
+                          )}
+                        </>
                       )}
 
                       <div className="border-t border-slate-800 my-1"></div>
@@ -339,16 +355,30 @@ export const Navbar: React.FC = () => {
             </button>
 
             {currentUser?.role === 'ADMIN' && (
-              <button
-                onClick={() => {
-                  setCurrentView('admin');
-                  setIsMobileMenuOpen(false);
-                }}
-                className="w-full text-left px-3 py-2 rounded-lg text-sm font-bold text-cyan-400 bg-slate-900 border border-slate-700/80 flex items-center gap-2"
-              >
-                <ShieldAlert className="w-4 h-4 text-cyan-400" />
-                <span>Painel ERP Corporativo</span>
-              </button>
+              <>
+                <button
+                  onClick={() => {
+                    setCurrentView('admin');
+                    setIsMobileMenuOpen(false);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-bold text-cyan-400 bg-slate-900 border border-slate-700/80 flex items-center gap-2"
+                >
+                  <ShieldAlert className="w-4 h-4 text-cyan-400" />
+                  <span>Painel ERP Corporativo</span>
+                </button>
+                {isMasterAdmin && (
+                  <button
+                    onClick={() => {
+                      setCurrentView('product-request');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm font-bold text-emerald-400 bg-slate-900 border border-slate-700/80 flex items-center gap-2"
+                  >
+                    <FilePlus2 className="w-4 h-4 text-emerald-400" />
+                    <span>Pedir Cadastro de Produto</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

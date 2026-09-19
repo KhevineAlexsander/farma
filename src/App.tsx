@@ -19,9 +19,19 @@ import { AdminDashboard } from './components/admin/AdminDashboard';
 import { InfoModals } from './components/InfoModals';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { ScientificGuide } from './components/ScientificGuide';
+import { ProductRequestPage } from './components/ProductRequestPage';
 
 const MainLayout: React.FC = () => {
   const { currentView, currentUser } = useApp();
+
+  // Direct dedicated view for Product Registration Form
+  if (currentView === 'product-request') {
+    return (
+      <div className="min-h-screen bg-[#070A10]">
+        <ProductRequestPage />
+      </div>
+    );
+  }
 
   // Strict Access Barrier: If user is not an ADMIN, block admin view immediately
   if (currentView === 'admin') {

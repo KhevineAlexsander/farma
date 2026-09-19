@@ -1,11 +1,27 @@
 import React, { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw, FileText, ChevronDown } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw, FileText, ChevronDown, Copy, ExternalLink, FilePlus2, Clock, CheckCircle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 
 export const ProductManagement: React.FC = () => {
-  const { products, addProduct, updateProduct, deleteProduct, toggleProductPromotion, toggleProductFeatured, syncOfficialCatalog, saveAllProductsToCloud, currentUser } = useApp();
+  const { 
+    products, 
+    addProduct, 
+    updateProduct, 
+    deleteProduct, 
+    toggleProductPromotion, 
+    toggleProductFeatured, 
+    syncOfficialCatalog, 
+    saveAllProductsToCloud, 
+    currentUser,
+    productRequests,
+    approveProductRequest,
+    deleteProductRequest,
+    getProductRequestShareUrl,
+    setCurrentView,
+    showToast
+  } = useApp();
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
@@ -13,6 +29,8 @@ export const ProductManagement: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingProducts, setIsSavingProducts] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+  const [showRequestsPanel, setShowRequestsPanel] = useState(true);
 
   // CSV Import State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -389,6 +407,36 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
             </button>
           )}
 
+          {/* Direct link for the store owner to request/register products - ONLY FOR MASTER ADMIN */}
+          {isMasterAdmin && (
+            <>
+              <button
+                onClick={() => {
+                  const url = getProductRequestShareUrl();
+                  navigator.clipboard.writeText(url);
+                  setCopiedShareLink(true);
+                  showToast('Link de cadastro copiado com sucesso!');
+                  setTimeout(() => setCopiedShareLink(false), 2500);
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/40 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+                title="Copiar link onde o dono pode pedir cadastro de produto (categoria, nome, dosagem, custos, venda e descrição)"
+              >
+                {copiedShareLink ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-cyan-400" />}
+                <span className="hidden md:inline">{copiedShareLink ? 'Link Copiado!' : 'Copiar Link do Dono'}</span>
+                <span className="md:hidden">Link Dono</span>
+              </button>
+
+              <button
+                onClick={() => setCurrentView('product-request')}
+                className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600/30 to-cyan-600/30 hover:from-emerald-600/40 hover:to-cyan-600/40 text-emerald-300 hover:text-white border border-emerald-500/40 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+                title="Abrir página dedicada onde o dono faz o pedido de cadastro"
+              >
+                <FilePlus2 className="w-4 h-4 text-emerald-400" />
+                <span>Fazer Pedido de Cadastro</span>
+              </button>
+            </>
+          )}
+
           <button
             onClick={openNewPeptideModal}
             className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
@@ -407,6 +455,139 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
           </button>
         </div>
       </div>
+
+      {/* Product Requests Banner / Section (Solicitações do Dono) */}
+      {productRequests.length > 0 && (
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                <FilePlus2 className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white tracking-tight">
+                    Solicitações de Cadastro de Produtos pelo Dono
+                  </h3>
+                  {productRequests.filter((r) => r.status === 'Pendente').length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                      {productRequests.filter((r) => r.status === 'Pendente').length} Pendentes
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400">
+                  Produtos solicitados via link com categoria, dosagem, preço de custo, preço de venda e descrição.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isMasterAdmin && (
+                <>
+                  <button
+                    onClick={() => {
+                      const url = getProductRequestShareUrl();
+                      navigator.clipboard.writeText(url);
+                      setCopiedShareLink(true);
+                      showToast('Link do formulário copiado!');
+                      setTimeout(() => setCopiedShareLink(false), 2000);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copiedShareLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                    <span>Copiar Link</span>
+                  </button>
+
+                  <button
+                    onClick={() => setCurrentView('product-request')}
+                    className="px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Abrir Formulário</span>
+                  </button>
+                </>
+              )}
+
+              <button
+                onClick={() => setShowRequestsPanel(!showRequestsPanel)}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 transition-colors cursor-pointer"
+                title={showRequestsPanel ? 'Recolher' : 'Expandir'}
+              >
+                <ChevronDown className={`w-4 h-4 transition-transform ${showRequestsPanel ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {showRequestsPanel && (
+            <div className="mt-4 space-y-2.5 overflow-x-auto">
+              <div className="min-w-[650px] space-y-2">
+                {productRequests.map((req) => {
+                  const reqProfit = (req.price || 0) - (req.costPrice || 0);
+                  const isApproved = req.status === 'Aprovado';
+                  return (
+                    <div
+                      key={req.id}
+                      className="bg-[#070A10] border border-slate-800/90 hover:border-slate-700 rounded-xl p-3 flex items-center justify-between gap-4 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                          <Package className="w-4 h-4 text-cyan-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-white uppercase">{req.name}</span>
+                            <span className="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[10px] font-bold">
+                              {req.dosage}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                isApproved
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                              }`}
+                            >
+                              {req.status}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-[11px] text-slate-400 mt-0.5">
+                            <span>Categoria: <strong className="text-slate-300">{req.category}</strong></span>
+                            <span>Custo: <strong className="text-slate-300">R$ {req.costPrice?.toFixed(2).replace('.', ',')}</strong></span>
+                            <span>Venda: <strong className="text-cyan-300">R$ {req.price?.toFixed(2).replace('.', ',')}</strong></span>
+                            <span>Lucro: <strong className="text-emerald-400">R$ {reqProfit.toFixed(2).replace('.', ',')}</strong></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {!isApproved && (
+                          <button
+                            onClick={() => approveProductRequest(req.id)}
+                            className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Aprovar & Publicar</span>
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            if (confirm(`Excluir o pedido de "${req.name}"?`)) {
+                              deleteProductRequest(req.id);
+                            }
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                          title="Excluir pedido"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Products Table */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
