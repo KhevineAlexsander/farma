@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Users,
   Package,
@@ -10,6 +10,12 @@ import {
   ArrowUpRight,
   CheckCircle2,
   Filter,
+  Send,
+  Copy,
+  Check,
+  X,
+  MessageSquare,
+  Sparkles,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
@@ -21,6 +27,13 @@ export const SalesReportsTab: React.FC = () => {
   const [productSearch, setProductSearch] = useState('');
   const [isSyncing, setIsSyncing] = useState(false);
   const [activeView, setActiveView] = useState<'both' | 'customers' | 'products'>('both');
+
+  // WhatsApp Summary State
+  const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
+  const [whatsAppPhone, setWhatsAppPhone] = useState(() => {
+    return localStorage.getItem('last_sales_report_wa_phone') || '';
+  });
+  const [copiedSummary, setCopiedSummary] = useState(false);
 
   // Filter orders according to period and status
   const now = new Date();
@@ -212,6 +225,91 @@ export const SalesReportsTab: React.FC = () => {
     return `https://wa.me/${fullNumber}?text=${msg}`;
   };
 
+  const generateSalesSummaryText = () => {
+    const periodLabel =
+      timeFilter === 'today'
+        ? 'Hoje'
+        : timeFilter === 'week'
+        ? 'Últimos 7 Dias'
+        : timeFilter === 'month'
+        ? 'Mês Atual'
+        : 'Geral (Todo o Histórico)';
+
+    const statusFilterLabel = onlyPaid ? 'Apenas Pedidos Pagos' : 'Todos os Pedidos';
+    const dateFormatted = new Date().toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+
+    let text = `📊 *RESUMO EXECUTIVO DE VENDAS - PEPTIDE IMPORTS*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `📅 *Período:* ${periodLabel}\n`;
+    text += `🔍 *Filtro:* ${statusFilterLabel}\n`;
+    text += `🕒 *Gerado em:* ${dateFormatted}\n\n`;
+
+    text += `💵 *Faturamento Total:* R$ ${totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+    text += `📦 *Total de Pedidos:* ${filteredOrders.length} pedido(s)\n`;
+    text += `🧪 *Frascos/Unidades Vendidos:* ${totalUnitsSold} un.\n`;
+    const avgTicket = filteredOrders.length > 0 ? totalRevenue / filteredOrders.length : 0;
+    text += `📈 *Ticket Médio:* R$ ${avgTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
+
+    text += `🏆 *TOP 5 CLIENTES (Quem Mais Compra):*\n`;
+    if (rankedCustomers.length === 0) {
+      text += `_Nenhum cliente registrado no período_\n`;
+    } else {
+      rankedCustomers.slice(0, 5).forEach((cust, idx) => {
+        text += `${idx + 1}º ${cust.name}: R$ ${cust.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} (${cust.ordersCount} ped.)\n`;
+      });
+    }
+
+    text += `\n📦 *TOP 5 PRODUTOS MAIS VENDIDOS:*\n`;
+    if (rankedProducts.length === 0) {
+      text += `_Nenhum produto vendido no período_\n`;
+    } else {
+      rankedProducts.slice(0, 5).forEach((prod, idx) => {
+        const dosageStr = prod.dosage ? ` (${prod.dosage})` : '';
+        text += `${idx + 1}º ${prod.name}${dosageStr}: ${prod.qtySold} un. (R$ ${prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})\n`;
+      });
+    }
+
+    text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `✨ _Relatório gerado via Peptide Imports ERP_`;
+    return text;
+  };
+
+  const handleSendSummaryToWhatsApp = () => {
+    if (!whatsAppPhone.trim()) {
+      showToast('Digite um número de WhatsApp com DDD antes de enviar.');
+      return;
+    }
+
+    const cleanNumber = whatsAppPhone.replace(/\D/g, '');
+    if (cleanNumber.length < 10) {
+      showToast('Digite um número válido com DDD (ex: 11987654321).');
+      return;
+    }
+
+    localStorage.setItem('last_sales_report_wa_phone', whatsAppPhone);
+
+    const fullNumber = cleanNumber.startsWith('55') && cleanNumber.length >= 12 ? cleanNumber : `55${cleanNumber}`;
+    const text = generateSalesSummaryText();
+    const encodedText = encodeURIComponent(text);
+    const waUrl = `https://api.whatsapp.com/send?phone=${fullNumber}&text=${encodedText}`;
+
+    window.open(waUrl, '_blank');
+    setIsWhatsAppModalOpen(false);
+    showToast('Abrindo WhatsApp com o resumo!');
+  };
+
+  const handleCopySummary = async () => {
+    try {
+      const text = generateSalesSummaryText();
+      await navigator.clipboard.writeText(text);
+      setCopiedSummary(true);
+      showToast('Resumo copiado com sucesso!');
+      setTimeout(() => setCopiedSummary(false), 2500);
+    } catch {
+      showToast('Não foi possível copiar automaticamente.');
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full overflow-hidden">
       {/* Header & Quick Controls */}
@@ -257,31 +355,43 @@ export const SalesReportsTab: React.FC = () => {
               ))}
             </div>
 
-            {/* Quick Actions (Paid filter & Refresh) */}
-            <div className="grid grid-cols-2 sm:flex items-center gap-2">
-              {/* Paid vs All Toggle */}
+            {/* Quick Actions (WhatsApp Summary, Paid filter & Refresh) */}
+            <div className="grid grid-cols-1 sm:flex items-center gap-2">
+              {/* WhatsApp Summary Trigger Button */}
               <button
-                onClick={() => setOnlyPaid(!onlyPaid)}
-                className={`w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border cursor-pointer min-h-[40px] sm:min-h-0 ${
-                  onlyPaid
-                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                    : 'bg-slate-800 text-slate-300 border-slate-700'
-                }`}
-                title="Alternar entre apenas pedidos pagos ou todos os pedidos"
+                onClick={() => setIsWhatsAppModalOpen(true)}
+                className="w-full sm:w-auto px-3.5 py-2 sm:py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[40px] sm:min-h-0"
+                title="Enviar resumo completo das vendas direto para o WhatsApp"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{onlyPaid ? 'Apenas Pagos' : 'Todos Pedidos'}</span>
+                <MessageSquare className="w-3.5 h-3.5 fill-current shrink-0" />
+                <span>Enviar Resumo WhatsApp</span>
               </button>
 
-              {/* Sync Button */}
-              <button
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[40px] sm:min-h-0"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
-              </button>
+              <div className="grid grid-cols-2 sm:flex items-center gap-2">
+                {/* Paid vs All Toggle */}
+                <button
+                  onClick={() => setOnlyPaid(!onlyPaid)}
+                  className={`w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border cursor-pointer min-h-[40px] sm:min-h-0 ${
+                    onlyPaid
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                  }`}
+                  title="Alternar entre apenas pedidos pagos ou todos os pedidos"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{onlyPaid ? 'Apenas Pagos' : 'Todos Pedidos'}</span>
+                </button>
+
+                {/* Sync Button */}
+                <button
+                  onClick={handleSync}
+                  disabled={isSyncing}
+                  className="w-full sm:w-auto px-3 py-2 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[40px] sm:min-h-0"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 shrink-0 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Atualizando...' : 'Atualizar'}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -636,8 +746,8 @@ export const SalesReportsTab: React.FC = () => {
       </div>
 
       {/* Simple Footer Summary */}
-      <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs text-slate-400">
-        <div className="flex items-center justify-between sm:justify-start gap-3 sm:gap-4 text-[11px] sm:text-xs">
+      <div className="bg-slate-950 border border-slate-800/80 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="flex flex-wrap items-center justify-between sm:justify-start gap-3 sm:gap-4 text-[11px] sm:text-xs">
           <span>
             Pedidos no Filtro: <strong className="text-white">{filteredOrders.length}</strong>
           </span>
@@ -646,13 +756,141 @@ export const SalesReportsTab: React.FC = () => {
             Frascos/Unidades: <strong className="text-cyan-300">{totalUnitsSold}</strong>
           </span>
         </div>
-        <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
-          <span className="text-[11px] sm:text-xs text-slate-400">Faturamento Total:</span>
-          <strong className="text-emerald-400 text-sm sm:text-base font-mono font-bold">
-            R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </strong>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-800/60">
+          <button
+            onClick={() => setIsWhatsAppModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[38px]"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Enviar Resumo para WhatsApp</span>
+          </button>
+          <div className="flex items-center justify-between sm:justify-end gap-2">
+            <span className="text-[11px] sm:text-xs text-slate-400">Faturamento:</span>
+            <strong className="text-emerald-400 text-sm sm:text-base font-mono font-bold">
+              R$ {totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </strong>
+          </div>
         </div>
       </div>
+
+      {/* Modal: Enviar Resumo no WhatsApp */}
+      {isWhatsAppModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div
+            className="relative w-full max-w-lg bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-2xl my-6 flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3.5 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 bg-emerald-500/15 text-emerald-400 rounded-xl border border-emerald-500/30 shrink-0">
+                  <MessageSquare className="w-5 h-5 fill-current" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    Enviar Resumo de Vendas
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-400">
+                    Defina o número de destino e envie o resumo instantâneo
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsWhatsAppModalOpen(false)}
+                className="p-2 text-slate-400 hover:text-white rounded-full min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="space-y-4 overflow-y-auto py-3.5 pr-1 flex-1 text-xs">
+              {/* Phone Input Box */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                <label className="block text-slate-300 font-bold flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                    Número do WhatsApp de Destino *
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-normal">com DDD (ex: 11987654321)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={whatsAppPhone}
+                    onChange={(e) => setWhatsAppPhone(e.target.value)}
+                    placeholder="Digite o número de WhatsApp..."
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-emerald-500 min-h-[44px]"
+                  />
+                  {whatsAppPhone && (
+                    <button
+                      type="button"
+                      onClick={() => setWhatsAppPhone('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500">
+                  Você pode enviar para o seu próprio WhatsApp, para sócios, gerentes ou contabilidade.
+                </p>
+              </div>
+
+              {/* Live Preview of formatted Message */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-slate-300 font-bold border-b border-slate-800/80 pb-2">
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                    Prévia da Mensagem Formatada
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopySummary}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 font-bold flex items-center gap-1 transition-all cursor-pointer"
+                  >
+                    {copiedSummary ? (
+                      <>
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span className="text-emerald-400">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 text-cyan-400" />
+                        <span>Copiar Texto</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 font-mono text-[11px] leading-relaxed text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap select-all">
+                  {generateSalesSummaryText()}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsWhatsAppModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSendSummaryToWhatsApp}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-400 hover:from-emerald-400 hover:to-teal-300 active:from-emerald-600 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center gap-2 min-h-[42px]"
+              >
+                <Send className="w-4 h-4" />
+                <span>Abrir e Enviar no WhatsApp</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

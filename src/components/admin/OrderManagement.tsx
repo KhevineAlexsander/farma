@@ -31,6 +31,7 @@ import {
   MinusCircle,
   Edit3,
   Tag,
+  DollarSign,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
@@ -42,6 +43,7 @@ export const OrderManagement: React.FC = () => {
     products,
     updateProduct,
     createManualOrder,
+    updateOrder,
     updateOrderStatus,
     clearOrderManually,
     deleteOrder,
@@ -304,6 +306,263 @@ export const OrderManagement: React.FC = () => {
     setIsSavingOrders(false);
     if (success) {
       setLastSaved(new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    }
+  };
+
+  // --- Edit Order State & Handlers ---
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
+  const [editCustName, setEditCustName] = useState('');
+  const [editCustPhone, setEditCustPhone] = useState('');
+  const [editCustEmail, setEditCustEmail] = useState('');
+  const [editCustCpf, setEditCustCpf] = useState('');
+  const [editIsPickup, setEditIsPickup] = useState(true);
+  const [editStreet, setEditStreet] = useState('');
+  const [editNumber, setEditNumber] = useState('');
+  const [editComplement, setEditComplement] = useState('');
+  const [editNeighborhood, setEditNeighborhood] = useState('');
+  const [editCity, setEditCity] = useState('São Paulo');
+  const [editState, setEditState] = useState('SP');
+  const [editZipCode, setEditZipCode] = useState('01000-000');
+  const [editTrackingCode, setEditTrackingCode] = useState('');
+  const [editCart, setEditCart] = useState<CartItem[]>([]);
+  const [editSelectedProdId, setEditSelectedProdId] = useState<string>('');
+  const [editSelectedQty, setEditSelectedQty] = useState<number>(1);
+  const [editProdSearch, setEditProdSearch] = useState<string>('');
+  const [editSelectedProdPrice, setEditSelectedProdPrice] = useState<string | number>('');
+  const [editUpdateCatalogPriceToo, setEditUpdateCatalogPriceToo] = useState<boolean>(false);
+  const [isEditProdSearchOpen, setIsEditProdSearchOpen] = useState<boolean>(false);
+  const [editShipping, setEditShipping] = useState<number>(0);
+  const [editDiscount, setEditDiscount] = useState<number>(0);
+  const [editPaymentMethod, setEditPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
+  const [editStatus, setEditStatus] = useState<OrderStatus>('Pago');
+  const [editOperator, setEditOperator] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [isSubmittingEditOrder, setIsSubmittingEditOrder] = useState(false);
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+
+  // Active Selected Product for Editing
+  const currentEditSelectedProduct =
+    products.find((p) => p.id === (editSelectedProdId || products[0]?.id)) || products[0];
+
+  const filteredEditProducts = products.filter((p) => {
+    if (!editProdSearch.trim()) return true;
+    const term = editProdSearch.toLowerCase().trim();
+    const nameMatch = (p.name || '').toLowerCase().includes(term);
+    const dosageMatch = (p.dosage || '').toLowerCase().includes(term);
+    const catMatch = (p.category || '').toLowerCase().includes(term);
+    return nameMatch || dosageMatch || catMatch;
+  });
+
+  const handleSelectEditProduct = (prod: Product) => {
+    setEditSelectedProdId(prod.id);
+    setEditSelectedProdPrice(prod.price);
+    setEditProdSearch(`${prod.name} ${prod.dosage || ''}`.trim());
+    setIsEditProdSearchOpen(false);
+  };
+
+  const handleOpenEditModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingOrder(order);
+    setEditCustName(order.customer?.name || '');
+    setEditCustPhone(order.customer?.phone || '');
+    setEditCustEmail(order.customer?.email || '');
+    setEditCustCpf(order.customer?.cpf || '');
+
+    const isStreetPickup = !order.address?.street || order.address?.street.toLowerCase().includes('balcão') || order.address?.street.toLowerCase().includes('retirada');
+    setEditIsPickup(isStreetPickup);
+    setEditStreet(order.address?.street || '');
+    setEditNumber(order.address?.number || '');
+    setEditComplement(order.address?.complement || '');
+    setEditNeighborhood(order.address?.neighborhood || '');
+    setEditCity(order.address?.city || 'São Paulo');
+    setEditState(order.address?.state || 'SP');
+    setEditZipCode(order.address?.zipCode || '01000-000');
+    setEditTrackingCode(order.trackingCode || '');
+
+    setEditCart(JSON.parse(JSON.stringify(order.items || [])));
+
+    const firstProd = products[0];
+    setEditSelectedProdId(firstProd?.id || '');
+    setEditSelectedQty(1);
+    setEditProdSearch('');
+    setEditSelectedProdPrice(firstProd?.price !== undefined ? firstProd.price : '');
+    setEditUpdateCatalogPriceToo(false);
+    setIsEditProdSearchOpen(false);
+
+    setEditShipping(order.shipping || 0);
+    setEditDiscount(order.discount || 0);
+    setEditPaymentMethod(order.paymentMethod || 'PIX');
+    setEditStatus(order.status || 'Pendente');
+    setEditOperator(order.clearedBy || currentUser?.name || 'Administrador');
+    setEditNotes(order.notes || '');
+    setEditFormError(null);
+  };
+
+  const handleAddProductToEditOrder = async () => {
+    const targetProd = currentEditSelectedProduct;
+    if (!targetProd) return;
+
+    const parsedPrice =
+      editSelectedProdPrice !== '' && !isNaN(Number(editSelectedProdPrice))
+        ? Math.max(0, Number(editSelectedProdPrice))
+        : targetProd.price;
+
+    if (editUpdateCatalogPriceToo && parsedPrice !== targetProd.price) {
+      await updateProduct(targetProd.id, { price: parsedPrice });
+    }
+
+    setEditCart((prev) => {
+      const existing = prev.find((item) => item.product.id === targetProd.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === targetProd.id
+            ? {
+                ...item,
+                product: { ...targetProd, price: parsedPrice },
+                quantity: item.quantity + editSelectedQty,
+              }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          product: { ...targetProd, price: parsedPrice },
+          quantity: editSelectedQty,
+        },
+      ];
+    });
+
+    setEditSelectedQty(1);
+    setEditUpdateCatalogPriceToo(false);
+  };
+
+  const handleRemoveEditItem = (prodId: string) => {
+    setEditCart((prev) => prev.filter((i) => i.product.id !== prodId));
+  };
+
+  const handleUpdateEditItemQty = (prodId: string, newQty: number) => {
+    if (newQty <= 0) {
+      handleRemoveEditItem(prodId);
+      return;
+    }
+    setEditCart((prev) =>
+      prev.map((i) => (i.product.id === prodId ? { ...i, quantity: newQty } : i))
+    );
+  };
+
+  const handleUpdateEditItemPrice = (prodId: string, newPrice: number) => {
+    const validPrice = Math.max(0, isNaN(newPrice) ? 0 : newPrice);
+    setEditCart((prev) =>
+      prev.map((item) =>
+        item.product.id === prodId
+          ? {
+              ...item,
+              product: {
+                ...item.product,
+                price: validPrice,
+              },
+            }
+          : item
+      )
+    );
+  };
+
+  const editSubtotal = editCart.reduce(
+    (sum, item) => sum + (item.product.price || 0) * item.quantity,
+    0
+  );
+  const editTotal = Math.max(
+    0,
+    editSubtotal + (Number(editShipping) || 0) - (Number(editDiscount) || 0)
+  );
+
+  const handleSaveEditedOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrder) return;
+    setEditFormError(null);
+
+    if (!editCustName.trim()) {
+      setEditFormError('Informe o nome do cliente.');
+      return;
+    }
+    if (!editCustPhone.trim()) {
+      setEditFormError('Informe o WhatsApp / telefone do cliente.');
+      return;
+    }
+    if (editCart.length === 0) {
+      setEditFormError('O pedido deve conter pelo menos 1 produto.');
+      return;
+    }
+
+    try {
+      setIsSubmittingEditOrder(true);
+
+      const addressData = editIsPickup
+        ? {
+            street: 'Balcão / Retirada Loja Física',
+            number: 'S/N',
+            neighborhood: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            zipCode: '01000-000',
+          }
+        : {
+            street: editStreet.trim() || 'Balcão',
+            number: editNumber.trim() || 'S/N',
+            complement: editComplement.trim(),
+            neighborhood: editNeighborhood.trim() || 'Centro',
+            city: editCity.trim() || 'São Paulo',
+            state: editState.trim() || 'SP',
+            zipCode: editZipCode.trim() || '01000-000',
+          };
+
+      const isNowPaid = editStatus === 'Pago' || editStatus === 'Entregue' || editStatus === 'Em Separação' || editStatus === 'Enviado';
+
+      const updatedPayload: Partial<Order> = {
+        customer: {
+          name: editCustName.trim(),
+          phone: editCustPhone.trim(),
+          email: editCustEmail.trim() || 'cliente@peptideimports.com.br',
+          cpf: editCustCpf.trim() || undefined,
+        },
+        address: addressData,
+        trackingCode: editTrackingCode.trim() || undefined,
+        items: editCart,
+        subtotal: editSubtotal,
+        shipping: Number(editShipping) || 0,
+        discount: Number(editDiscount) || 0,
+        total: editTotal,
+        paymentMethod: editPaymentMethod,
+        status: editStatus,
+        notes: editNotes.trim() || undefined,
+        clearedBy: isNowPaid ? (editOperator.trim() || currentUser?.name || 'Administrador') : undefined,
+        clearedManuallyAt: isNowPaid ? (editingOrder.clearedManuallyAt || new Date().toLocaleString('pt-BR')) : undefined,
+      };
+
+      await updateOrder(editingOrder.id, updatedPayload);
+
+      if (selectedOrder && selectedOrder.id === editingOrder.id) {
+        setSelectedOrder({
+          ...selectedOrder,
+          ...updatedPayload,
+          customer: {
+            ...selectedOrder.customer,
+            ...updatedPayload.customer,
+          },
+          address: {
+            ...selectedOrder.address,
+            ...updatedPayload.address,
+          },
+        } as Order);
+      }
+
+      setEditingOrder(null);
+    } catch (err) {
+      console.error('Error saving edited order:', err);
+      setEditFormError('Erro ao atualizar o pedido. Verifique os dados e tente novamente.');
+    } finally {
+      setIsSubmittingEditOrder(false);
     }
   };
 
@@ -670,24 +929,35 @@ export const OrderManagement: React.FC = () => {
                 )}
 
                 {/* Mobile Action Buttons */}
-                <div className="grid grid-cols-3 gap-2 pt-1">
+                <div className="grid grid-cols-4 gap-1.5 pt-1">
                   <button
                     onClick={(e) => handleOpenClearModal(order, e)}
-                    className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[40px]"
+                    className="px-2 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[38px]"
+                    title="Dar baixa no pedido"
                   >
                     <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>Baixa</span>
+                    <span className="truncate">Baixa</span>
                   </button>
                   <button
                     onClick={() => handleOpenDetail(order)}
-                    className="px-3 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors border border-slate-800 min-h-[40px] cursor-pointer"
+                    className="px-2 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[38px] cursor-pointer"
+                    title="Ver detalhes"
                   >
                     <Eye className="w-3.5 h-3.5 shrink-0" />
                     <span>Ver</span>
                   </button>
                   <button
+                    onClick={(e) => handleOpenEditModal(order, e)}
+                    className="px-2 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/30 cursor-pointer min-h-[38px]"
+                    title="Editar informações do pedido"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                    <span>Editar</span>
+                  </button>
+                  <button
                     onClick={(e) => handleOpenDeleteModal(order, e)}
-                    className="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[40px]"
+                    className="px-2 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[38px]"
+                    title="Excluir pedido"
                   >
                     <Trash2 className="w-3.5 h-3.5 shrink-0" />
                     <span>Excluir</span>
@@ -701,17 +971,19 @@ export const OrderManagement: React.FC = () => {
 
       {/* 2. Desktop Table View (>= md) */}
       <div className="hidden md:block bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
+        <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-950">
+          <table className="w-full min-w-[960px] text-left text-xs text-slate-300 border-collapse">
             <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
               <tr>
-                <th className="py-4 px-5 whitespace-nowrap">Pedido</th>
-                <th className="py-4 px-5">Cliente / Contato</th>
-                <th className="py-4 px-5">Itens</th>
-                <th className="py-4 px-5 whitespace-nowrap">Total</th>
-                <th className="py-4 px-5 whitespace-nowrap">Pagamento</th>
-                <th className="py-4 px-5 whitespace-nowrap">Status / Baixa</th>
-                <th className="py-4 px-5 text-right whitespace-nowrap">Ações</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Pedido</th>
+                <th className="py-3.5 px-4">Cliente / Contato</th>
+                <th className="py-3.5 px-4">Itens</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Total</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Pagamento</th>
+                <th className="py-3.5 px-4 whitespace-nowrap">Status / Baixa</th>
+                <th className="py-3.5 px-4 text-right whitespace-nowrap sticky right-0 z-20 bg-slate-950 border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)]">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
@@ -739,9 +1011,9 @@ export const OrderManagement: React.FC = () => {
                 filteredOrders.map((order) => {
                   const badge = getStatusBadge(order.status);
                   return (
-                    <tr key={order.id} className="hover:bg-slate-800/30 transition-colors">
+                    <tr key={order.id} className="group hover:bg-slate-800/30 transition-colors">
                       {/* Order Number & Date */}
-                      <td className="py-4 px-5 whitespace-nowrap">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <span className="font-bold text-cyan-400 block text-sm font-tech tracking-wide">
                           {order.orderNumber}
                         </span>
@@ -752,9 +1024,9 @@ export const OrderManagement: React.FC = () => {
                       </td>
 
                       {/* Customer */}
-                      <td className="py-4 px-5">
-                        <span className="font-bold text-slate-100 block text-sm">{order.customer?.name || 'Cliente'}</span>
-                        <div className="flex items-center gap-2 mt-0.5">
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-slate-100 block text-sm leading-snug">{order.customer?.name || 'Cliente'}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
                           <span className="text-xs text-slate-400">{order.customer?.phone || '-'}</span>
                           {order.customer?.phone && (
                             <a
@@ -771,23 +1043,23 @@ export const OrderManagement: React.FC = () => {
                       </td>
 
                       {/* Items Summary */}
-                      <td className="py-4 px-5">
+                      <td className="py-3 px-4">
                         <span className="font-semibold text-slate-200">
                           {(order.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0)} frasco(s)
                         </span>
-                        <span className="text-[11px] text-slate-400 block truncate max-w-[160px]">
+                        <span className="text-[11px] text-slate-400 block truncate max-w-[150px]">
                           {(order.items || []).map((i) => i.product?.name || 'Item').join(', ')}
                         </span>
                       </td>
 
                       {/* Total Amount */}
-                      <td className="py-4 px-5 font-extrabold text-white text-sm whitespace-nowrap">
+                      <td className="py-3 px-4 font-extrabold text-white text-sm whitespace-nowrap">
                         R$ {(order.total || 0).toFixed(2).replace('.', ',')}
                       </td>
 
                       {/* Payment Method */}
-                      <td className="py-4 px-5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-950 border border-slate-700/80 text-slate-300 whitespace-nowrap shadow-sm">
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-semibold bg-slate-950 border border-slate-700/80 text-slate-300 whitespace-nowrap shadow-sm">
                           {(order.paymentMethod || '').includes('WhatsApp') && (
                             <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
                           )}
@@ -802,50 +1074,58 @@ export const OrderManagement: React.FC = () => {
                       </td>
 
                       {/* Status & Baixa indicator */}
-                      <td className="py-4 px-5 whitespace-nowrap">
-                        <div className="space-y-1">
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-extrabold border ${badge.bg}`}>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <div className="space-y-0.5">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${badge.bg}`}>
                             {badge.text}
                           </span>
                           {order.clearedManuallyAt ? (
-                            <span className="block text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
-                              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                            <span className="block text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 shrink-0" />
                               Baixa por {order.clearedBy}
                             </span>
                           ) : (
-                            <span className="block text-[11px] text-amber-400 font-medium">
-                              Aguardando baixa manual
+                            <span className="block text-[10px] text-amber-400 font-medium">
+                              Aguardando baixa
                             </span>
                           )}
                         </div>
                       </td>
 
-                      {/* Actions */}
-                      <td className="py-4 px-5 text-right">
-                        <div className="flex items-center justify-end gap-1.5 sm:gap-2">
+                      {/* Sticky Actions Column - NEVER gets hidden */}
+                      <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors">
+                        <div className="flex items-center justify-end gap-1.5 flex-nowrap">
                           <button
                             onClick={(e) => handleOpenClearModal(order, e)}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-600/20"
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px]"
                             title="Dar baixa manual neste pedido"
                           >
-                            <CheckCircle className="w-3.5 h-3.5" />
+                            <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                             <span>Baixa</span>
                           </button>
                           <button
                             onClick={() => handleOpenDetail(order)}
-                            className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-slate-800 cursor-pointer"
+                            className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-800 cursor-pointer shrink-0 min-h-[34px]"
                             title="Ver detalhes do pedido"
                           >
-                            <Eye className="w-3.5 h-3.5" />
+                            <Eye className="w-3.5 h-3.5 shrink-0" />
                             <span>Ver</span>
                           </button>
                           <button
+                            onClick={(e) => handleOpenEditModal(order, e)}
+                            className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition-all border border-cyan-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                            title="Editar dados deste pedido"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                            <span>Editar</span>
+                          </button>
+                          <button
                             onClick={(e) => handleOpenDeleteModal(order, e)}
-                            className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all border border-red-500/20 cursor-pointer shadow-sm"
+                            className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all border border-red-500/20 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
                             title="Excluir pedido (Requer senha 8817)"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">Excluir</span>
+                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                            <span>Excluir</span>
                           </button>
                         </div>
                       </td>
@@ -856,8 +1136,9 @@ export const OrderManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <div className="p-4 bg-slate-950 border-t border-slate-800 text-xs text-slate-400 text-center">
-          Mostrando {filteredOrders.length} de {orders.length} pedidos
+        <div className="p-3.5 bg-slate-950 border-t border-slate-800 text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>Mostrando {filteredOrders.length} de {orders.length} pedidos</span>
+          <span className="text-[11px] text-slate-500">Dica: A coluna de ações fica fixada à direita para acesso imediato.</span>
         </div>
       </div>
 
@@ -1062,6 +1343,18 @@ export const OrderManagement: React.FC = () => {
                 </h3>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    const ord = selectedOrder;
+                    setSelectedOrder(null);
+                    handleOpenEditModal(ord);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
+                  title="Editar dados deste pedido"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Editar</span>
+                </button>
                 <button
                   onClick={() => handleOpenDeleteModal(selectedOrder)}
                   className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-600 text-red-400 hover:text-white text-xs font-bold flex items-center gap-1 transition-all border border-red-500/30 cursor-pointer"
@@ -2036,6 +2329,598 @@ export const OrderManagement: React.FC = () => {
                     <>
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Salvar Pedido no ERP</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal: Editar Pedido Existente (Mobile & Desktop Responsive) */}
+      {editingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div
+            className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-7 text-white shadow-2xl my-6 max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-cyan-500/15 text-cyan-400 rounded-xl border border-cyan-500/30 shrink-0">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                      Editar Pedido {editingOrder.orderNumber}
+                    </h3>
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${getStatusBadge(editStatus).bg}`}>
+                      {editStatus}
+                    </span>
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-400">
+                    Ajuste dados do cliente, endereço, itens, valores e status com sincronização automática
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isSubmittingEditOrder) {
+                    setEditingOrder(null);
+                  }
+                }}
+                className="p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSaveEditedOrder} className="space-y-4 overflow-y-auto pr-1 py-3 text-xs flex-1">
+              {/* Section 1: Dados do Cliente */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 text-slate-200 font-bold border-b border-slate-800/80 pb-2">
+                  <User className="w-4 h-4 text-cyan-400" />
+                  <span>1. Dados do Cliente</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Nome Completo *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editCustName}
+                      onChange={(e) => setEditCustName(e.target.value)}
+                      placeholder="Ex: Roberto Silva"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">WhatsApp / Telefone *</label>
+                    <input
+                      type="text"
+                      required
+                      value={editCustPhone}
+                      onChange={(e) => setEditCustPhone(e.target.value)}
+                      placeholder="Ex: (11) 98765-4321"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">E-mail</label>
+                    <input
+                      type="email"
+                      value={editCustEmail}
+                      onChange={(e) => setEditCustEmail(e.target.value)}
+                      placeholder="cliente@email.com"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">CPF (Opcional)</label>
+                    <input
+                      type="text"
+                      value={editCustCpf}
+                      onChange={(e) => setEditCustCpf(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Entrega & Endereço */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center gap-2 text-slate-200 font-bold">
+                    <Truck className="w-4 h-4 text-cyan-400" />
+                    <span>2. Modalidade de Entrega & Rastreio</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditIsPickup(true)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        editIsPickup ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Balcão / Retirada
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditIsPickup(false)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                        !editIsPickup ? 'bg-cyan-500 text-slate-950' : 'bg-slate-900 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Entrega / Envio
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="sm:col-span-2">
+                    <label className="block text-slate-400 font-medium mb-1 flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-cyan-400" />
+                      Código de Rastreio (Correios / Jadlog / Loggi)
+                    </label>
+                    <input
+                      type="text"
+                      value={editTrackingCode}
+                      onChange={(e) => setEditTrackingCode(e.target.value.toUpperCase())}
+                      placeholder="Ex: NL123456789BR"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                </div>
+
+                {!editIsPickup && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 border-t border-slate-800/60">
+                    <div className="sm:col-span-1">
+                      <label className="block text-slate-400 font-medium mb-1">CEP</label>
+                      <input
+                        type="text"
+                        value={editZipCode}
+                        onChange={(e) => setEditZipCode(e.target.value)}
+                        placeholder="01000-000"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-400 font-medium mb-1">Rua / Logradouro</label>
+                      <input
+                        type="text"
+                        value={editStreet}
+                        onChange={(e) => setEditStreet(e.target.value)}
+                        placeholder="Av. Paulista"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Número</label>
+                      <input
+                        type="text"
+                        value={editNumber}
+                        onChange={(e) => setEditNumber(e.target.value)}
+                        placeholder="1000"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Complemento</label>
+                      <input
+                        type="text"
+                        value={editComplement}
+                        onChange={(e) => setEditComplement(e.target.value)}
+                        placeholder="Apto 42"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Bairro</label>
+                      <input
+                        type="text"
+                        value={editNeighborhood}
+                        onChange={(e) => setEditNeighborhood(e.target.value)}
+                        placeholder="Centro"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="block text-slate-400 font-medium mb-1">Cidade</label>
+                      <input
+                        type="text"
+                        value={editCity}
+                        onChange={(e) => setEditCity(e.target.value)}
+                        placeholder="São Paulo"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Estado (UF)</label>
+                      <input
+                        type="text"
+                        value={editState}
+                        onChange={(e) => setEditState(e.target.value)}
+                        placeholder="SP"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Produtos do Pedido com Pesquisa e Edição de Preço */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center gap-2 text-slate-200 font-bold">
+                    <Package className="w-4 h-4 text-cyan-400" />
+                    <span>3. Produtos / Peptídeos do Pedido</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-cyan-400">
+                    {editCart.length} item(ns) no pedido
+                  </span>
+                </div>
+
+                {/* Search / Add more products to existing order */}
+                <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+                  <div className="relative">
+                    <label className="block text-slate-400 font-medium mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Search className="w-3.5 h-3.5 text-cyan-400" />
+                        Adicionar Novo Peptídeo ao Pedido:
+                      </span>
+                      {currentEditSelectedProduct && (
+                        <span className="text-cyan-400 font-mono text-[11px]">
+                          Estoque: {currentEditSelectedProduct.stock} un.
+                        </span>
+                      )}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={editProdSearch}
+                        onFocus={() => setIsEditProdSearchOpen(true)}
+                        onChange={(e) => {
+                          setEditProdSearch(e.target.value);
+                          setIsEditProdSearchOpen(true);
+                        }}
+                        placeholder="Digite o nome do peptídeo a adicionar..."
+                        className="w-full px-3.5 py-2 pl-9 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                      />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                      {editProdSearch && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditProdSearch('');
+                            setIsEditProdSearchOpen(false);
+                          }}
+                          className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white p-1"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Autocomplete Dropdown List */}
+                    {isEditProdSearchOpen && filteredEditProducts.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1.5 z-30 bg-slate-950 border border-slate-700 rounded-xl shadow-2xl max-h-56 overflow-y-auto divide-y divide-slate-800/80">
+                        {filteredEditProducts.map((p) => (
+                          <div
+                            key={p.id}
+                            onClick={() => handleSelectEditProduct(p)}
+                            className="p-2.5 hover:bg-cyan-950/40 flex items-center justify-between cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0">
+                                <PeptideVial capColor={p.capColor || '#06b6d4'} labelColor={p.labelColor || '#0891b2'} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-white text-xs truncate">
+                                  {p.name} <span className="text-cyan-400 font-normal">{p.dosage}</span>
+                                </p>
+                                <span className="text-[10px] text-slate-400">{p.category} | Estoque: {p.stock} un.</span>
+                              </div>
+                            </div>
+                            <span className="text-xs font-bold font-mono text-emerald-400 shrink-0">
+                              R$ {(p.price || 0).toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Pricing and Qty controls */}
+                  {currentEditSelectedProduct && (
+                    <div className="pt-2 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                      <div className="sm:col-span-5">
+                        <label className="block text-slate-400 font-medium mb-1 flex items-center justify-between">
+                          <span>Preço Unitário (R$):</span>
+                          {editSelectedProdPrice !== '' && Number(editSelectedProdPrice) !== currentEditSelectedProduct.price && (
+                            <span className="text-amber-400 font-mono text-[10px] flex items-center gap-0.5">
+                              <Tag className="w-3 h-3" /> Preço customizado
+                            </span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-2.5 text-slate-500 font-bold text-xs">R$</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={editSelectedProdPrice}
+                            onChange={(e) => setEditSelectedProdPrice(e.target.value)}
+                            placeholder="0,00"
+                            className="w-full px-3 py-2 pl-9 bg-slate-950 border border-cyan-500/50 rounded-xl text-white font-mono font-bold focus:outline-none focus:border-cyan-400 min-h-[40px]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-3">
+                        <label className="block text-slate-400 font-medium mb-1">Quantidade:</label>
+                        <div className="flex items-center gap-1 bg-slate-950 border border-slate-700 rounded-xl p-1 min-h-[40px]">
+                          <button
+                            type="button"
+                            onClick={() => setEditSelectedQty(Math.max(1, editSelectedQty - 1))}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            value={editSelectedQty}
+                            onChange={(e) => setEditSelectedQty(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full text-center bg-transparent text-white font-mono font-bold text-xs focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditSelectedQty(editSelectedQty + 1)}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="sm:col-span-4">
+                        <button
+                          type="button"
+                          onClick={handleAddProductToEditOrder}
+                          className="w-full px-3 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-cyan-500/20 min-h-[40px]"
+                        >
+                          <Plus className="w-4 h-4 stroke-[3]" />
+                          <span>Adicionar ao Pedido</span>
+                        </button>
+                      </div>
+
+                      {/* Checkbox to also update the product in catalog */}
+                      {editSelectedProdPrice !== '' && Number(editSelectedProdPrice) !== currentEditSelectedProduct.price && (
+                        <div className="sm:col-span-12 pt-1 flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            id="chkUpdateEditCatalogPrice"
+                            checked={editUpdateCatalogPriceToo}
+                            onChange={(e) => setEditUpdateCatalogPriceToo(e.target.checked)}
+                            className="rounded border-slate-700 text-cyan-500 focus:ring-cyan-500 w-4 h-4 cursor-pointer"
+                          />
+                          <label htmlFor="chkUpdateEditCatalogPrice" className="text-[11px] text-amber-300 cursor-pointer">
+                            Atualizar permanentemente o preço de <strong>{currentEditSelectedProduct.name}</strong> para R$ {Number(editSelectedProdPrice).toFixed(2).replace('.', ',')} no catálogo
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Current Items in Edit Order */}
+                {editCart.length > 0 ? (
+                  <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                    {editCart.map((item) => (
+                      <div
+                        key={item.product.id}
+                        className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
+                            <PeptideVial capColor={item.product.capColor || '#06b6d4'} labelColor={item.product.labelColor || '#0891b2'} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-white text-xs truncate">
+                              {item.product.name}
+                            </p>
+                            <span className="text-[10px] text-slate-400">{item.product.dosage || ''}</span>
+                          </div>
+                        </div>
+
+                        {/* Inline price edit, quantity and item subtotal */}
+                        <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-400">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={item.product.price}
+                              onChange={(e) => handleUpdateEditItemPrice(item.product.id, parseFloat(e.target.value) || 0)}
+                              className="w-20 px-2 py-1 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono text-xs text-right focus:outline-none focus:border-cyan-500"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg p-1">
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateEditItemQty(item.product.id, item.quantity - 1)}
+                              className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white"
+                            >
+                              -
+                            </button>
+                            <span className="px-1.5 font-mono font-bold text-xs text-white">
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateEditItemQty(item.product.id, item.quantity + 1)}
+                              className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-white"
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          <span className="font-bold font-mono text-emerald-400 text-xs min-w-[70px] text-right">
+                            R$ {((item.product.price || 0) * item.quantity).toFixed(2).replace('.', ',')}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveEditItem(item.product.id)}
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg cursor-pointer"
+                            title="Remover produto do pedido"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-red-400 py-3 text-xs italic">
+                    Nenhum produto no pedido. Adicione pelo menos 1 item.
+                  </p>
+                )}
+              </div>
+
+              {/* Section 4: Valores, Pagamento, Status & Auditoria */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 text-slate-200 font-bold border-b border-slate-800/80 pb-2">
+                  <DollarSign className="w-4 h-4 text-cyan-400" />
+                  <span>4. Valores, Pagamento, Status & Auditoria</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Frete (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editShipping}
+                      onChange={(e) => setEditShipping(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Desconto (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editDiscount}
+                      onChange={(e) => setEditDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Forma de Pagamento</label>
+                    <select
+                      value={editPaymentMethod}
+                      onChange={(e) => setEditPaymentMethod(e.target.value as any)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500 min-h-[40px] cursor-pointer"
+                    >
+                      <option value="PIX">PIX</option>
+                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                      <option value="Boleto">Boleto Bancário</option>
+                      <option value="WhatsApp / A Combinar">WhatsApp / A Combinar</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Status do Pedido</label>
+                    <select
+                      value={editStatus}
+                      onChange={(e) => setEditStatus(e.target.value as OrderStatus)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500 min-h-[40px] cursor-pointer"
+                    >
+                      <option value="Pendente">Pendente (Aguardando Pagamento)</option>
+                      <option value="Pago">Pago (Comprovante OK / Baixa)</option>
+                      <option value="Em Separação">Em Separação (Embalagem Térmica)</option>
+                      <option value="Enviado">Enviado (Despachado)</option>
+                      <option value="Entregue">Entregue (Concluído)</option>
+                      <option value="Cancelado">Cancelado</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Operador / Atendente Responsável</label>
+                    <input
+                      type="text"
+                      value={editOperator}
+                      onChange={(e) => setEditOperator(e.target.value)}
+                      placeholder="Nome do operador"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Observações Internas</label>
+                    <input
+                      type="text"
+                      value={editNotes}
+                      onChange={(e) => setEditNotes(e.target.value)}
+                      placeholder="Ex: Pagamento confirmado via comprovante WhatsApp..."
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                </div>
+
+                {/* Live Total Card */}
+                <div className="p-3.5 bg-gradient-to-r from-cyan-950/40 via-slate-900 to-emerald-950/40 border border-cyan-500/30 rounded-xl flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] text-slate-400">Total Atualizado:</span>
+                    <p className="text-[10px] text-slate-400 font-mono">
+                      Subtotal: R$ {editSubtotal.toFixed(2).replace('.', ',')} | Frete: +R$ {(Number(editShipping) || 0).toFixed(2).replace('.', ',')} | Desc: -R$ {(Number(editDiscount) || 0).toFixed(2).replace('.', ',')}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-lg sm:text-xl font-extrabold font-mono text-cyan-400">
+                      R$ {editTotal.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {editFormError && (
+                <div className="p-3 bg-red-950/70 border border-red-500 rounded-xl text-xs text-red-300 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{editFormError}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isSubmittingEditOrder}
+                  onClick={() => {
+                    setEditingOrder(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingEditOrder || editCart.length === 0}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-400 hover:from-cyan-400 hover:to-teal-300 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all cursor-pointer flex items-center gap-2 min-h-[42px]"
+                >
+                  {isSubmittingEditOrder ? (
+                    <span>Salvando Alterações...</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Salvar Alterações</span>
                     </>
                   )}
                 </button>

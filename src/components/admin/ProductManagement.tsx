@@ -600,7 +600,9 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                 <th className="py-3.5 px-4">Preço Venda</th>
                 <th className="py-3.5 px-4">Promoção (Oferta)</th>
                 <th className="py-3.5 px-4">Destaque</th>
-                <th className="py-3.5 px-4 text-right">Ações</th>
+                <th className="py-3.5 px-4 text-right whitespace-nowrap sticky right-0 z-20 bg-slate-950 border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)]">
+                  Ações
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
@@ -700,7 +702,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                     </td>
 
                     {/* Action buttons */}
-                    <td className="py-3 px-4 text-right space-x-2">
+                    <td className="py-3 px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] space-x-2 transition-colors">
                       <button
                         onClick={() => openEditProductModal(product)}
                         className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors"

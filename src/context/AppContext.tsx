@@ -109,6 +109,7 @@ interface AppContextType {
     notes?: string;
     clearedBy?: string;
   }) => Promise<Order>;
+  updateOrder: (orderId: string, updatedData: Partial<Order>) => Promise<boolean>;
   updateOrderStatus: (orderId: string, status: OrderStatus, trackingCode?: string) => void;
   clearOrderManually: (orderId: string, status: OrderStatus, clearedBy: string, notes?: string) => void;
   deleteOrder: (orderId: string) => Promise<boolean>;
@@ -1934,6 +1935,127 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newOrder;
   };
 
+  const updateOrder = async (orderId: string, updatedData: Partial<Order>): Promise<boolean> => {
+    const isoTimestamp = new Date().toISOString();
+    let updatedOrderObj: Order | null = null;
+
+    setOrders((prev) => {
+      const updatedList = prev.map((order) => {
+        if (order.id === orderId) {
+          const computedSubtotal =
+            updatedData.subtotal !== undefined
+              ? updatedData.subtotal
+              : updatedData.items !== undefined
+              ? (updatedData.items || []).reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0)
+              : order.subtotal;
+
+          const shipping = updatedData.shipping !== undefined ? Number(updatedData.shipping) : (order.shipping || 0);
+          const discount = updatedData.discount !== undefined ? Number(updatedData.discount) : (order.discount || 0);
+          const total =
+            updatedData.total !== undefined
+              ? Number(updatedData.total)
+              : Number(Math.max(0, computedSubtotal + shipping - discount).toFixed(2));
+
+          updatedOrderObj = {
+            ...order,
+            ...updatedData,
+            customer: {
+              ...order.customer,
+              ...(updatedData.customer || {}),
+            },
+            address: {
+              ...order.address,
+              ...(updatedData.address || {}),
+            },
+            items: updatedData.items !== undefined ? updatedData.items : order.items,
+            subtotal: Number(computedSubtotal.toFixed(2)),
+            shipping: Number(shipping.toFixed(2)),
+            discount: Number(discount.toFixed(2)),
+            total: Number(total.toFixed(2)),
+            updatedAt: isoTimestamp,
+          };
+          return updatedOrderObj;
+        }
+        return order;
+      });
+
+      try {
+        localStorage.setItem('peptide_orders', JSON.stringify(updatedList));
+      } catch (e) {
+        console.error('Error saving orders to localStorage:', e);
+      }
+      return updatedList;
+    });
+
+    if (!updatedOrderObj) return false;
+    const finalOrder = updatedOrderObj as Order;
+
+    // Save to Supabase
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase
+        .from('orders')
+        .upsert(mapOrderToDB(finalOrder))
+        .then((res) => {
+          if (res.error) console.log('Supabase order update info:', res.error.message);
+        });
+    }
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(finalOrder), { merge: true });
+    } catch (e) {
+      console.log('Error updating order in Firestore:', e);
+    }
+
+    // Update linked financial transaction if existing
+    setFinancialTransactions((prev) => {
+      const updatedFinances = prev.map((tx) => {
+        if (tx.orderId === orderId) {
+          return {
+            ...tx,
+            amount: finalOrder.total,
+            description: `Venda ${finalOrder.orderNumber} (${finalOrder.paymentMethod}) - Pedido Atualizado`,
+          };
+        }
+        return tx;
+      });
+      try {
+        localStorage.setItem('peptide_finances', JSON.stringify(updatedFinances));
+      } catch {}
+      return updatedFinances;
+    });
+
+    if (supabase) {
+      supabase
+        .from('financial_transactions')
+        .update({
+          amount: finalOrder.total,
+          description: `Venda ${finalOrder.orderNumber} (${finalOrder.paymentMethod}) - Pedido Atualizado`,
+        })
+        .eq('order_id', orderId)
+        .then();
+    }
+
+    try {
+      const finQuery = query(collection(db, 'financialTransactions'), where('orderId', '==', orderId));
+      const finSnap = await getDocs(finQuery);
+      finSnap.forEach(async (d) => {
+        try {
+          await updateDoc(doc(db, 'financialTransactions', d.id), {
+            amount: finalOrder.total,
+            description: `Venda ${finalOrder.orderNumber} (${finalOrder.paymentMethod}) - Pedido Atualizado`,
+          });
+        } catch {}
+      });
+    } catch (e) {
+      console.log('Error updating linked financial transaction in Firestore:', e);
+    }
+
+    showToast(`Pedido ${finalOrder.orderNumber} atualizado com sucesso!`);
+    return true;
+  };
+
   const updateOrderStatus = async (orderId: string, status: OrderStatus, trackingCode?: string) => {
     const isoTimestamp = new Date().toISOString();
     let updatedList: Order[] = [];
@@ -2196,6 +2318,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orders,
         createOrder,
         createManualOrder,
+        updateOrder,
         updateOrderStatus,
         clearOrderManually,
         deleteOrder,
