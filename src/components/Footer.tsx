@@ -139,11 +139,25 @@ export const Footer: React.FC = () => {
         </div>
 
         {/* Bottom Legal & Copyright Notice */}
-        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px]">
-          <p>
-            © {new Date().getFullYear()} PEPTIDE IMPORTS FARMA. Todos os direitos reservados.
-          </p>
-          <p className="text-center sm:text-right max-w-md">
+        <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px] border-t border-slate-800/40 mt-2">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
+            <p>
+              © {new Date().getFullYear()} PEPTIDE IMPORTS FARMA. Todos os direitos reservados.
+            </p>
+            <span className="hidden sm:inline text-slate-700">•</span>
+            <p className="text-slate-400">
+              Sistema criado por{' '}
+              <a
+                href="https://instagram.com/khevine_nunes"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-cyan-400 font-bold hover:text-cyan-300 transition-colors underline-offset-2 hover:underline"
+              >
+                @khevine_nunes
+              </a>
+            </p>
+          </div>
+          <p className="text-center sm:text-right max-w-md text-slate-500">
             Produtos destinados para fins de pesquisa científica, suporte bioquímico avançado e suplementação autorizada.
           </p>
         </div>

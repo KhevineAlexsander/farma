@@ -292,6 +292,24 @@ export const AdminDashboard: React.FC = () => {
           </>
         )}
       </main>
+
+      {/* Admin Panel Footer */}
+      <footer className="border-t border-slate-800/60 bg-slate-950/80 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+          <span>PEPTIDE IMPORTS ERP • Painel de Gestão Farmacêutica</span>
+          <span>
+            Sistema criado por{' '}
+            <a
+              href="https://instagram.com/khevine_nunes"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-cyan-400 font-bold hover:text-cyan-300 transition-colors"
+            >
+              @khevine_nunes
+            </a>
+          </span>
+        </div>
+      </footer>
     </div>
   );
 };
