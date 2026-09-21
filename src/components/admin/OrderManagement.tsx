@@ -24,19 +24,279 @@ import {
   ExternalLink,
   ChevronRight,
   Filter,
+  Plus,
+  ShoppingBag,
+  User,
+  PlusCircle,
+  MinusCircle,
+  Edit3,
+  Tag,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Order, OrderStatus } from '../../types';
+import { Order, OrderStatus, CartItem, Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 
 export const OrderManagement: React.FC = () => {
-  const { orders, updateOrderStatus, clearOrderManually, deleteOrder, currentUser, storeSettings, saveAllOrdersToCloud } = useApp();
+  const {
+    orders,
+    products,
+    updateProduct,
+    createManualOrder,
+    updateOrderStatus,
+    clearOrderManually,
+    deleteOrder,
+    currentUser,
+    storeSettings,
+    saveAllOrdersToCloud,
+  } = useApp();
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [trackingInput, setTrackingInput] = useState('');
   const [isSavingOrders, setIsSavingOrders] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+
+  // Manual Order Creation State
+  const [isManualModalOpen, setIsManualModalOpen] = useState(false);
+  const [custName, setCustName] = useState('');
+  const [custPhone, setCustPhone] = useState('');
+  const [custEmail, setCustEmail] = useState('');
+  const [custCpf, setCustCpf] = useState('');
+
+  // Delivery / Address
+  const [isPickup, setIsPickup] = useState(true);
+  const [street, setStreet] = useState('');
+  const [number, setNumber] = useState('');
+  const [complement, setComplement] = useState('');
+  const [neighborhood, setNeighborhood] = useState('');
+  const [city, setCity] = useState('São Paulo');
+  const [state, setState] = useState('SP');
+  const [zipCode, setZipCode] = useState('01000-000');
+
+  // Items for Manual Order
+  const [manualCart, setManualCart] = useState<CartItem[]>([]);
+  const [selectedProdId, setSelectedProdId] = useState<string>('');
+  const [selectedQty, setSelectedQty] = useState<number>(1);
+  const [manualProdSearch, setManualProdSearch] = useState<string>('');
+  const [selectedProdPrice, setSelectedProdPrice] = useState<string | number>('');
+  const [updateCatalogPriceToo, setUpdateCatalogPriceToo] = useState<boolean>(false);
+  const [isProdSearchOpen, setIsProdSearchOpen] = useState<boolean>(false);
+
+  // Financials for Manual Order
+  const [manualShipping, setManualShipping] = useState<number>(0);
+  const [manualDiscount, setManualDiscount] = useState<number>(0);
+  const [manualPaymentMethod, setManualPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
+  const [manualStatus, setManualStatus] = useState<OrderStatus>('Pago');
+  const [manualOperator, setManualOperator] = useState(currentUser?.name || 'Administrador');
+  const [manualNotes, setManualNotes] = useState('Pedido manual registrado diretamente no painel administrativo.');
+  const [isSubmittingManualOrder, setIsSubmittingManualOrder] = useState(false);
+  const [manualFormError, setManualFormError] = useState<string | null>(null);
+
+  // Active Selected Product
+  const currentSelectedProduct =
+    products.find((p) => p.id === (selectedProdId || products[0]?.id)) || products[0];
+
+  // Filtered products for search
+  const filteredManualProducts = products.filter((p) => {
+    if (!manualProdSearch.trim()) return true;
+    const term = manualProdSearch.toLowerCase().trim();
+    const nameMatch = (p.name || '').toLowerCase().includes(term);
+    const dosageMatch = (p.dosage || '').toLowerCase().includes(term);
+    const catMatch = (p.category || '').toLowerCase().includes(term);
+    return nameMatch || dosageMatch || catMatch;
+  });
+
+  const handleSelectProduct = (prod: Product) => {
+    setSelectedProdId(prod.id);
+    setSelectedProdPrice(prod.price);
+    setManualProdSearch(`${prod.name} ${prod.dosage || ''}`.trim());
+    setIsProdSearchOpen(false);
+  };
+
+  const handleSelectDropdownChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const prodId = e.target.value;
+    const prod = products.find((p) => p.id === prodId);
+    if (prod) {
+      handleSelectProduct(prod);
+    }
+  };
+
+  const handleAddProductToManualOrder = async () => {
+    const targetProd = currentSelectedProduct;
+    if (!targetProd) return;
+
+    const parsedPrice =
+      selectedProdPrice !== '' && !isNaN(Number(selectedProdPrice))
+        ? Math.max(0, Number(selectedProdPrice))
+        : targetProd.price;
+
+    // Se o usuário solicitou salvar no catálogo geral da loja
+    if (updateCatalogPriceToo && parsedPrice !== targetProd.price) {
+      await updateProduct(targetProd.id, { price: parsedPrice });
+    }
+
+    setManualCart((prev) => {
+      const existing = prev.find((item) => item.product.id === targetProd.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === targetProd.id
+            ? {
+                ...item,
+                product: { ...targetProd, price: parsedPrice },
+                quantity: item.quantity + selectedQty,
+              }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          product: { ...targetProd, price: parsedPrice },
+          quantity: selectedQty,
+        },
+      ];
+    });
+
+    setSelectedQty(1);
+    setUpdateCatalogPriceToo(false);
+  };
+
+  const handleRemoveManualItem = (prodId: string) => {
+    setManualCart((prev) => prev.filter((i) => i.product.id !== prodId));
+  };
+
+  const handleUpdateManualItemQty = (prodId: string, newQty: number) => {
+    if (newQty <= 0) {
+      handleRemoveManualItem(prodId);
+      return;
+    }
+    setManualCart((prev) =>
+      prev.map((i) => (i.product.id === prodId ? { ...i, quantity: newQty } : i))
+    );
+  };
+
+  const handleUpdateManualItemPrice = (prodId: string, newPrice: number) => {
+    const validPrice = Math.max(0, isNaN(newPrice) ? 0 : newPrice);
+    setManualCart((prev) =>
+      prev.map((item) =>
+        item.product.id === prodId
+          ? {
+              ...item,
+              product: {
+                ...item.product,
+                price: validPrice,
+              },
+            }
+          : item
+      )
+    );
+  };
+
+  const manualSubtotal = manualCart.reduce(
+    (sum, item) => sum + (item.product.price || 0) * item.quantity,
+    0
+  );
+  const manualTotal = Math.max(
+    0,
+    manualSubtotal + (Number(manualShipping) || 0) - (Number(manualDiscount) || 0)
+  );
+
+  const handleResetManualOrderForm = () => {
+    setCustName('');
+    setCustPhone('');
+    setCustEmail('');
+    setCustCpf('');
+    setIsPickup(true);
+    setStreet('');
+    setNumber('');
+    setComplement('');
+    setNeighborhood('');
+    setCity('São Paulo');
+    setState('SP');
+    setZipCode('01000-000');
+    setManualCart([]);
+    const firstProd = products[0];
+    setSelectedProdId(firstProd?.id || '');
+    setSelectedQty(1);
+    setManualProdSearch('');
+    setSelectedProdPrice(firstProd?.price !== undefined ? firstProd.price : '');
+    setUpdateCatalogPriceToo(false);
+    setIsProdSearchOpen(false);
+    setManualShipping(0);
+    setManualDiscount(0);
+    setManualPaymentMethod('PIX');
+    setManualStatus('Pago');
+    setManualOperator(currentUser?.name || 'Administrador');
+    setManualNotes('Pedido manual registrado via painel ERP.');
+    setManualFormError(null);
+  };
+
+  const handleSubmitManualOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setManualFormError(null);
+
+    if (!custName.trim()) {
+      setManualFormError('Informe o nome do cliente.');
+      return;
+    }
+    if (!custPhone.trim()) {
+      setManualFormError('Informe o telefone / WhatsApp do cliente.');
+      return;
+    }
+    if (manualCart.length === 0) {
+      setManualFormError('Adicione pelo menos um produto ao pedido.');
+      return;
+    }
+
+    try {
+      setIsSubmittingManualOrder(true);
+
+      const addressData = isPickup
+        ? {
+            street: 'Balcão / Retirada Loja Física',
+            number: 'S/N',
+            neighborhood: 'Centro',
+            city: 'São Paulo',
+            state: 'SP',
+            zipCode: '01000-000',
+          }
+        : {
+            street: street.trim() || 'Balcão',
+            number: number.trim() || 'S/N',
+            complement: complement.trim(),
+            neighborhood: neighborhood.trim() || 'Centro',
+            city: city.trim() || 'São Paulo',
+            state: state.trim() || 'SP',
+            zipCode: zipCode.trim() || '01000-000',
+          };
+
+      await createManualOrder({
+        customer: {
+          name: custName.trim(),
+          phone: custPhone.trim(),
+          email: custEmail.trim() || undefined,
+          cpf: custCpf.trim() || undefined,
+        },
+        address: addressData,
+        items: manualCart,
+        subtotal: manualSubtotal,
+        shipping: Number(manualShipping) || 0,
+        discount: Number(manualDiscount) || 0,
+        paymentMethod: manualPaymentMethod,
+        status: manualStatus,
+        notes: manualNotes.trim() || 'Pedido manual registrado via painel ERP.',
+        clearedBy: manualOperator,
+      });
+
+      handleResetManualOrderForm();
+      setIsManualModalOpen(false);
+    } catch (err) {
+      console.error('Error submitting manual order:', err);
+      setManualFormError('Erro ao registrar pedido manual. Verifique os dados e tente novamente.');
+    } finally {
+      setIsSubmittingManualOrder(false);
+    }
+  };
 
   const handleSaveOrdersToCloud = async () => {
     setIsSavingOrders(true);
@@ -217,10 +477,21 @@ export const OrderManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto w-full sm:w-auto justify-between sm:justify-end pt-1 sm:pt-0">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto w-full sm:w-auto justify-between sm:justify-end pt-1 sm:pt-0">
+          <button
+            onClick={() => {
+              handleResetManualOrderForm();
+              setIsManualModalOpen(true);
+            }}
+            className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 cursor-pointer min-h-[36px]"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>+ Novo Pedido Manual</span>
+          </button>
+
           <button
             onClick={() => setStatusFilter('Aguardando Baixa')}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px] ${
               statusFilter === 'Aguardando Baixa'
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
                 : 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
@@ -233,7 +504,7 @@ export const OrderManagement: React.FC = () => {
           <button
             onClick={handleSaveOrdersToCloud}
             disabled={isSavingOrders}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
             title="Sincronizar pedidos com a nuvem"
           >
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSavingOrders ? 'animate-spin' : ''}`} />
@@ -1089,6 +1360,682 @@ export const OrderManagement: React.FC = () => {
                     <>
                       <Trash2 className="w-4 h-4" />
                       <span>Confirmar Exclusão</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Adicionar Pedido Manual (Mobile & Desktop Responsive) */}
+      {isManualModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div
+            className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-7 text-white shadow-2xl my-6 max-h-[92vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-cyan-500/15 text-cyan-400 rounded-xl border border-cyan-500/30 shrink-0">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                    Adicionar Pedido Manual
+                  </h3>
+                  <p className="text-[11px] sm:text-xs text-slate-400">
+                    Registra o pedido no ERP com baixa no estoque e lançamento contábil
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isSubmittingManualOrder) {
+                    setIsManualModalOpen(false);
+                    handleResetManualOrderForm();
+                  }
+                }}
+                className="p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <form onSubmit={handleSubmitManualOrder} className="space-y-4 overflow-y-auto pr-1 py-3 text-xs flex-1">
+              {/* Section 1: Dados do Cliente */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 text-slate-200 font-bold border-b border-slate-800/80 pb-2">
+                  <User className="w-4 h-4 text-cyan-400" />
+                  <span>1. Dados do Cliente</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Nome Completo *</label>
+                    <input
+                      type="text"
+                      required
+                      value={custName}
+                      onChange={(e) => setCustName(e.target.value)}
+                      placeholder="Ex: Dr. Roberto Guimarães"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">WhatsApp / Telefone *</label>
+                    <input
+                      type="text"
+                      required
+                      value={custPhone}
+                      onChange={(e) => setCustPhone(e.target.value)}
+                      placeholder="Ex: (11) 98765-4321"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">E-mail (Opcional)</label>
+                    <input
+                      type="email"
+                      value={custEmail}
+                      onChange={(e) => setCustEmail(e.target.value)}
+                      placeholder="cliente@email.com"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">CPF (Opcional)</label>
+                    <input
+                      type="text"
+                      value={custCpf}
+                      onChange={(e) => setCustCpf(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Modalidade de Entrega e Endereço */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2 flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-slate-200 font-bold">
+                    <MapPin className="w-4 h-4 text-cyan-400" />
+                    <span>2. Endereço / Entrega</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setIsPickup(true)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                        isPickup ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Retirada / Balcão
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsPickup(false)}
+                      className={`px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all cursor-pointer ${
+                        !isPickup ? 'bg-cyan-500 text-slate-950 shadow-sm' : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Entrega / Envio
+                    </button>
+                  </div>
+                </div>
+
+                {!isPickup ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 animate-in fade-in">
+                    <div className="col-span-2 sm:col-span-1">
+                      <label className="block text-slate-400 font-medium mb-1">CEP</label>
+                      <input
+                        type="text"
+                        value={zipCode}
+                        onChange={(e) => setZipCode(e.target.value)}
+                        placeholder="00000-000"
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 min-h-[38px]"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="block text-slate-400 font-medium mb-1">Rua / Logradouro</label>
+                      <input
+                        type="text"
+                        value={street}
+                        onChange={(e) => setStreet(e.target.value)}
+                        placeholder="Av. Paulista"
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 min-h-[38px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Número</label>
+                      <input
+                        type="text"
+                        value={number}
+                        onChange={(e) => setNumber(e.target.value)}
+                        placeholder="1000"
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 min-h-[38px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Bairro</label>
+                      <input
+                        type="text"
+                        value={neighborhood}
+                        onChange={(e) => setNeighborhood(e.target.value)}
+                        placeholder="Bela Vista"
+                        className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 min-h-[38px]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-400 font-medium mb-1">Cidade / UF</label>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <input
+                          type="text"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          placeholder="São Paulo"
+                          className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 min-h-[38px]"
+                        />
+                        <input
+                          type="text"
+                          value={state}
+                          onChange={(e) => setState(e.target.value)}
+                          placeholder="SP"
+                          maxLength={2}
+                          className="w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-center uppercase min-h-[38px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-2.5 bg-slate-900/60 rounded-xl border border-slate-800 text-slate-400 text-xs flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <span>Retirada em mãos / Balcão da distribuidora (Sem taxa de frete de envio).</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Produtos do Pedido com Pesquisa e Edição de Preço */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3.5">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center gap-2 text-slate-200 font-bold">
+                    <ShoppingBag className="w-4 h-4 text-cyan-400" />
+                    <span>3. Produtos / Peptídeos do Pedido</span>
+                  </div>
+                  <span className="text-[11px] font-mono text-cyan-400 font-bold">
+                    {manualCart.length} item(ns)
+                  </span>
+                </div>
+
+                {/* Bloco de Pesquisa e Seleção do Produto */}
+                <div className="space-y-2.5">
+                  {/* Campo de Pesquisa Ativa */}
+                  <div className="relative">
+                    <label className="block text-[11px] text-slate-400 font-semibold mb-1 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Search className="w-3.5 h-3.5 text-cyan-400" />
+                        Pesquisar Peptídeo no Catálogo:
+                      </span>
+                      <span className="text-[10px] text-slate-500">Busque por nome, dosagem ou categoria</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={manualProdSearch}
+                        onChange={(e) => {
+                          setManualProdSearch(e.target.value);
+                          setIsProdSearchOpen(true);
+                        }}
+                        onFocus={() => setIsProdSearchOpen(true)}
+                        placeholder="Ex: Tirzepatida, Retatrutida, 60mg, Semaglutida, BPC..."
+                        className="w-full pl-9 pr-9 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs min-h-[40px]"
+                      />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                      {manualProdSearch && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setManualProdSearch('');
+                            setIsProdSearchOpen(false);
+                          }}
+                          className="absolute right-2.5 top-2.5 p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Menu Flutuante de Resultados da Busca */}
+                    {isProdSearchOpen && (
+                      <div
+                        className="absolute z-20 left-0 right-0 mt-1 max-h-52 overflow-y-auto bg-slate-900 border border-cyan-500/50 rounded-xl shadow-2xl shadow-black/90 p-1.5 space-y-1"
+                        onMouseDown={(e) => e.preventDefault()}
+                      >
+                        {filteredManualProducts.length === 0 ? (
+                          <div className="p-3 text-center text-xs text-slate-400">
+                            Nenhum produto encontrado para "{manualProdSearch}".
+                          </div>
+                        ) : (
+                          filteredManualProducts.slice(0, 15).map((p) => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => handleSelectProduct(p)}
+                              className={`w-full text-left p-2 rounded-lg flex items-center justify-between gap-2 text-xs transition-colors cursor-pointer ${
+                                p.id === currentSelectedProduct?.id
+                                  ? 'bg-cyan-500/20 border border-cyan-500/40 text-white'
+                                  : 'hover:bg-slate-800 text-slate-200'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <PeptideVial color={p.vialColor || '#06b6d4'} size="sm" />
+                                <div className="min-w-0">
+                                  <span className="font-bold text-white block truncate">
+                                    {p.name} {p.dosage ? `(${p.dosage})` : ''}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block font-mono">
+                                    {p.category || 'Peptídeos'} • Estoque: {p.stock || 0} un.
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="text-right shrink-0 font-mono font-bold text-emerald-400">
+                                R$ {(p.price || 0).toFixed(2).replace('.', ',')}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Seleção Alternativa Rápida via Dropdown */}
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-slate-400 font-semibold flex items-center justify-between">
+                      <span>Ou escolha na lista de produtos:</span>
+                      <span className="text-[10px] text-cyan-400 font-mono">{products.length} cadastrados</span>
+                    </label>
+                    <select
+                      value={currentSelectedProduct?.id || ''}
+                      onChange={handleSelectDropdownChange}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-cyan-500 text-xs min-h-[40px]"
+                    >
+                      {filteredManualProducts.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} {p.dosage ? `(${p.dosage})` : ''} — R$ {(p.price || 0).toFixed(2).replace('.', ',')} [Estoque: {p.stock || 0}]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Cartão do Produto Selecionado com Edição de Preço e Quantidade */}
+                  {currentSelectedProduct && (
+                    <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-800 space-y-3">
+                      {/* Linha de Identificação do Produto */}
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2 flex-wrap">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <PeptideVial color={currentSelectedProduct.vialColor || '#06b6d4'} size="sm" />
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-white block truncate">
+                              {currentSelectedProduct.name} {currentSelectedProduct.dosage ? `(${currentSelectedProduct.dosage})` : ''}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block font-mono">
+                              Estoque:{' '}
+                              <span className={(currentSelectedProduct.stock || 0) > 0 ? 'text-emerald-400 font-bold' : 'text-red-400 font-bold'}>
+                                {currentSelectedProduct.stock || 0} un.
+                              </span>
+                              {' • '}
+                              Tabela Oficial:{' '}
+                              <span className="text-slate-300 font-semibold">
+                                R$ {(currentSelectedProduct.price || 0).toFixed(2).replace('.', ',')}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+
+                        {Number(selectedProdPrice) !== currentSelectedProduct.price && selectedProdPrice !== '' && (
+                          <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-md border border-amber-500/30 font-semibold shrink-0">
+                            Preço Personalizado
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Painel de Valor Unitário Editável, Qtd e Botão Adicionar */}
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                        {/* Campo para Editar o Valor do Produto */}
+                        <div className="sm:col-span-5">
+                          <label className="block text-[11px] text-cyan-400 font-bold mb-1 flex items-center justify-between">
+                            <span className="flex items-center gap-1">
+                              <Edit3 className="w-3 h-3" />
+                              Valor Unitário (R$) *:
+                            </span>
+                            {Number(selectedProdPrice) !== currentSelectedProduct.price && selectedProdPrice !== '' && (
+                              <button
+                                type="button"
+                                onClick={() => setSelectedProdPrice(currentSelectedProduct.price)}
+                                className="text-[10px] text-slate-400 hover:text-cyan-300 underline cursor-pointer"
+                              >
+                                Restaurar tabela
+                              </button>
+                            )}
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-cyan-400 font-mono text-xs font-bold">R$</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              required
+                              value={selectedProdPrice}
+                              onChange={(e) => setSelectedProdPrice(e.target.value)}
+                              placeholder="0,00"
+                              className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-cyan-500/60 focus:border-cyan-400 rounded-xl text-white font-mono font-bold text-xs focus:outline-none min-h-[40px]"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quantidade */}
+                        <div className="sm:col-span-3">
+                          <label className="block text-[11px] text-slate-400 font-medium mb-1">Quantidade:</label>
+                          <div className="flex items-center bg-slate-950 border border-slate-700 rounded-xl px-1.5 py-1 min-h-[40px]">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedQty(Math.max(1, selectedQty - 1))}
+                              className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                            >
+                              <MinusCircle className="w-3.5 h-3.5" />
+                            </button>
+                            <input
+                              type="number"
+                              min={1}
+                              value={selectedQty}
+                              onChange={(e) => setSelectedQty(Math.max(1, parseInt(e.target.value) || 1))}
+                              className="w-full bg-transparent text-white font-bold font-mono text-center text-xs focus:outline-none"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setSelectedQty(selectedQty + 1)}
+                              className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Botão Adicionar */}
+                        <div className="sm:col-span-4">
+                          <button
+                            type="button"
+                            onClick={handleAddProductToManualOrder}
+                            className="w-full px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-cyan-500/20 min-h-[40px]"
+                          >
+                            <Plus className="w-4 h-4 stroke-[3]" />
+                            <span>Adicionar</span>
+                            <span className="text-[11px] font-mono font-bold ml-1">
+                              (R$ {((Number(selectedProdPrice) || currentSelectedProduct.price) * selectedQty).toFixed(2).replace('.', ',')})
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Opção para sincronizar com catálogo da loja se preço alterado */}
+                      {Number(selectedProdPrice) !== currentSelectedProduct.price && selectedProdPrice !== '' && (
+                        <label className="flex items-center gap-2 text-[11px] text-slate-300 pt-1 cursor-pointer select-none bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                          <input
+                            type="checkbox"
+                            checked={updateCatalogPriceToo}
+                            onChange={(e) => setUpdateCatalogPriceToo(e.target.checked)}
+                            className="rounded border-slate-700 bg-slate-950 text-cyan-500 focus:ring-0 cursor-pointer"
+                          />
+                          <span>
+                            Atualizar também o preço padrão de <strong>{currentSelectedProduct.name}</strong> para <strong>R$ {Number(selectedProdPrice).toFixed(2).replace('.', ',')}</strong> no catálogo permanente da loja
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Lista dos Produtos Adicionados ao Pedido com Edição Direta no Carrinho */}
+                <div className="space-y-2 pt-1">
+                  <div className="text-[11px] font-bold text-slate-400 flex items-center justify-between">
+                    <span>Itens incluídos no pedido:</span>
+                    <span className="text-cyan-400 font-mono">
+                      Subtotal: R$ {manualSubtotal.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+
+                  {manualCart.length === 0 ? (
+                    <div className="p-4 text-center text-slate-500 bg-slate-900/40 rounded-xl border border-dashed border-slate-800 text-xs">
+                      Nenhum produto adicionado ainda. Pesquise e adicione produtos acima.
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {manualCart.map((item) => {
+                        const itemSubtotal = (item.product.price || 0) * item.quantity;
+                        const catalogProd = products.find((p) => p.id === item.product.id);
+                        const isPriceCustomized = catalogProd && catalogProd.price !== item.product.price;
+
+                        return (
+                          <div
+                            key={item.product.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 bg-slate-900 rounded-xl border border-slate-800"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <PeptideVial color={item.product.vialColor || '#06b6d4'} size="sm" />
+                              <div className="min-w-0">
+                                <h5 className="font-bold text-white truncate text-xs">{item.product.name}</h5>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                                  <span>{item.product.dosage}</span>
+                                  {isPriceCustomized && (
+                                    <span className="text-amber-400 font-medium">
+                                      (Tabela: R$ {catalogProd.price.toFixed(2).replace('.', ',')})
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 flex-wrap">
+                              {/* Edição Rápida do Preço Unitário no Item */}
+                              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1">
+                                <span className="text-[10px] text-slate-500">Un: R$</span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  min="0"
+                                  value={item.product.price}
+                                  onChange={(e) =>
+                                    handleUpdateManualItemPrice(
+                                      item.product.id,
+                                      parseFloat(e.target.value) || 0
+                                    )
+                                  }
+                                  className="w-16 bg-transparent text-cyan-300 font-bold font-mono text-xs text-right focus:outline-none"
+                                  title="Editar valor unitário deste item no pedido"
+                                />
+                              </div>
+
+                              {/* Controle Qtd +/- */}
+                              <div className="flex items-center gap-1 bg-slate-950 rounded-lg p-1 border border-slate-800">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateManualItemQty(item.product.id, item.quantity - 1)
+                                  }
+                                  className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                                >
+                                  <MinusCircle className="w-3.5 h-3.5" />
+                                </button>
+                                <span className="w-6 text-center font-bold text-white font-mono text-xs">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleUpdateManualItemQty(item.product.id, item.quantity + 1)
+                                  }
+                                  className="p-1 text-slate-400 hover:text-white rounded cursor-pointer"
+                                >
+                                  <PlusCircle className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <span className="font-bold text-emerald-400 font-mono text-xs w-20 text-right">
+                                R$ {itemSubtotal.toFixed(2).replace('.', ',')}
+                              </span>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveManualItem(item.product.id)}
+                                className="p-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded cursor-pointer"
+                                title="Remover item"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Section 4: Valores, Pagamento & Status */}
+              <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 text-slate-200 font-bold border-b border-slate-800/80 pb-2">
+                  <CreditCard className="w-4 h-4 text-cyan-400" />
+                  <span>4. Valores, Pagamento & Status</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Frete (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={manualShipping}
+                      onChange={(e) => setManualShipping(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono min-h-[38px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Desconto (R$)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={manualDiscount}
+                      onChange={(e) => setManualDiscount(parseFloat(e.target.value) || 0)}
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono min-h-[38px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Forma Pagamento</label>
+                    <select
+                      value={manualPaymentMethod}
+                      onChange={(e) => setManualPaymentMethod(e.target.value as any)}
+                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white min-h-[38px]"
+                    >
+                      <option value="PIX">PIX</option>
+                      <option value="Cartão de Crédito">Cartão de Crédito</option>
+                      <option value="Boleto">Boleto</option>
+                      <option value="WhatsApp / A Combinar">WhatsApp / A Combinar</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Status Inicial</label>
+                    <select
+                      value={manualStatus}
+                      onChange={(e) => setManualStatus(e.target.value as OrderStatus)}
+                      className="w-full px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white min-h-[38px]"
+                    >
+                      <option value="Pago">Pago (Baixa Direta)</option>
+                      <option value="Pendente">Pendente</option>
+                      <option value="Em Separação">Em Separação</option>
+                      <option value="Enviado">Enviado</option>
+                      <option value="Entregue">Entregue</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Atendente / Operador</label>
+                    <input
+                      type="text"
+                      value={manualOperator}
+                      onChange={(e) => setManualOperator(e.target.value)}
+                      placeholder="Nome do atendente"
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white min-h-[38px]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-400 font-medium mb-1">Observações Internas</label>
+                    <input
+                      type="text"
+                      value={manualNotes}
+                      onChange={(e) => setManualNotes(e.target.value)}
+                      placeholder="Ex: Venda direta WhatsApp, retirada agendada"
+                      className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white min-h-[38px]"
+                    />
+                  </div>
+                </div>
+
+                {/* Final Total Box */}
+                <div className="p-3 bg-gradient-to-r from-slate-900 to-slate-950 rounded-xl border border-cyan-500/30 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] text-slate-400 block">Subtotal: R$ {manualSubtotal.toFixed(2).replace('.', ',')}</span>
+                    <span className="text-[11px] text-slate-400 block">Frete: +R$ {(Number(manualShipping) || 0).toFixed(2).replace('.', ',')} | Desconto: -R$ {(Number(manualDiscount) || 0).toFixed(2).replace('.', ',')}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase text-cyan-400 font-bold tracking-wider block">Total Faturado</span>
+                    <span className="text-lg sm:text-xl font-extrabold text-emerald-400 font-mono">
+                      R$ {manualTotal.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {manualFormError && (
+                <div className="p-3 bg-red-950/60 border border-red-500/50 rounded-xl text-xs text-red-300 flex items-center gap-2 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{manualFormError}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isSubmittingManualOrder}
+                  onClick={() => {
+                    setIsManualModalOpen(false);
+                    handleResetManualOrderForm();
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingManualOrder || manualCart.length === 0}
+                  className="px-6 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-slate-950 font-extrabold text-xs shadow-lg shadow-cyan-500/25 transition-all cursor-pointer flex items-center gap-2 min-h-[42px]"
+                >
+                  {isSubmittingManualOrder ? (
+                    <span>Registrando Pedido...</span>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Salvar Pedido no ERP</span>
                     </>
                   )}
                 </button>

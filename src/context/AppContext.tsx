@@ -97,6 +97,18 @@ interface AppContextType {
     notes?: string;
     couponCode?: string;
   }) => Order;
+  createManualOrder: (orderData: {
+    customer: { name: string; email?: string; phone: string; cpf?: string };
+    address?: Partial<Address>;
+    items: CartItem[];
+    subtotal?: number;
+    shipping?: number;
+    discount?: number;
+    paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
+    status?: OrderStatus;
+    notes?: string;
+    clearedBy?: string;
+  }) => Promise<Order>;
   updateOrderStatus: (orderId: string, status: OrderStatus, trackingCode?: string) => void;
   clearOrderManually: (orderId: string, status: OrderStatus, clearedBy: string, notes?: string) => void;
   deleteOrder: (orderId: string) => Promise<boolean>;
@@ -1794,6 +1806,134 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newOrder;
   };
 
+  const createManualOrder = async (orderData: {
+    customer: { name: string; email?: string; phone: string; cpf?: string };
+    address?: Partial<Address>;
+    items: CartItem[];
+    subtotal?: number;
+    shipping?: number;
+    discount?: number;
+    paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
+    status?: OrderStatus;
+    notes?: string;
+    clearedBy?: string;
+  }): Promise<Order> => {
+    const computedSubtotal = orderData.subtotal !== undefined
+      ? orderData.subtotal
+      : (orderData.items || []).reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0);
+    const shipping = Number((orderData.shipping || 0).toFixed(2));
+    const discount = Number((orderData.discount || 0).toFixed(2));
+    const total = Number(Math.max(0, computedSubtotal + shipping - discount).toFixed(2));
+    const currentStatus: OrderStatus = orderData.status || 'Pago';
+    const isPaid = currentStatus === 'Pago' || currentStatus === 'Entregue' || currentStatus === 'Em Separação' || currentStatus === 'Enviado';
+    const operator = orderData.clearedBy || currentUser?.name || 'Administrador Master';
+
+    const newOrder: Order = {
+      id: `ord-${Date.now()}`,
+      orderNumber: `#PI-${Math.floor(1000 + Math.random() * 9000)}`,
+      createdAt: new Date().toISOString(),
+      customer: {
+        name: orderData.customer.name.trim(),
+        email: (orderData.customer.email || '').trim() || 'cliente.direto@peptideimports.com.br',
+        phone: (orderData.customer.phone || '').trim(),
+        cpf: (orderData.customer.cpf || '').trim() || undefined,
+      },
+      address: {
+        street: orderData.address?.street?.trim() || 'Balcão / A Combinar',
+        number: orderData.address?.number?.trim() || 'S/N',
+        complement: orderData.address?.complement?.trim() || '',
+        neighborhood: orderData.address?.neighborhood?.trim() || 'Centro',
+        city: orderData.address?.city?.trim() || 'São Paulo',
+        state: orderData.address?.state?.trim() || 'SP',
+        zipCode: orderData.address?.zipCode?.trim() || '01000-000',
+      },
+      items: orderData.items,
+      subtotal: Number(computedSubtotal.toFixed(2)),
+      shipping,
+      discount,
+      total,
+      status: currentStatus,
+      paymentMethod: orderData.paymentMethod,
+      notes: orderData.notes || 'Pedido manual registrado via painel ERP.',
+      clearedManuallyAt: isPaid ? new Date().toLocaleString('pt-BR') : undefined,
+      clearedBy: isPaid ? operator : undefined,
+    };
+
+    // Update orders in state and localStorage
+    setOrders((prev) => {
+      const updated = [newOrder, ...prev];
+      try {
+        localStorage.setItem('peptide_orders', JSON.stringify(updated));
+      } catch (e) {
+        console.error('Error saving orders to localStorage:', e);
+      }
+      return updated;
+    });
+
+    // Decrement stock for ordered items
+    if (orderData.items && orderData.items.length > 0) {
+      setProducts((prevProducts) => {
+        const updatedProds = prevProducts.map((p) => {
+          const matchedItem = orderData.items.find((it) => it.product?.id === p.id);
+          if (matchedItem) {
+            const newStock = Math.max(0, (p.stock || 0) - (matchedItem.quantity || 1));
+            return { ...p, stock: newStock };
+          }
+          return p;
+        });
+        try {
+          localStorage.setItem('peptide_products', JSON.stringify(updatedProds));
+        } catch {}
+        return updatedProds;
+      });
+    }
+
+    // Save to Supabase
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      supabase.from('orders').insert(mapOrderToDB(newOrder)).then();
+    }
+
+    // Save to Firestore
+    try {
+      await setDoc(doc(db, 'orders', newOrder.id), cleanUndefinedForFirestore(newOrder));
+    } catch (e) {
+      console.log('Error saving manual order in Firestore:', e);
+    }
+
+    // Create linked financial transaction
+    const newTx: FinancialTransaction = {
+      id: `tx-${Date.now()}`,
+      date: new Date().toISOString().split('T')[0],
+      type: 'ENTRADA',
+      description: `Venda ${newOrder.orderNumber} (${newOrder.paymentMethod}) - Pedido Manual`,
+      category: 'Venda de Produtos',
+      amount: newOrder.total,
+      orderId: newOrder.id,
+    };
+
+    setFinancialTransactions((prev) => {
+      const updated = [newTx, ...prev];
+      try {
+        localStorage.setItem('peptide_finances', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    if (supabase) {
+      supabase.from('financial_transactions').insert(mapFinToDB(newTx)).then();
+    }
+
+    try {
+      await setDoc(doc(db, 'financialTransactions', newTx.id), cleanUndefinedForFirestore(newTx));
+    } catch (e) {
+      console.log('Error saving transaction for manual order in Firestore:', e);
+    }
+
+    showToast(`Pedido manual ${newOrder.orderNumber} (R$ ${newOrder.total.toFixed(2).replace('.', ',')}) registrado com sucesso!`);
+    return newOrder;
+  };
+
   const updateOrderStatus = async (orderId: string, status: OrderStatus, trackingCode?: string) => {
     const isoTimestamp = new Date().toISOString();
     let updatedList: Order[] = [];
@@ -2055,6 +2195,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsAuthOpen,
         orders,
         createOrder,
+        createManualOrder,
         updateOrderStatus,
         clearOrderManually,
         deleteOrder,

@@ -19,11 +19,23 @@ import {
 } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { useApp } from '../../context/AppContext';
+import { Order, FinancialTransaction } from '../../types';
+import { PeptideVial } from '../PeptideVial';
 
 export const FinancialManagement: React.FC = () => {
-  const { orders, financialTransactions, addFinancialTransaction, clearAllFinances, products } = useApp();
+  const { orders, financialTransactions, addFinancialTransaction, deleteFinancialTransaction, deleteOrder, clearAllFinances, products } = useApp();
   const [period, setPeriod] = useState<'Dia' | 'Semana' | 'Mês'>('Mês');
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
+
+  // Active Tab in Financial Ledger & Direct Orders
+  const [activeFinanceTab, setActiveFinanceTab] = useState<'caixa' | 'pedidos'>('caixa');
+
+  // Deletion modal state for Direct Orders & Transactions
+  const [orderToDeleteFromFinance, setOrderToDeleteFromFinance] = useState<Order | null>(null);
+  const [txToDelete, setTxToDelete] = useState<FinancialTransaction | null>(null);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // New Transaction Form
   const [txType, setTxType] = useState<'ENTRADA' | 'SAIDA'>('ENTRADA');
@@ -39,6 +51,80 @@ export const FinancialManagement: React.FC = () => {
 
   // Search/Filter in tables for mobile
   const [productSearch, setProductSearch] = useState('');
+
+  // Handler to delete a direct order from finances
+  const handleConfirmDeleteOrderFromFinance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderToDeleteFromFinance) return;
+
+    if (deletePassword.trim() !== '8817') {
+      setDeleteError('Senha incorreta! Digite a senha 8817 para confirmar a exclusão do pedido.');
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      await deleteOrder(orderToDeleteFromFinance.id);
+      setOrderToDeleteFromFinance(null);
+      setDeletePassword('');
+      setDeleteError(null);
+    } catch (err) {
+      console.error('Error deleting order from finance:', err);
+      setDeleteError('Ocorreu um erro ao excluir o pedido direto. Tente novamente.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Handler to delete a manual transaction
+  const handleConfirmDeleteTx = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!txToDelete) return;
+
+    if (deletePassword.trim() !== '8817') {
+      setDeleteError('Senha incorreta! Digite a senha 8817 para autorizar a exclusão.');
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      await deleteFinancialTransaction(txToDelete.id);
+      setTxToDelete(null);
+      setDeletePassword('');
+      setDeleteError(null);
+    } catch (err) {
+      console.error('Error deleting transaction:', err);
+      setDeleteError('Ocorreu um erro ao excluir o lançamento. Tente novamente.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Helper to initiate deletion from Livro Caixa
+  const handleDeleteTxItem = (tx: FinancialTransaction) => {
+    if (tx.orderId) {
+      const matched = orders.find((o) => o.id === tx.orderId);
+      if (matched) {
+        setOrderToDeleteFromFinance(matched);
+        setDeletePassword('');
+        setDeleteError(null);
+        return;
+      }
+    }
+    const match = tx.description.match(/#PI-\d+/);
+    if (match) {
+      const matched = orders.find((o) => o.orderNumber === match[0]);
+      if (matched) {
+        setOrderToDeleteFromFinance(matched);
+        setDeletePassword('');
+        setDeleteError(null);
+        return;
+      }
+    }
+    setTxToDelete(tx);
+    setDeletePassword('');
+    setDeleteError(null);
+  };
 
   // Calculate KPIs strictly from real orders
   const validOrders = orders.filter((o) => o.status !== 'Cancelado');
@@ -521,15 +607,20 @@ export const FinancialManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Financial Ledger Table (Livro Caixa: Entradas e Saídas) */}
+      {/* Financial Ledger & Direct Orders Section */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
           <div>
-            <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
-              Livro Caixa & Lançamentos Financeiros
-            </h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-tight">
+                Controle de Faturamento & Livro Caixa
+              </h3>
+              <span className="text-[10px] bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded-full font-bold">
+                ERP Integrado
+              </span>
+            </div>
             <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-              Registro contábil de receitas de vendas e despesas operacionais
+              Gerencie lançamentos contábeis e exclua pedidos diretos do faturamento com recálculo automático de DRE
             </p>
           </div>
 
@@ -558,99 +649,352 @@ export const FinancialManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Mobile View: Cards for Transactions */}
-        <div className="block md:hidden space-y-2.5">
-          {financialTransactions.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-xs">
-              Nenhum lançamento financeiro registrado até o momento.
-            </div>
-          ) : (
-            financialTransactions.map((tx) => {
-              const isIncome = tx.type === 'ENTRADA';
-              return (
-                <div
-                  key={tx.id}
-                  className="bg-slate-950 border border-slate-800/80 rounded-2xl p-3.5 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          isIncome
-                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-red-500/15 text-red-400 border border-red-500/30'
-                        }`}
-                      >
-                        {isIncome ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                        {tx.type}
-                      </span>
-                      <span className="text-[10px] font-mono text-slate-400">{tx.date}</span>
-                    </div>
-
-                    <span className={`font-mono font-bold text-xs sm:text-sm ${isIncome ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {isIncome ? '+' : '-'} R$ {(tx.amount || 0).toFixed(2).replace('.', ',')}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h5 className="font-semibold text-white text-xs">{tx.description}</h5>
-                    <span className="text-[10px] text-slate-500 block mt-0.5">{tx.category}</span>
-                  </div>
-                </div>
-              );
-            })
-          )}
+        {/* Sub-Tab Navigation for Finanças: Livro Caixa vs Pedidos Diretos */}
+        <div className="flex items-center gap-2 p-1 bg-slate-950/80 border border-slate-800 rounded-xl">
+          <button
+            onClick={() => setActiveFinanceTab('caixa')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeFinanceTab === 'caixa'
+                ? 'bg-slate-800 text-white shadow-md border border-slate-700'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Livro Caixa Geral ({financialTransactions.length})</span>
+          </button>
+          <button
+            onClick={() => setActiveFinanceTab('pedidos')}
+            className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+              activeFinanceTab === 'pedidos'
+                ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <ShoppingBag className="w-3.5 h-3.5" />
+            <span>Pedidos Diretos & Faturamento ({orders.length})</span>
+          </button>
         </div>
 
-        {/* Desktop View: Full Table */}
-        <div className="hidden md:block overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-              <tr>
-                <th className="py-3 px-3">Data</th>
-                <th className="py-3 px-3">Tipo</th>
-                <th className="py-3 px-3">Descrição</th>
-                <th className="py-3 px-3">Categoria</th>
-                <th className="py-3 px-3 text-right">Valor</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/60">
+        {/* TAB 1: Livro Caixa Geral (Entradas e Saídas) */}
+        {activeFinanceTab === 'caixa' && (
+          <div className="space-y-3">
+            {/* Mobile View: Cards for Transactions */}
+            <div className="block md:hidden space-y-2.5">
               {financialTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="py-8 text-center text-slate-500 text-xs">
-                    Nenhum lançamento financeiro registrado até o momento.
-                  </td>
-                </tr>
+                <div className="py-8 text-center text-slate-500 text-xs">
+                  Nenhum lançamento financeiro registrado até o momento.
+                </div>
               ) : (
                 financialTransactions.map((tx) => {
                   const isIncome = tx.type === 'ENTRADA';
+                  const isDirectOrder = !!tx.orderId || tx.description.includes('#PI-');
                   return (
-                    <tr key={tx.id} className="hover:bg-slate-800/30">
-                      <td className="py-2.5 px-3 text-slate-400 font-mono">{tx.date}</td>
-                      <td className="py-2.5 px-3">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                            isIncome
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-red-500/15 text-red-400 border border-red-500/30'
-                          }`}
-                        >
-                          {isIncome ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                          {tx.type}
+                    <div
+                      key={tx.id}
+                      className="bg-slate-950 border border-slate-800/80 rounded-2xl p-3.5 space-y-2.5"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isIncome
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                            }`}
+                          >
+                            {isIncome ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                            {tx.type}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400">{tx.date}</span>
+                          {isDirectOrder && (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded-md font-bold">
+                              Pedido Direto
+                            </span>
+                          )}
+                        </div>
+
+                        <span className={`font-mono font-bold text-xs sm:text-sm ${isIncome ? 'text-emerald-400' : 'text-red-400'}`}>
+                          {isIncome ? '+' : '-'} R$ {(tx.amount || 0).toFixed(2).replace('.', ',')}
                         </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-white font-medium">{tx.description}</td>
-                      <td className="py-2.5 px-3 text-slate-400">{tx.category}</td>
-                      <td className={`py-2.5 px-3 text-right font-bold text-sm font-mono ${isIncome ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {isIncome ? '+' : '-'} R$ {(tx.amount || 0).toFixed(2).replace('.', ',')}
-                      </td>
-                    </tr>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-900">
+                        <div>
+                          <h5 className="font-semibold text-white text-xs">{tx.description}</h5>
+                          <span className="text-[10px] text-slate-500 block mt-0.5">{tx.category}</span>
+                        </div>
+
+                        <button
+                          onClick={() => handleDeleteTxItem(tx)}
+                          className="px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 text-[11px] font-semibold flex items-center gap-1 transition-colors cursor-pointer min-h-[34px]"
+                          title={isDirectOrder ? 'Excluir este pedido direto do faturamento' : 'Excluir lançamento'}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>{isDirectOrder ? 'Excluir Pedido' : 'Excluir'}</span>
+                        </button>
+                      </div>
+                    </div>
                   );
                 })
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            {/* Desktop View: Full Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-3">Data</th>
+                    <th className="py-3 px-3">Tipo</th>
+                    <th className="py-3 px-3">Descrição</th>
+                    <th className="py-3 px-3">Categoria</th>
+                    <th className="py-3 px-3 text-right">Valor</th>
+                    <th className="py-3 px-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {financialTransactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-500 text-xs">
+                        Nenhum lançamento financeiro registrado até o momento.
+                      </td>
+                    </tr>
+                  ) : (
+                    financialTransactions.map((tx) => {
+                      const isIncome = tx.type === 'ENTRADA';
+                      const isDirectOrder = !!tx.orderId || tx.description.includes('#PI-');
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3 text-slate-400 font-mono">{tx.date}</td>
+                          <td className="py-2.5 px-3">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                                isIncome
+                                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-red-500/15 text-red-400 border border-red-500/30'
+                              }`}
+                            >
+                              {isIncome ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                              {tx.type}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-white font-medium">
+                            <div className="flex items-center gap-1.5">
+                              <span>{tx.description}</span>
+                              {isDirectOrder && (
+                                <span className="text-[9px] px-1.5 py-0.2 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 rounded font-bold">
+                                  Direto
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400">{tx.category}</td>
+                          <td className={`py-2.5 px-3 text-right font-bold text-sm font-mono ${isIncome ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {isIncome ? '+' : '-'} R$ {(tx.amount || 0).toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              onClick={() => handleDeleteTxItem(tx)}
+                              className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all cursor-pointer inline-flex items-center gap-1 text-[11px] font-semibold"
+                              title={isDirectOrder ? 'Excluir este pedido direto do faturamento' : 'Excluir lançamento contábil'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span className="hidden xl:inline">{isDirectOrder ? 'Excluir Pedido' : 'Excluir'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: Pedidos Diretos & Faturamento */}
+        {activeFinanceTab === 'pedidos' && (
+          <div className="space-y-3">
+            <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-xs text-slate-300 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <ShoppingBag className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  Lista de <strong>{orders.length} pedidos diretos</strong> registrados no sistema. A exclusão de um pedido aqui recalcula o faturamento bruto, o CPV e o DRE instantaneamente.
+                </span>
+              </div>
+            </div>
+
+            {/* Mobile View: Cards for Orders */}
+            <div className="block md:hidden space-y-3">
+              {orders.length === 0 ? (
+                <div className="py-8 text-center text-slate-500 text-xs">
+                  Nenhum pedido direto registrado no sistema.
+                </div>
+              ) : (
+                orders.map((order) => {
+                  const orderCost = (order.items || []).reduce(
+                    (sum, item) => sum + (item.product?.costPrice || 0) * (item.quantity || 1),
+                    0
+                  );
+                  const orderProfit = (order.total || 0) - orderCost;
+                  const dateFormatted = order.createdAt
+                    ? new Date(order.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                    : '-';
+
+                  return (
+                    <div key={order.id} className="bg-slate-950 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-extrabold text-cyan-400 font-mono text-xs">{order.orderNumber}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                              {order.status}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono block mt-0.5">{dateFormatted}</span>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] text-slate-400 block">Total</span>
+                          <span className="font-bold text-white font-mono text-sm">
+                            R$ {(order.total || 0).toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-xs text-slate-300">
+                        <span className="text-slate-500">Cliente: </span>
+                        <strong>{order.customer?.name || 'Cliente'}</strong> ({order.customer?.phone || 'Sem telefone'})
+                      </div>
+
+                      {/* Products overview */}
+                      <div className="p-2 bg-slate-900/90 rounded-xl text-[11px] space-y-1 border border-slate-800/80">
+                        {(order.items || []).map((it, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-slate-300">
+                            <span className="truncate max-w-[200px]">{it.quantity}x {it.product?.name || 'Peptídeo'} {it.product?.dosage}</span>
+                            <span className="font-mono text-slate-400">R$ {((it.product?.price || 0) * (it.quantity || 1)).toFixed(2).replace('.', ',')}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Cost & Profit Calculation */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-900">
+                        <div className="p-1.5 bg-slate-900/60 rounded-lg">
+                          <span className="text-slate-500 block text-[10px]">Custo (CPV)</span>
+                          <span className="text-slate-300 font-mono font-semibold">R$ {orderCost.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                        <div className="p-1.5 bg-emerald-950/30 border border-emerald-500/20 rounded-lg">
+                          <span className="text-emerald-400/80 block text-[10px]">Lucro Direto</span>
+                          <span className="text-emerald-400 font-mono font-bold">+R$ {orderProfit.toFixed(2).replace('.', ',')}</span>
+                        </div>
+                      </div>
+
+                      {/* Delete Order Action */}
+                      <div className="pt-1 flex items-center justify-end">
+                        <button
+                          onClick={() => {
+                            setOrderToDeleteFromFinance(order);
+                            setDeletePassword('');
+                            setDeleteError(null);
+                          }}
+                          className="w-full px-3 py-2 rounded-xl bg-red-500/15 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[40px]"
+                        >
+                          <Trash2 className="w-4 h-4 shrink-0" />
+                          <span>Excluir Pedido Direto</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Desktop View: Orders Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="py-3 px-3">Pedido</th>
+                    <th className="py-3 px-3">Data</th>
+                    <th className="py-3 px-3">Cliente</th>
+                    <th className="py-3 px-3">Itens</th>
+                    <th className="py-3 px-3">Pagamento</th>
+                    <th className="py-3 px-3 text-right">Faturamento</th>
+                    <th className="py-3 px-3 text-right">CPV (Custo)</th>
+                    <th className="py-3 px-3 text-right">Lucro</th>
+                    <th className="py-3 px-3 text-center">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {orders.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-500 text-xs">
+                        Nenhum pedido direto registrado no sistema.
+                      </td>
+                    </tr>
+                  ) : (
+                    orders.map((order) => {
+                      const orderCost = (order.items || []).reduce(
+                        (sum, item) => sum + (item.product?.costPrice || 0) * (item.quantity || 1),
+                        0
+                      );
+                      const orderProfit = (order.total || 0) - orderCost;
+                      const dateFormatted = order.createdAt
+                        ? new Date(order.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                        : '-';
+
+                      return (
+                        <tr key={order.id} className="hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3">
+                            <span className="font-extrabold text-cyan-400 font-mono">{order.orderNumber}</span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-400 font-mono text-[11px]">{dateFormatted}</td>
+                          <td className="py-2.5 px-3 text-white font-medium">
+                            <div>{order.customer?.name || 'Cliente'}</div>
+                            <div className="text-[10px] text-slate-500">{order.customer?.phone || '-'}</div>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300">
+                            <div className="text-[11px] truncate max-w-[160px]" title={(order.items || []).map(i => `${i.quantity}x ${i.product?.name}`).join(', ')}>
+                              {(order.items || []).map((i) => `${i.quantity}x ${i.product?.name || 'Item'}`).join(', ')}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                              {order.paymentMethod || 'PIX'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-white font-mono">
+                            R$ {(order.total || 0).toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-400 font-mono">
+                            R$ {orderCost.toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-emerald-400 font-mono">
+                            +R$ {orderProfit.toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              onClick={() => {
+                                setOrderToDeleteFromFinance(order);
+                                setDeletePassword('');
+                                setDeleteError(null);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/30 text-[11px] font-bold flex items-center gap-1 transition-all cursor-pointer mx-auto shadow-sm"
+                              title="Excluir este pedido direto do faturamento"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Excluir Pedido</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* New Transaction Modal (Mobile Friendly) */}
@@ -856,6 +1200,235 @@ export const FinancialManagement: React.FC = () => {
                       <span>Confirmar Limpeza</span>
                     </>
                   )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Excluir Pedido Direto do Faturamento (Senha 8817) */}
+      {orderToDeleteFromFinance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md bg-slate-900 border border-red-500/40 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl shadow-red-950/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                if (!isDeleting) {
+                  setOrderToDeleteFromFinance(null);
+                  setDeletePassword('');
+                  setDeleteError(null);
+                }
+              }}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4">
+              <div className="p-2.5 bg-red-500/15 text-red-400 rounded-xl border border-red-500/30 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="pr-8">
+                <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">
+                  Finanças & DRE - Exclusão Direta
+                </span>
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Excluir Pedido {orderToDeleteFromFinance.orderNumber}
+                </h3>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmDeleteOrderFromFinance} className="space-y-3.5">
+              {/* Resumo do Pedido */}
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-1.5">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Cliente:</span>
+                  <span className="text-white font-semibold truncate max-w-[200px]">{orderToDeleteFromFinance.customer?.name || 'Cliente'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Faturamento Bruto:</span>
+                  <span className="text-emerald-400 font-bold font-mono">R$ {(orderToDeleteFromFinance.total || 0).toFixed(2).replace('.', ',')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Forma de Pagamento:</span>
+                  <span className="text-cyan-400 font-semibold">{orderToDeleteFromFinance.paymentMethod || 'PIX'}</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-red-950/25 border border-red-500/30 rounded-xl flex items-start gap-2 text-xs text-red-200">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  A exclusão deste pedido removerá o lançamento do Livro Caixa e recalculará as receitas, CPV e Lucro Líquido do DRE. Confirme com a senha de administrador:
+                </p>
+              </div>
+
+              {/* Password Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    Senha de Confirmação:
+                  </span>
+                  <span className="text-[11px] text-amber-400 font-mono font-semibold">Senha: 8817</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    autoFocus
+                    required
+                    value={deletePassword}
+                    onChange={(e) => {
+                      setDeletePassword(e.target.value);
+                      if (deleteError) setDeleteError(null);
+                    }}
+                    placeholder="Digite a senha 8817"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-red-500 placeholder-slate-600 font-mono tracking-widest min-h-[42px]"
+                  />
+                  <KeyRound className="w-4 h-4 text-slate-500 absolute right-3.5 top-3" />
+                </div>
+              </div>
+
+              {deleteError && (
+                <div className="p-2.5 bg-red-950/60 border border-red-500/50 rounded-xl text-xs text-red-300 flex items-center gap-2 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setOrderToDeleteFromFinance(null);
+                    setDeletePassword('');
+                    setDeleteError(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeleting || !deletePassword.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-red-600/30 transition-all cursor-pointer flex items-center gap-2 min-h-[42px]"
+                >
+                  {isDeleting ? (
+                    <span>Excluindo Pedido...</span>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Confirmar Exclusão</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Excluir Lançamento Avulso do Livro Caixa (Senha 8817) */}
+      {txToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md bg-slate-900 border border-red-500/40 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl shadow-red-950/50"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                if (!isDeleting) {
+                  setTxToDelete(null);
+                  setDeletePassword('');
+                  setDeleteError(null);
+                }
+              }}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4">
+              <div className="p-2.5 bg-red-500/15 text-red-400 rounded-xl border border-red-500/30 shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div className="pr-8">
+                <span className="text-[10px] text-red-400 font-bold uppercase tracking-wider block">
+                  Exclusão de Lançamento
+                </span>
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  Excluir {txToDelete.type} do Livro Caixa
+                </h3>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmDeleteTx} className="space-y-3.5">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs space-y-1">
+                <div className="text-white font-semibold">{txToDelete.description}</div>
+                <div className="flex justify-between text-slate-400 pt-1">
+                  <span>Valor:</span>
+                  <span className={`font-mono font-bold ${txToDelete.type === 'ENTRADA' ? 'text-emerald-400' : 'text-red-400'}`}>
+                    R$ {(txToDelete.amount || 0).toFixed(2).replace('.', ',')}
+                  </span>
+                </div>
+              </div>
+
+              {/* Password Input */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    Senha de Confirmação:
+                  </span>
+                  <span className="text-[11px] text-amber-400 font-mono font-semibold">Senha: 8817</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="password"
+                    autoFocus
+                    required
+                    value={deletePassword}
+                    onChange={(e) => {
+                      setDeletePassword(e.target.value);
+                      if (deleteError) setDeleteError(null);
+                    }}
+                    placeholder="Digite a senha 8817"
+                    className="w-full px-4 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-red-500 placeholder-slate-600 font-mono tracking-widest min-h-[42px]"
+                  />
+                  <KeyRound className="w-4 h-4 text-slate-500 absolute right-3.5 top-3" />
+                </div>
+              </div>
+
+              {deleteError && (
+                <div className="p-2.5 bg-red-950/60 border border-red-500/50 rounded-xl text-xs text-red-300 flex items-center gap-2 animate-in fade-in">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => {
+                    setTxToDelete(null);
+                    setDeletePassword('');
+                    setDeleteError(null);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDeleting || !deletePassword.trim()}
+                  className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 disabled:bg-slate-800 disabled:text-slate-600 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-red-600/30 transition-all cursor-pointer flex items-center gap-2 min-h-[42px]"
+                >
+                  {isDeleting ? <span>Excluindo...</span> : <span>Confirmar Exclusão</span>}
                 </button>
               </div>
             </form>
