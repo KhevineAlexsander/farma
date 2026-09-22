@@ -1,18 +1,56 @@
-import React, { useState } from 'react';
-import { Plus, Search, Edit2, Trash2, AlertTriangle, Check, Eye, X, DollarSign, Package, Sparkles, Tag, Star, Image, UploadCloud, Layers, Database, RefreshCw, FileText, ChevronDown, Copy, ExternalLink, FilePlus2, Clock, CheckCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import {
+  Plus,
+  Search,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  Check,
+  Eye,
+  X,
+  DollarSign,
+  Package,
+  Sparkles,
+  Tag,
+  Star,
+  Image,
+  UploadCloud,
+  Layers,
+  Database,
+  RefreshCw,
+  FileText,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  FilePlus2,
+  Clock,
+  CheckCircle,
+  ShieldCheck,
+  ShieldAlert,
+  ArrowRight,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
 import { PeptideVial } from '../PeptideVial';
+import {
+  validateProductForCreation,
+  auditDatabaseDeduplication,
+  DeduplicationAuditReport,
+  normalizeProductName,
+  normalizeDosage,
+} from '../../utils/productDeduplication';
 
 export const ProductManagement: React.FC = () => {
   const { 
     products, 
+    orders,
     addProduct, 
     updateProduct, 
     deleteProduct, 
     toggleProductPromotion, 
     toggleProductFeatured, 
     syncOfficialCatalog, 
+    executeCatalogDeduplication,
     saveAllProductsToCloud, 
     currentUser,
     productRequests,
@@ -32,13 +70,20 @@ export const ProductManagement: React.FC = () => {
   const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [showRequestsPanel, setShowRequestsPanel] = useState(true);
 
+  // Anti-Deduplication System State
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
+  const [isResolvingDeduplication, setIsResolvingDeduplication] = useState(false);
+  const [auditTestInput, setAuditTestInput] = useState('');
+  const [auditTestDosage, setAuditTestDosage] = useState('');
+  const auditReport = useMemo(() => auditDatabaseDeduplication(products, orders), [products, orders]);
+
   // CSV Import State
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [csvText, setCsvText] = useState(`categoria,produto,dosagem,unidade,preco
 Emagrecimento & Metabolismo,Tirzepatida,60,mg,175.00
 Emagrecimento & Metabolismo,Tirzepatida,100,mg,230.00
-Emagrecimento & Metabolismo,Retatrutide,30,mg,185.00
-Emagrecimento & Metabolismo,Retatrutide,60,mg,285.00
+Emagrecimento & Metabolismo,Retratutida,30,mg,185.00
+Emagrecimento & Metabolismo,Retratutida,60,mg,285.00
 Emagrecimento & Metabolismo,Cagrilintide,10,mg,150.00
 Emagrecimento & Metabolismo,AOD-9604,5,mg,80.00
 Emagrecimento & Metabolismo,SLU-PP-322,5,mg,120.00
@@ -61,7 +106,7 @@ Hormonais & Outros,Melanotan II,10,mg,65.00
 Hormonais & Outros,VIP,10,mg,135.00
 Hormonais & Outros,KLOW,80,mg,260.00
 Hormonais & Outros,GLOW,70,mg,160.00
-Hormonais & Outros,Most-C,10,mg,80.00`);
+Hormonais & Outros,MOTS-C,10,mg,80.00`);
 
   const handleImportCsv = (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,26 +148,29 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
           continue;
         }
 
-        // Check if product already exists with same name and dosage (case-insensitive)
-        const exists = products.some(
-          p => (p.name || '').trim().toUpperCase() === productName && 
-               (p.dosage || '').trim().toUpperCase() === dosageStr
+        // Anti-Deduplication validation check (normalizes Retratutida, Epithalon, Mots-c, etc.)
+        const validation = validateProductForCreation(
+          { name: productName, dosage: dosageStr },
+          products
         );
 
-        if (exists) {
+        if (!validation.isValid && validation.isDuplicate) {
           skippedCount++;
           continue;
         }
 
+        const canonicalName = validation.suggestedName || normalizeProductName(productName);
+        const canonicalDosage = validation.suggestedDosage || normalizeDosage(dosageStr);
+
         const newProd: Omit<Product, 'id'> = {
-          name: productName,
-          dosage: dosageStr,
+          name: canonicalName,
+          dosage: canonicalDosage,
           category,
           price: priceNum,
           costPrice: Math.round(priceNum * 0.4 * 100) / 100,
           stock: 35,
           capColor: (category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : (category || '').toLowerCase().includes('beleza') ? '#EC4899' : '#0088FF',
-          description: `Produto farmacêutico importado de alta pureza (${productName} ${dosageStr}).`,
+          description: `Produto farmacêutico importado de alta pureza (${canonicalName} ${canonicalDosage}).`,
           benefits: ['Laudo HPLC certificado', 'Alta biodisponibilidade'],
           purity: '99.6% HPLC',
           storage: '2°C a 8°C (Refrigerado)',
@@ -138,7 +186,7 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
       }
     }
 
-    let msg = `Importação concluída!\n• ${importedCount} novos produtos adicionados.\n• ${skippedCount} produtos ignorados (já existiam).`;
+    let msg = `Importação concluída!\n• ${importedCount} novos produtos adicionados com validação anti-duplicidade.\n• ${skippedCount} produtos ignorados por já existirem no catálogo (duplicidades bloqueadas).`;
     if (errorCount > 0) {
       msg += `\n• ${errorCount} linhas ignoradas por formatação inválida.`;
     }
@@ -262,9 +310,27 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
       ? Math.max(0, Math.min(1000000, rawOrigPrice)) 
       : (isPromotion ? parsedPrice * 1.25 : undefined);
 
+    const validation = validateProductForCreation(
+      {
+        name: name.trim().slice(0, 100),
+        dosage: dosage.trim().slice(0, 50),
+        id: editingProductId || undefined,
+      },
+      products
+    );
+
+    if (!validation.isValid && validation.isDuplicate) {
+      showToast(validation.message || 'Produto com mesma especificação já cadastrado no catálogo!');
+      alert(`Atenção: Duplicidade Detectada!\n\n${validation.message}\n\nPara manter a integridade dos relatórios e vendas, edite o produto já existente ou altere a especificação.`);
+      return;
+    }
+
+    const canonicalName = validation.suggestedName || normalizeProductName(name.trim().slice(0, 100).toUpperCase());
+    const canonicalDosage = validation.suggestedDosage || normalizeDosage(dosage.trim().slice(0, 50).toUpperCase());
+
     const productPayload: Omit<Product, 'id'> = {
-      name: name.trim().slice(0, 100).toUpperCase(),
-      dosage: dosage.trim().slice(0, 50).toUpperCase(),
+      name: canonicalName,
+      dosage: canonicalDosage,
       category,
       price: parsedPrice,
       costPrice: Math.max(0, parseFloat(costPrice) || 0),
@@ -394,6 +460,28 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
             <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
             <span className="hidden sm:inline">{isSyncing ? 'Gravando...' : 'Restaurar Catálogo Base'}</span>
             <span className="sm:hidden">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
+          </button>
+
+          <button
+            onClick={() => setIsAuditModalOpen(true)}
+            className={`px-3.5 py-2.5 rounded-xl border font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer ${
+              auditReport.isClean
+                ? 'bg-slate-900 hover:bg-slate-800 text-emerald-400 border-emerald-500/40'
+                : 'bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border-amber-500/60 animate-pulse'
+            }`}
+            title="Sistema de Prevenção e Auditoria de Duplicidades"
+          >
+            {auditReport.isClean ? (
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <ShieldAlert className="w-4 h-4 text-amber-400" />
+            )}
+            <span className="hidden sm:inline">
+              {auditReport.isClean ? 'Sistema Anti-Duplicidade' : `Duplicidades (${auditReport.totalCatalogDuplicates})`}
+            </span>
+            <span className="sm:hidden">
+              {auditReport.isClean ? 'Anti-Duplicidade' : `Dupl. (${auditReport.totalCatalogDuplicates})`}
+            </span>
           </button>
 
           {isMasterAdmin && (
@@ -1072,6 +1160,298 @@ Hormonais & Outros,Most-C,10,mg,80.00`);
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Anti-Duplication System Modal */}
+      {isAuditModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="px-6 py-5 bg-slate-950 border-b border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center ${
+                  auditReport.isClean
+                    ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400'
+                    : 'bg-amber-500/10 border border-amber-500/30 text-amber-400'
+                }`}>
+                  {auditReport.isClean ? <ShieldCheck className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-white font-bold text-base flex items-center gap-2">
+                    Sistema Anti-Duplicidade de Produtos
+                    {auditReport.isClean ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+                        Ativo & Protegido
+                      </span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                        Ação Necessária ({auditReport.totalCatalogDuplicates})
+                      </span>
+                    )}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Prevenção de cadastros repetidos, normalização de sinônimos e unificação de pedidos.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsAuditModalOpen(false)}
+                className="p-2 rounded-xl bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs">
+              {/* Status Banner */}
+              {auditReport.isClean ? (
+                <div className="p-4 rounded-2xl bg-emerald-950/40 border border-emerald-500/30 flex items-start gap-3.5">
+                  <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="text-emerald-300 font-bold text-sm">Catálogo 100% Íntegro e Livre de Duplicidades</h4>
+                    <p className="text-slate-300 leading-relaxed">
+                      Nenhum produto duplicado foi encontrado no banco de dados. Todas as variações ortográficas conhecidas (como <em>Retratutida / Retatrutide</em>, <em>Epithalon / Ephitalon</em>, <em>MOTS-C / Most-C</em> e <em>Tirzepatida / Tirze</em>) estão canonicamente sincronizadas e protegidas contra novas repetições.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex items-start gap-3.5">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1.5 flex-1">
+                    <h4 className="text-amber-300 font-bold text-sm">
+                      {(auditReport?.duplicateGroups || []).length} Grupo(s) de Produtos Duplicados Detectados no Banco
+                    </h4>
+                    <p className="text-slate-300 leading-relaxed">
+                      Foram localizados produtos no catálogo com mesma substância e dosagem gravados sob grafias ou registros diferentes. Você pode unificá-los abaixo com 1 clique para consolidar estoques, relatórios e vendas.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Duplicate Groups List (if any detected) */}
+              {(auditReport?.duplicateGroups || []).length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-white uppercase tracking-wider text-[11px] text-slate-300">
+                      Grupos Duplicados para Unificação
+                    </h4>
+                    <span className="text-[11px] text-slate-400">
+                      {(auditReport?.duplicateGroups || []).length} grupo(s) pendente(s)
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {(auditReport?.duplicateGroups || []).map((group, idx) => (
+                      <div
+                        key={idx}
+                        className="p-4 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-3.5"
+                      >
+                        <div className="flex items-center justify-between pb-2.5 border-b border-slate-800/80">
+                          <div>
+                            <span className="text-xs font-bold text-cyan-300 uppercase">
+                              {group.canonicalName}
+                            </span>
+                            <span className="ml-2 text-xs font-semibold text-slate-400">
+                              {group.canonicalDosage || 'Dosagem Padrão'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-medium">
+                            {(group?.duplicateProducts || []).length + 1} registros encontrados
+                          </span>
+                        </div>
+
+                        {/* Primary vs Duplicates Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {/* Primary Product */}
+                          <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase font-bold text-emerald-400 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Registro Principal (Mantido)
+                              </span>
+                              <span className="text-slate-400 font-mono text-[10px]">{group.primaryProduct?.id}</span>
+                            </div>
+                            <p className="text-white font-bold text-xs">{group.primaryProduct?.name} {group.primaryProduct?.dosage}</p>
+                            <div className="flex items-center gap-3 text-[11px] text-slate-300 pt-1">
+                              <span>Preço: <strong className="text-emerald-300">R$ {group.primaryProduct?.price?.toFixed(2) || '0.00'}</strong></span>
+                              <span>Estoque: <strong className="text-white">{group.primaryProduct?.stock || 0} un.</strong></span>
+                            </div>
+                          </div>
+
+                          {/* Redundant Products */}
+                          <div className="space-y-2">
+                            {(group?.duplicateProducts || []).map((dup) => (
+                              <div
+                                key={dup.id}
+                                className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-1"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] uppercase font-bold text-rose-400">
+                                    Variação Duplicada (Removida e Fundida)
+                                  </span>
+                                  <span className="text-slate-400 font-mono text-[10px]">{dup.id}</span>
+                                </div>
+                                <p className="text-slate-200 font-semibold text-xs">{dup.name} {dup.dosage}</p>
+                                <div className="flex items-center gap-3 text-[11px] text-slate-400 pt-1">
+                                  <span>Preço: R$ {(dup.price || 0).toFixed(2)}</span>
+                                  <span>Estoque: {dup.stock || 0} un.</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Merge Action Button */}
+                        <div className="flex justify-end pt-1">
+                          <button
+                            onClick={async () => {
+                              if (!group.primaryProduct) return;
+                              setIsResolvingDeduplication(true);
+                              await executeCatalogDeduplication(
+                                group.primaryProduct.id,
+                                (group.duplicateProducts || []).map((p) => p.id)
+                              );
+                              setIsResolvingDeduplication(false);
+                            }}
+                            disabled={isResolvingDeduplication}
+                            className="px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-md cursor-pointer disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${isResolvingDeduplication ? 'animate-spin' : ''}`} />
+                            <span>Unificar este Grupo no Banco</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Protective Layers Breakdown */}
+              <div className="space-y-3 pt-2">
+                <h4 className="font-bold text-white uppercase tracking-wider text-[11px] text-slate-300">
+                  Camadas de Proteção Ativas
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                    <div className="w-7 h-7 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold">
+                      1
+                    </div>
+                    <h5 className="font-bold text-white text-xs">Normalização Fonética</h5>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Reconhece automaticamente variações como <em>Retratutida</em> / <em>Retatrutide</em>, <em>Epithalon</em> / <em>Ephitalon</em>, <em>MOTS-C</em> / <em>Most-C</em> e <em>Tirzepatida</em> / <em>Tirze</em>.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                    <div className="w-7 h-7 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">
+                      2
+                    </div>
+                    <h5 className="font-bold text-white text-xs">Bloqueio Proativo</h5>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Valida em tempo real o formulário de cadastro e importações CSV. Impede novos itens se a mesma substância e dosagem já existirem.
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                    <div className="w-7 h-7 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center font-bold">
+                      3
+                    </div>
+                    <h5 className="font-bold text-white text-xs">Consolidação em Vendas</h5>
+                    <p className="text-slate-400 text-[11px] leading-relaxed">
+                      Pedidos e relatórios de vendas (WhatsApp / PDF) agrupam os itens pelo peptídeo canônico, eliminando linhas repetidas.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Rule Simulator */}
+              <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-white text-xs flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    Simulador de Validação Anti-Duplicidade
+                  </h4>
+                  <span className="text-[10px] text-slate-400">Teste qualquer nome ou variação ortográfica</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Nome ou Variação:</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: retratutida, epitalon, most-c, tirze"
+                      value={auditTestInput}
+                      onChange={(e) => setAuditTestInput(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:border-cyan-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">Dosagem:</label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 60mg, 10 mg, 40mg"
+                      value={auditTestDosage}
+                      onChange={(e) => setAuditTestDosage(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:border-cyan-500"
+                    />
+                  </div>
+                </div>
+
+                {auditTestInput.trim() && (
+                  (() => {
+                    const testValidation = validateProductForCreation(
+                      { name: auditTestInput, dosage: auditTestDosage },
+                      products
+                    );
+                    const normN = normalizeProductName(auditTestInput);
+                    const normD = normalizeDosage(auditTestDosage);
+
+                    return (
+                      <div className={`p-3 rounded-xl border space-y-1.5 ${
+                        testValidation.isDuplicate
+                          ? 'bg-amber-950/30 border-amber-500/40 text-amber-200'
+                          : 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold flex items-center gap-1.5">
+                            {testValidation.isDuplicate ? (
+                              <>
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                                Duplicidade Detectada (Cadastro Bloqueado)
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                                Válido para Cadastro
+                              </>
+                            )}
+                          </span>
+                          <span className="font-mono text-[10px] text-slate-300">
+                            Canônico: {normN} {normD}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-300">
+                          {testValidation.message}
+                        </p>
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAuditModalOpen(false)}
+                className="px-5 py-2.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 text-xs transition-colors cursor-pointer"
+              >
+                Fechar Painel
+              </button>
+            </div>
           </div>
         </div>
       )}

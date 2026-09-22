@@ -34,6 +34,15 @@ import {
   signInWithPopup,
   signOut,
 } from '../lib/firebase';
+import {
+  validateProductForCreation,
+  sanitizeOrderItems,
+  normalizeProductName,
+  normalizeDosage,
+  mergeDuplicateProductGroup,
+  auditDatabaseDeduplication,
+  DeduplicationAuditReport,
+} from '../utils/productDeduplication';
 
 /**
  * Recursively cleans an object to remove any keys with 'undefined' values,
@@ -66,6 +75,11 @@ interface AppContextType {
   toggleProductPromotion: (id: string, isPromotion?: boolean, discount?: number) => void;
   toggleProductFeatured: (id: string) => void;
   syncOfficialCatalog: () => Promise<void>;
+  executeCatalogDeduplication: (
+    primaryProductId: string,
+    duplicateProductIds: string[]
+  ) => Promise<{ success: boolean; message: string }>;
+  auditDeduplication: () => DeduplicationAuditReport;
 
   cart: CartItem[];
   cartCount: number;
@@ -1038,9 +1052,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- Product CRUD & Promotion Toggles ---
   const addProduct = async (productData: Omit<Product, 'id'>) => {
+    // Proactive anti-duplication validation
+    const validation = validateProductForCreation(productData, products);
+    if (!validation.isValid && validation.isDuplicate) {
+      const msg = validation.message || 'Produto com mesma especificação já cadastrado no catálogo!';
+      showToast(msg);
+      return;
+    }
+
+    const canonicalName = validation.suggestedName || normalizeProductName(productData.name);
+    const canonicalDosage = validation.suggestedDosage || normalizeDosage(productData.dosage || '');
+
     const newId = `prod-${Date.now()}`;
     const newProduct: Product = {
       ...productData,
+      name: canonicalName,
+      dosage: canonicalDosage,
       id: newId,
     };
     setProducts((prev) => {
@@ -1048,7 +1075,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('peptide_products', JSON.stringify(updated));
       return updated;
     });
-    showToast(`Produto "${newProduct.name}" cadastrado com sucesso!`);
+    showToast(`Produto "${newProduct.name}" (${newProduct.dosage || 'Padrão'}) cadastrado com sucesso!`);
 
     // Save to Supabase
     try {
@@ -1068,9 +1095,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateProduct = async (id: string, updatedFields: Partial<Product>) => {
+    const cleanedFields = { ...updatedFields };
+    if (cleanedFields.name) {
+      cleanedFields.name = normalizeProductName(cleanedFields.name);
+    }
+    if (cleanedFields.dosage !== undefined) {
+      cleanedFields.dosage = normalizeDosage(cleanedFields.dosage);
+    }
+
     let updatedList: Product[] = [];
     setProducts((prev) => {
-      updatedList = prev.map((p) => (p.id === id ? { ...p, ...updatedFields } : p));
+      updatedList = prev.map((p) => (p.id === id ? { ...p, ...cleanedFields } : p));
       localStorage.setItem('peptide_products', JSON.stringify(updatedList));
       return updatedList;
     });
@@ -1460,6 +1495,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const auditDeduplication = (): DeduplicationAuditReport => {
+    return auditDatabaseDeduplication(products, orders);
+  };
+
+  const executeCatalogDeduplication = async (
+    primaryProductId: string,
+    duplicateProductIds: string[]
+  ): Promise<{ success: boolean; message: string }> => {
+    try {
+      const primary = products.find((p) => p.id === primaryProductId);
+      if (!primary) {
+        return { success: false, message: 'Produto principal não encontrado no catálogo.' };
+      }
+
+      showToast('Unificando produtos duplicados e sincronizando pedidos...');
+
+      const { updatedProducts, updatedOrders, deletedProductIds } = mergeDuplicateProductGroup(
+        primary,
+        duplicateProductIds,
+        products,
+        orders
+      );
+
+      // 1. Update in-memory and local state
+      setProducts(updatedProducts);
+      localStorage.setItem('peptide_products', JSON.stringify(updatedProducts));
+
+      setOrders(updatedOrders);
+      localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+
+      // 2. Sync to Supabase
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const primaryUpdated = updatedProducts.find((p) => p.id === primary.id) || primary;
+        await supabase.from('products').upsert(mapProductToDB(primaryUpdated));
+        if (deletedProductIds.length > 0) {
+          await supabase.from('products').delete().in('id', deletedProductIds);
+        }
+      }
+
+      // 3. Sync to Firestore
+      const primaryUpdated = updatedProducts.find((p) => p.id === primary.id) || primary;
+      await setDoc(doc(db, 'products', primary.id), cleanUndefinedForFirestore(primaryUpdated), { merge: true });
+      for (const delId of deletedProductIds) {
+        await deleteDoc(doc(db, 'products', delId));
+      }
+
+      // 4. Update impacted orders in DB
+      for (const ord of updatedOrders) {
+        const originalOrd = orders.find((o) => o.id === ord.id);
+        if (JSON.stringify(originalOrd?.items) !== JSON.stringify(ord.items)) {
+          if (supabase) {
+            await supabase.from('orders').upsert(mapOrderToDB(ord));
+          }
+          await setDoc(doc(db, 'orders', ord.id), cleanUndefinedForFirestore(ord), { merge: true });
+        }
+      }
+
+      showToast(`Duplicidades unificadas com sucesso! ${deletedProductIds.length} produto(s) duplicado(s) removido(s) e catálogo padronizado.`);
+      return { success: true, message: 'Unificação concluída com sucesso!' };
+    } catch (err: any) {
+      console.error('Erro na unificação de duplicidades:', err);
+      showToast('Erro ao unificar duplicidades.');
+      return { success: false, message: err?.message || 'Erro ao unificar.' };
+    }
+  };
+
   // --- Cart Actions ---
   const addToCart = (product: Product, quantity = 1) => {
     setCart((prev) => {
@@ -1723,13 +1825,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const discount = Number((orderData.discount !== undefined ? (orderData.discount || 0) : (couponDiscount || 0)).toFixed(2));
     const total = Number(Math.max(0, subtotal + shipping - discount).toFixed(2));
 
+    const sanitizedItems = sanitizeOrderItems([...cart], products);
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
       orderNumber: `#PI-${Math.floor(1000 + Math.random() * 9000)}`,
       createdAt: new Date().toISOString(),
       customer: orderData.customer,
       address: orderData.address,
-      items: [...cart],
+      items: sanitizedItems,
       subtotal,
       shipping,
       discount,
@@ -1819,9 +1922,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes?: string;
     clearedBy?: string;
   }): Promise<Order> => {
+    const sanitizedItems = sanitizeOrderItems(orderData.items || [], products);
     const computedSubtotal = orderData.subtotal !== undefined
       ? orderData.subtotal
-      : (orderData.items || []).reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0);
+      : sanitizedItems.reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0);
     const shipping = Number((orderData.shipping || 0).toFixed(2));
     const discount = Number((orderData.discount || 0).toFixed(2));
     const total = Number(Math.max(0, computedSubtotal + shipping - discount).toFixed(2));
@@ -1848,7 +1952,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         state: orderData.address?.state?.trim() || 'SP',
         zipCode: orderData.address?.zipCode?.trim() || '01000-000',
       },
-      items: orderData.items,
+      items: sanitizedItems,
       subtotal: Number(computedSubtotal.toFixed(2)),
       shipping,
       discount,
@@ -1942,11 +2046,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) => {
       const updatedList = prev.map((order) => {
         if (order.id === orderId) {
+          const sanitizedItems =
+            updatedData.items !== undefined
+              ? sanitizeOrderItems(updatedData.items, products)
+              : order.items;
+
           const computedSubtotal =
             updatedData.subtotal !== undefined
               ? updatedData.subtotal
               : updatedData.items !== undefined
-              ? (updatedData.items || []).reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0)
+              ? (sanitizedItems || []).reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0)
               : order.subtotal;
 
           const shipping = updatedData.shipping !== undefined ? Number(updatedData.shipping) : (order.shipping || 0);
@@ -1967,7 +2076,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...order.address,
               ...(updatedData.address || {}),
             },
-            items: updatedData.items !== undefined ? updatedData.items : order.items,
+            items: sanitizedItems,
             subtotal: Number(computedSubtotal.toFixed(2)),
             shipping: Number(shipping.toFixed(2)),
             discount: Number(discount.toFixed(2)),
@@ -2316,6 +2425,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         toggleProductPromotion,
         toggleProductFeatured,
         syncOfficialCatalog,
+        executeCatalogDeduplication,
+        auditDeduplication,
         cart,
         cartCount,
         cartTotal,

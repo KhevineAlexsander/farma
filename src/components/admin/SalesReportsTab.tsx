@@ -38,21 +38,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order } from '../../types';
-
-// Helper to normalize product names (fix common typos such as Ephitalon -> Epithalon, multiple spaces, etc.)
-function normalizeProductName(name: string): string {
-  if (!name) return '';
-  const trimmed = name.trim().replace(/\s+/g, ' ');
-  if (/^ephitalon$/i.test(trimmed)) {
-    return 'EPITHALON';
-  }
-  return trimmed;
-}
-
-function normalizeDosage(dosage: string): string {
-  if (!dosage) return '';
-  return dosage.trim().replace(/\s+/g, ' ');
-}
+import {
+  normalizeProductName,
+  normalizeDosage,
+  findCanonicalCatalogProduct,
+  getProductDeduplicationKey,
+} from '../../utils/productDeduplication';
 
 export interface SalesReportsTabProps {
   onOpenEditOrder?: (orderId: string) => void;
@@ -255,24 +246,8 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         const normalizedName = normalizeProductName(rawProdName);
         const normalizedDosage = normalizeDosage(rawDosage);
 
-        // Priority 1: Match catalog product by exact ID if available
-        let matchedProduct = prodId ? products.find((p) => p.id === prodId) : undefined;
-
-        // Priority 2: Match catalog product by normalized name and dosage
-        if (!matchedProduct) {
-          matchedProduct = products.find(
-            (p) =>
-              normalizeProductName(p.name).toUpperCase() === normalizedName.toUpperCase() &&
-              (!normalizedDosage || normalizeDosage(p.dosage).toUpperCase() === normalizedDosage.toUpperCase())
-          );
-        }
-
-        // Priority 3: Match catalog product by normalized name alone if dosage missing
-        if (!matchedProduct && !normalizedDosage) {
-          matchedProduct = products.find(
-            (p) => normalizeProductName(p.name).toUpperCase() === normalizedName.toUpperCase()
-          );
-        }
+        // Match canonical catalog product using comprehensive deduplication rules
+        const matchedProduct = findCanonicalCatalogProduct(item, products);
 
         const canonicalId = matchedProduct?.id || prodId;
         const canonicalName = matchedProduct ? matchedProduct.name : normalizedName;
