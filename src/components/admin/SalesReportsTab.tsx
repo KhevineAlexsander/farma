@@ -29,12 +29,22 @@ import {
   BarChart3,
   Calendar,
   Users,
+  Edit3,
+  Eye,
+  ExternalLink,
+  Truck,
+  ChevronRight,
+  User,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order } from '../../types';
 
-export const SalesReportsTab: React.FC = () => {
-  const { orders, products, storeSettings, saveAllOrdersToCloud, showToast } = useApp();
+export interface SalesReportsTabProps {
+  onOpenEditOrder?: (orderId: string) => void;
+}
+
+export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrder }) => {
+  const { orders, products, storeSettings, saveAllOrdersToCloud, showToast, updateOrderStatus } = useApp();
 
   // Period and Status filters
   const [timeFilter, setTimeFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all'>('month');
@@ -51,6 +61,22 @@ export const SalesReportsTab: React.FC = () => {
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Modal: View and edit orders for a specific selected product
+  const [selectedProductForOrders, setSelectedProductForOrders] = useState<{
+    id?: string;
+    name: string;
+    dosage?: string;
+    category?: string;
+    qtySold: number;
+    qtyConfirmed: number;
+    qtyPending: number;
+    totalRevenue: number;
+    currentStock?: number;
+    ordersCount: number;
+  } | null>(null);
+  const [productOrdersStatusFilter, setProductOrdersStatusFilter] = useState<'all' | 'pending' | 'confirmed'>('all');
+  const [productOrdersSearch, setProductOrdersSearch] = useState('');
 
   // WhatsApp Summary Modal State
   const [isWhatsAppModalOpen, setIsWhatsAppModalOpen] = useState(false);
@@ -519,6 +545,133 @@ export const SalesReportsTab: React.FC = () => {
     }
   };
 
+  // Matching orders for the product currently inspected
+  const productOrdersDetails = useMemo(() => {
+    if (!selectedProductForOrders) {
+      return { allOrders: [], pendingCount: 0, confirmedCount: 0, totalUnits: 0, totalRevenue: 0 };
+    }
+
+    const targetName = (selectedProductForOrders.name || '').toLowerCase().trim();
+    const targetDosage = (selectedProductForOrders.dosage || '').toLowerCase().trim();
+
+    // Check all time-matched orders in the current period window
+    const matches: Array<{
+      order: Order;
+      itemQty: number;
+      itemPrice: number;
+      itemSubtotal: number;
+      otherItemsCount: number;
+    }> = [];
+
+    (periodOrdersStats.timeMatched || []).forEach((ord) => {
+      const items = ord.items || [];
+      const matchedItems = items.filter((it) => {
+        const pName = (it.product?.name || (it as any).name || '').toLowerCase().trim();
+        const pDosage = (it.product?.dosage || (it as any).dosage || '').toLowerCase().trim();
+
+        if (selectedProductForOrders.id && it.product?.id === selectedProductForOrders.id) {
+          return true;
+        }
+        return pName === targetName && pDosage === targetDosage;
+      });
+
+      if (matchedItems.length > 0) {
+        const itemQty = matchedItems.reduce((acc, i) => acc + (Number(i.quantity) || 1), 0);
+        const itemPrice = Number(matchedItems[0]?.product?.price) || Number((matchedItems[0] as any)?.price) || 0;
+        const itemSubtotal = itemPrice * itemQty;
+        const otherItemsCount = items.length - matchedItems.length;
+
+        matches.push({
+          order: ord,
+          itemQty,
+          itemPrice,
+          itemSubtotal,
+          otherItemsCount,
+        });
+      }
+    });
+
+    const pendingCount = matches.filter((m) => m.order.status === 'Pendente').length;
+    const confirmedCount = matches.filter((m) => m.order.status !== 'Pendente').length;
+    const totalUnits = matches.reduce((acc, m) => acc + m.itemQty, 0);
+    const totalRevenue = matches.reduce((acc, m) => acc + m.itemSubtotal, 0);
+
+    return {
+      allOrders: matches,
+      pendingCount,
+      confirmedCount,
+      totalUnits,
+      totalRevenue,
+    };
+  }, [selectedProductForOrders, periodOrdersStats.timeMatched]);
+
+  const filteredProductOrders = useMemo(() => {
+    if (!productOrdersDetails.allOrders) return [];
+
+    return productOrdersDetails.allOrders.filter(({ order }) => {
+      if (productOrdersStatusFilter === 'pending' && order.status !== 'Pendente') {
+        return false;
+      }
+      if (productOrdersStatusFilter === 'confirmed' && order.status === 'Pendente') {
+        return false;
+      }
+
+      if (productOrdersSearch.trim()) {
+        const term = productOrdersSearch.toLowerCase().trim();
+        const custName = (order.customer?.name || '').toLowerCase();
+        const custPhone = (order.customer?.phone || '').toLowerCase();
+        const orderNum = (order.orderNumber || order.id || '').toLowerCase();
+        return custName.includes(term) || custPhone.includes(term) || orderNum.includes(term);
+      }
+
+      return true;
+    });
+  }, [productOrdersDetails.allOrders, productOrdersStatusFilter, productOrdersSearch]);
+
+  const handleOpenOrderInEdit = (orderId: string) => {
+    setSelectedProductForOrders(null);
+    if (onOpenEditOrder) {
+      onOpenEditOrder(orderId);
+    } else {
+      showToast('Abrindo pedido no painel...');
+    }
+  };
+
+  const handleQuickMarkPaid = (orderId: string, orderNum: string) => {
+    updateOrderStatus(orderId, 'Pago');
+    showToast(`Pedido ${orderNum} marcado como Pago!`);
+  };
+
+  const getCustomerWhatsappUrl = (order: Order) => {
+    const rawPhone = order.customer?.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phoneWithDdi = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const orderNum = order.orderNumber || `#${order.id.slice(-6).toUpperCase()}`;
+    const message = encodeURIComponent(
+      `Olá ${order.customer?.name || 'Cliente'}, tudo bem? Aqui é da Peptide Imports a respeito do seu pedido ${orderNum}!`
+    );
+    return `https://wa.me/${phoneWithDdi}?text=${message}`;
+  };
+
+  const getOrderStatusBadge = (status: string) => {
+    switch (status) {
+      case 'Pendente':
+        return { bg: 'bg-amber-500/15 text-amber-300 border-amber-500/30', label: 'Pendente', icon: Clock };
+      case 'Pago':
+        return { bg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', label: 'Pago', icon: CheckCircle };
+      case 'Pago Parcial':
+        return { bg: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30', label: 'Pago Parcial', icon: DollarSign };
+      case 'Em Separação':
+        return { bg: 'bg-blue-500/15 text-blue-300 border-blue-500/30', label: 'Em Separação', icon: Package };
+      case 'Enviado':
+        return { bg: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30', label: 'Enviado', icon: Truck };
+      case 'Entregue':
+        return { bg: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40', label: 'Entregue', icon: CheckCircle2 };
+      default:
+        return { bg: 'bg-slate-800 text-slate-300 border-slate-700', label: status, icon: Clock };
+    }
+  };
+
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full overflow-hidden">
       
@@ -922,6 +1075,32 @@ export const SalesReportsTab: React.FC = () => {
                       Média: R$ {prod.unitPriceAverage.toFixed(2).replace('.', ',')}/un
                     </span>
                   </div>
+
+                  {/* Button to view orders containing this product and edit them */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedProductForOrders({
+                        id: prod.id,
+                        name: prod.name,
+                        dosage: prod.dosage,
+                        category: prod.category,
+                        qtySold: prod.qtySold,
+                        qtyConfirmed: prod.qtyConfirmed,
+                        qtyPending: prod.qtyPending,
+                        totalRevenue: prod.totalRevenue,
+                        currentStock: prod.currentStock,
+                        ordersCount: prod.ordersCount,
+                      });
+                      setProductOrdersStatusFilter('all');
+                      setProductOrdersSearch('');
+                    }}
+                    className="w-full mt-2 py-1.5 px-3 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 border border-cyan-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                  >
+                    <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Ver Pedidos ({prod.ordersCount}) & Editar</span>
+                    <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
+                  </button>
                 </div>
               );
             })}
@@ -948,7 +1127,23 @@ export const SalesReportsTab: React.FC = () => {
                 return (
                   <div
                     key={idx}
-                    className="bg-slate-950 border border-slate-800/80 hover:border-slate-700 rounded-2xl p-3.5 sm:p-4 transition-all space-y-2.5 shadow-sm"
+                    onClick={() => {
+                      setSelectedProductForOrders({
+                        id: prod.id,
+                        name: prod.name,
+                        dosage: prod.dosage,
+                        category: prod.category,
+                        qtySold: prod.qtySold,
+                        qtyConfirmed: prod.qtyConfirmed,
+                        qtyPending: prod.qtyPending,
+                        totalRevenue: prod.totalRevenue,
+                        currentStock: prod.currentStock,
+                        ordersCount: prod.ordersCount,
+                      });
+                      setProductOrdersStatusFilter('all');
+                      setProductOrdersSearch('');
+                    }}
+                    className="bg-slate-950 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-900/40 rounded-2xl p-3.5 sm:p-4 transition-all space-y-2.5 shadow-sm cursor-pointer group"
                   >
                     <div className="flex items-start justify-between gap-3">
                       
@@ -957,7 +1152,7 @@ export const SalesReportsTab: React.FC = () => {
                         {getRankBadge(idx)}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <h5 className="font-extrabold text-white text-xs sm:text-sm tracking-tight break-words">
+                            <h5 className="font-extrabold text-white text-xs sm:text-sm tracking-tight break-words group-hover:text-cyan-300 transition-colors">
                               {prod.name}
                             </h5>
                             {prod.dosage && (
@@ -970,13 +1165,38 @@ export const SalesReportsTab: React.FC = () => {
                           <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-1">
                             <span className="text-slate-500">{prod.category}</span>
                             <span>•</span>
-                            <span>Presente em <strong className="text-slate-200">{prod.ordersCount}</strong> pedido(s)</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProductForOrders({
+                                  id: prod.id,
+                                  name: prod.name,
+                                  dosage: prod.dosage,
+                                  category: prod.category,
+                                  qtySold: prod.qtySold,
+                                  qtyConfirmed: prod.qtyConfirmed,
+                                  qtyPending: prod.qtyPending,
+                                  totalRevenue: prod.totalRevenue,
+                                  currentStock: prod.currentStock,
+                                  ordersCount: prod.ordersCount,
+                                });
+                                setProductOrdersStatusFilter('all');
+                                setProductOrdersSearch('');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-bold text-[11px] transition-colors cursor-pointer"
+                              title="Ver os pedidos que contêm este produto"
+                            >
+                              <Eye className="w-3 h-3 text-cyan-400" />
+                              <span>Presente em <strong className="text-white">{prod.ordersCount}</strong> pedido(s)</span>
+                              <span className="text-cyan-400 ml-0.5 font-bold">→ Ver & Editar</span>
+                            </button>
                           </div>
                         </div>
                       </div>
 
-                      {/* Sold quantity & Revenue */}
-                      <div className="text-right shrink-0">
+                      {/* Sold quantity & Revenue + Action Button */}
+                      <div className="text-right shrink-0 flex flex-col items-end">
                         <div className="flex items-baseline justify-end gap-1">
                           <span className="text-base sm:text-lg font-black text-cyan-300 font-mono">
                             {prod.qtySold}
@@ -1002,6 +1222,32 @@ export const SalesReportsTab: React.FC = () => {
                             Aguardando baixa
                           </span>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedProductForOrders({
+                              id: prod.id,
+                              name: prod.name,
+                              dosage: prod.dosage,
+                              category: prod.category,
+                              qtySold: prod.qtySold,
+                              qtyConfirmed: prod.qtyConfirmed,
+                              qtyPending: prod.qtyPending,
+                              totalRevenue: prod.totalRevenue,
+                              currentStock: prod.currentStock,
+                              ordersCount: prod.ordersCount,
+                            });
+                            setProductOrdersStatusFilter('all');
+                            setProductOrdersSearch('');
+                          }}
+                          className="mt-2 inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-cyan-950/60 border border-slate-800 hover:border-cyan-500/40 text-slate-300 group-hover:text-cyan-300 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        >
+                          <Edit3 className="w-3 h-3 text-cyan-400" />
+                          <span>Ver Pedidos</span>
+                          <ChevronRight className="w-3 h-3 text-slate-500 group-hover:text-cyan-300" />
+                        </button>
                       </div>
                     </div>
 
@@ -1160,6 +1406,339 @@ export const SalesReportsTab: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* =========================================================================
+          MODAL: PEDIDOS QUE CONTÊM O PRODUTO SELECIONADO (DRILL-DOWN & EDIÇÃO)
+         ========================================================================= */}
+      {selectedProductForOrders && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div
+            className="relative w-full max-w-3xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white shadow-2xl my-6 flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3.5 border-b border-slate-800 shrink-0 gap-3">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div className="p-2.5 bg-cyan-500/20 text-cyan-400 rounded-2xl border border-cyan-500/30 shrink-0 mt-0.5">
+                  <Package className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base sm:text-lg font-black text-white tracking-tight truncate">
+                      {selectedProductForOrders.name}
+                    </h3>
+                    {selectedProductForOrders.dosage && (
+                      <span className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 font-mono font-bold text-xs rounded-md border border-cyan-500/30">
+                        {selectedProductForOrders.dosage}
+                      </span>
+                    )}
+                    {selectedProductForOrders.category && (
+                      <span className="px-2 py-0.5 bg-slate-800 text-slate-400 text-[11px] rounded-md border border-slate-700">
+                        {selectedProductForOrders.category}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
+                    Listando todos os pedidos do período que contêm este produto. Clique em qualquer pedido para editar diretamente.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedProductForOrders(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-full min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Product Performance Summary Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 py-3 border-b border-slate-800 shrink-0">
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total no Período</span>
+                <span className="text-base sm:text-lg font-black font-mono text-cyan-300">
+                  {productOrdersDetails.totalUnits} un.
+                </span>
+                <span className="text-[10px] text-slate-500 block">frascos vendidos</span>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Faturamento Item</span>
+                <span className="text-base sm:text-lg font-black font-mono text-emerald-400">
+                  R$ {productOrdersDetails.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-slate-500 block">receita gerada</span>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total de Pedidos</span>
+                <span className="text-base sm:text-lg font-black font-mono text-white">
+                  {productOrdersDetails.allOrders.length}
+                </span>
+                <span className="text-[10px] text-slate-400 block">
+                  <span className="text-emerald-400 font-bold">{productOrdersDetails.confirmedCount} conf.</span>
+                  {' • '}
+                  <span className="text-amber-400 font-bold">{productOrdersDetails.pendingCount} pend.</span>
+                </span>
+              </div>
+
+              <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Estoque em Tempo Real</span>
+                <span
+                  className={`text-base sm:text-lg font-black font-mono ${
+                    typeof selectedProductForOrders.currentStock === 'number' && selectedProductForOrders.currentStock <= 5
+                      ? 'text-amber-400'
+                      : 'text-slate-200'
+                  }`}
+                >
+                  {typeof selectedProductForOrders.currentStock === 'number'
+                    ? `${selectedProductForOrders.currentStock} un.`
+                    : '—'}
+                </span>
+                <span className="text-[10px] text-slate-500 block">no estoque da loja</span>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar inside Modal */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 py-3 border-b border-slate-800 shrink-0">
+              {/* Status Tabs */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setProductOrdersStatusFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap cursor-pointer ${
+                    productOrdersStatusFilter === 'all'
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Todos ({productOrdersDetails.allOrders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductOrdersStatusFilter('pending')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
+                    productOrdersStatusFilter === 'pending'
+                      ? 'bg-amber-500 text-slate-950 shadow-sm'
+                      : 'text-amber-400/90 hover:text-amber-300'
+                  }`}
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>Pendentes ({productOrdersDetails.pendingCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProductOrdersStatusFilter('confirmed')}
+                  className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap flex items-center gap-1 cursor-pointer ${
+                    productOrdersStatusFilter === 'confirmed'
+                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                      : 'text-emerald-400/90 hover:text-emerald-300'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Confirmados ({productOrdersDetails.confirmedCount})</span>
+                </button>
+              </div>
+
+              {/* Search input */}
+              <div className="relative flex-1 sm:max-w-xs">
+                <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={productOrdersSearch}
+                  onChange={(e) => setProductOrdersSearch(e.target.value)}
+                  placeholder="Buscar cliente, nº ou tel..."
+                  className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[38px]"
+                />
+                {productOrdersSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setProductOrdersSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Scrollable Orders List */}
+            <div className="flex-1 overflow-y-auto py-3 space-y-3 pr-1 min-h-[220px]">
+              {filteredProductOrders.length === 0 ? (
+                <div className="text-center py-12 bg-slate-950/60 rounded-2xl border border-slate-800/80 text-slate-400 space-y-2">
+                  <Package className="w-8 h-8 text-slate-600 mx-auto" />
+                  <p className="text-xs font-semibold">Nenhum pedido encontrado para os filtros selecionados.</p>
+                  {(productOrdersStatusFilter !== 'all' || productOrdersSearch) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProductOrdersStatusFilter('all');
+                        setProductOrdersSearch('');
+                      }}
+                      className="text-xs text-cyan-400 hover:underline font-bold"
+                    >
+                      Limpar filtros de busca
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredProductOrders.map(({ order, itemQty, itemPrice, itemSubtotal, otherItemsCount }) => {
+                  const badge = getOrderStatusBadge(order.status);
+                  const BadgeIcon = badge.icon;
+                  const orderDateStr = order.createdAt ? new Date(order.createdAt).toLocaleString('pt-BR') : 'Data não informada';
+
+                  return (
+                    <div
+                      key={order.id}
+                      className="bg-slate-950 border border-slate-800 hover:border-cyan-500/50 rounded-2xl p-3.5 sm:p-4 transition-all space-y-3 shadow-md group"
+                    >
+                      {/* Top Header of Order Card */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-900 pb-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono font-extrabold text-white text-xs sm:text-sm">
+                            #{order.orderNumber || order.id.slice(-6).toUpperCase()}
+                          </span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border flex items-center gap-1 ${badge.bg}`}>
+                            <BadgeIcon className="w-3 h-3" />
+                            <span>{badge.label}</span>
+                          </span>
+                          <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-600" />
+                            {orderDateStr}
+                          </span>
+                        </div>
+
+                        {/* Primary Action Button: Open in Edit mode */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenOrderInEdit(order.id)}
+                          className="px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-cyan-500/20 transition-all cursor-pointer"
+                          title="Abrir este pedido diretamente na tela de edição"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                          <span>Editar Pedido</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Main Grid: Customer info + Product highlight */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {/* Customer Info Box */}
+                        <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800/80 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                              <User className="w-3 h-3 text-slate-500" />
+                              Cliente
+                            </span>
+                            {order.customer?.phone && (
+                              <a
+                                href={getCustomerWhatsappUrl(order)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold transition-colors"
+                                title="Conversar no WhatsApp"
+                              >
+                                <MessageSquare className="w-3 h-3" />
+                                <span>WhatsApp</span>
+                              </a>
+                            )}
+                          </div>
+                          <h6 className="font-extrabold text-white text-xs sm:text-sm truncate">
+                            {order.customer?.name || 'Cliente Sem Nome'}
+                          </h6>
+                          <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                            <span>{order.customer?.phone || 'Sem telefone'}</span>
+                            {order.customer?.city && (
+                              <>
+                                <span>•</span>
+                                <span>{order.customer.city}/{order.customer.state || ''}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Product in this order Highlight */}
+                        <div className="p-3 bg-cyan-950/20 rounded-xl border border-cyan-500/30 space-y-1.5">
+                          <span className="text-[10px] uppercase font-bold text-cyan-400 block">
+                            Item neste pedido:
+                          </span>
+                          <div className="flex items-baseline justify-between">
+                            <span className="font-extrabold text-white text-sm">
+                              {itemQty}x {selectedProductForOrders.name} {selectedProductForOrders.dosage || ''}
+                            </span>
+                            <span className="font-mono font-bold text-cyan-300 text-sm">
+                              R$ {itemSubtotal.toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5">
+                            <span>Preço un.: R$ {itemPrice.toFixed(2).replace('.', ',')}</span>
+                            {otherItemsCount > 0 && (
+                              <span className="text-slate-400 font-medium">
+                                + {otherItemsCount} outro{otherItemsCount > 1 ? 's' : ''} produto{otherItemsCount > 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Order Footer summary & secondary actions */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-900 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">Total do Pedido:</span>
+                          <span className="font-mono font-black text-emerald-400 text-sm">
+                            R$ {Number(order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                          <span className="text-slate-500 text-[11px]">
+                            ({order.paymentMethod || 'PIX'})
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {order.status === 'Pendente' && (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickMarkPaid(order.id, order.orderNumber || order.id)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Marcar como Pago sem precisar abrir o editor"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                              <span>Marcar como Pago</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOrderInEdit(order.id)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3 h-3 text-cyan-400" />
+                            <span>Abrir e Editar</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800 shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Mostrando {filteredProductOrders.length} de {productOrdersDetails.allOrders.length} pedidos
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedProductForOrders(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           MODAL: ENVIAR RESUMO DE VENDAS PARA O WHATSAPP (RANKING CLIENTES OPCIONAL)

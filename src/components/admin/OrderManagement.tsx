@@ -36,12 +36,23 @@ import {
   Send,
   Share2,
   Check,
+  ArrowLeft,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 
-export const OrderManagement: React.FC = () => {
+export interface OrderManagementProps {
+  initialEditingOrderId?: string | null;
+  onClearInitialEditingOrder?: () => void;
+  onReturnToReports?: () => void;
+}
+
+export const OrderManagement: React.FC<OrderManagementProps> = ({
+  initialEditingOrderId,
+  onClearInitialEditingOrder,
+  onReturnToReports,
+}) => {
   const {
     orders,
     products,
@@ -409,6 +420,19 @@ export const OrderManagement: React.FC = () => {
     setEditNotes(order.notes || '');
     setEditFormError(null);
   };
+
+  // Automatically open order in edit mode when redirected from Sales Reports or external tab
+  React.useEffect(() => {
+    if (initialEditingOrderId && orders.length > 0) {
+      const orderToEdit = orders.find((o) => o.id === initialEditingOrderId);
+      if (orderToEdit) {
+        handleOpenEditModal(orderToEdit);
+        if (onClearInitialEditingOrder) {
+          onClearInitialEditingOrder();
+        }
+      }
+    }
+  }, [initialEditingOrderId, orders]);
 
   const handleAddProductToEditOrder = async () => {
     const targetProd = currentEditSelectedProduct;
@@ -2747,16 +2771,33 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   </p>
                 </div>
               </div>
-              <button
-                onClick={() => {
-                  if (!isSubmittingEditOrder) {
-                    setEditingOrder(null);
-                  }
-                }}
-                className="p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2">
+                {onReturnToReports && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingOrder(null);
+                      onReturnToReports();
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Retornar ao Relatório de Vendas"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Voltar ao Relatório</span>
+                    <span className="sm:hidden">Relatório</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (!isSubmittingEditOrder) {
+                      setEditingOrder(null);
+                    }
+                  }}
+                  className="p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             {/* Scrollable Form Body */}

@@ -113,6 +113,12 @@ export const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'finances' | 'products' | 'orders' | 'employees' | 'settings' | 'coupons' | 'reports'>(() => {
     return (visibleTabs[0]?.id as any) || 'orders';
   });
+  const [targetEditingOrderId, setTargetEditingOrderId] = useState<string | null>(null);
+
+  const handleOpenEditOrder = (orderId: string) => {
+    setTargetEditingOrderId(orderId);
+    setActiveTab('orders');
+  };
 
   // Ensure activeTab is always one of the permitted ones
   React.useEffect(() => {
@@ -282,9 +288,17 @@ export const AdminDashboard: React.FC = () => {
           </div>
         ) : (
           <>
-            {activeTab === 'orders' && permissions.canManageOrders && <OrderManagement />}
+            {activeTab === 'orders' && permissions.canManageOrders && (
+              <OrderManagement
+                initialEditingOrderId={targetEditingOrderId}
+                onClearInitialEditingOrder={() => setTargetEditingOrderId(null)}
+                onReturnToReports={() => setActiveTab('reports')}
+              />
+            )}
             {activeTab === 'products' && permissions.canManageProducts && <ProductManagement />}
-            {activeTab === 'reports' && permissions.canManageReports && <SalesReportsTab />}
+            {activeTab === 'reports' && permissions.canManageReports && (
+              <SalesReportsTab onOpenEditOrder={handleOpenEditOrder} />
+            )}
             {activeTab === 'coupons' && permissions.canManageProducts && <CouponManagement />}
             {activeTab === 'employees' && permissions.canManageStaff && <EmployeeManagement />}
             {activeTab === 'settings' && permissions.canManageSettings && <StoreSettingsTab />}
