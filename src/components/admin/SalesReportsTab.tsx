@@ -20,6 +20,8 @@ import {
   Layers,
   AlertTriangle,
   CheckCircle2,
+  CheckCircle,
+  Clock,
   ChevronDown,
   ChevronUp,
   SlidersHorizontal,
@@ -59,45 +61,22 @@ export const SalesReportsTab: React.FC = () => {
   const [whatsAppTopProductsLimit, setWhatsAppTopProductsLimit] = useState<number>(5);
   const [copiedSummary, setCopiedSummary] = useState(false);
 
-  // Real-time filtering of orders
-  const filteredOrders = useMemo(() => {
+  // Period statistics before status filter (to display exact counts of pending vs confirmed in the time window)
+  const periodOrdersStats = useMemo(() => {
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
-
     const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0, 0);
     const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
-
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-    return orders.filter((order) => {
-      // 1. Status Filter
+    const timeMatched = orders.filter((order) => {
       if (order.status === 'Cancelado') return false;
-
-      if (statusFilterMode === 'confirmed_paid') {
-        // Pedidos com pagamento aprovado ou em andamento logístico
-        if (!['Pago', 'Pago Parcial', 'Em Separação', 'Enviado', 'Entregue'].includes(order.status)) {
-          return false;
-        }
-      } else if (statusFilterMode === 'fully_paid') {
-        if (!['Pago', 'Entregue'].includes(order.status)) {
-          return false;
-        }
-      } else if (statusFilterMode === 'pending') {
-        if (order.status !== 'Pendente') {
-          return false;
-        }
-      }
-      // 'all_active' includes all except Cancelado
-
-      // 2. Time Filter
       if (timeFilter !== 'all') {
         const orderTime = new Date(order.createdAt || Date.now()).getTime();
-
         if (timeFilter === 'today') {
           if (orderTime < startOfToday.getTime() || orderTime > endOfToday.getTime()) return false;
         } else if (timeFilter === 'yesterday') {
@@ -110,10 +89,45 @@ export const SalesReportsTab: React.FC = () => {
           if (orderTime < startOfLastMonth.getTime() || orderTime > endOfLastMonth.getTime()) return false;
         }
       }
-
       return true;
     });
-  }, [orders, timeFilter, statusFilterMode]);
+
+    const pendingCount = timeMatched.filter((o) => o.status === 'Pendente').length;
+    const confirmedCount = timeMatched.filter((o) => o.status !== 'Pendente').length;
+    const fullyPaidCount = timeMatched.filter((o) => ['Pago', 'Entregue'].includes(o.status)).length;
+    const totalActiveCount = timeMatched.length;
+
+    return {
+      pendingCount,
+      confirmedCount,
+      fullyPaidCount,
+      totalActiveCount,
+      timeMatched,
+    };
+  }, [orders, timeFilter]);
+
+  // Real-time filtering of orders
+  const filteredOrders = useMemo(() => {
+    return periodOrdersStats.timeMatched.filter((order) => {
+      // 1. Status Filter
+      if (statusFilterMode === 'confirmed_paid') {
+        // Pedidos com pagamento aprovado ou em andamento logístico (Sem Pendentes)
+        if (!['Pago', 'Pago Parcial', 'Em Separação', 'Enviado', 'Entregue'].includes(order.status)) {
+          return false;
+        }
+      } else if (statusFilterMode === 'fully_paid') {
+        if (!['Pago', 'Entregue'].includes(order.status)) {
+          return false;
+        }
+      } else if (statusFilterMode === 'pending') {
+        if (order.status !== 'Pendente') {
+          return false;
+        }
+      }
+      // 'all_active' includes all except Cancelado (Com Pendentes)
+      return true;
+    });
+  }, [periodOrdersStats, statusFilterMode]);
 
   // Overall Financial & Volume metrics in real time
   const metrics = useMemo(() => {
@@ -174,7 +188,11 @@ export const SalesReportsTab: React.FC = () => {
         dosage: string;
         category: string;
         qtySold: number;
+        qtyConfirmed: number;
+        qtyPending: number;
         totalRevenue: number;
+        revenueConfirmed: number;
+        revenuePending: number;
         ordersCount: number;
         currentStock?: number;
         unitPriceAverage: number;
@@ -187,6 +205,7 @@ export const SalesReportsTab: React.FC = () => {
     filteredOrders.forEach((order) => {
       const items = order.items || [];
       const orderProductsInThisOrder = new Set<string>();
+      const isPendingOrder = order.status === 'Pendente';
 
       items.forEach((item) => {
         const prodName = (item.product?.name || (item as any).name || 'Produto').trim();
@@ -206,6 +225,7 @@ export const SalesReportsTab: React.FC = () => {
 
         const itemQty = Math.max(1, Number(item.quantity) || 1);
         const itemPrice = Number(item.product?.price) || Number((item as any).price) || (itemQty > 0 ? (order.subtotal || order.total) / (items.length || 1) : 0);
+        const itemLineTotal = itemPrice * itemQty;
 
         const existing = productMap.get(key) || {
           id: item.product?.id || matchedProduct?.id,
@@ -213,7 +233,11 @@ export const SalesReportsTab: React.FC = () => {
           dosage: dosage || (matchedProduct?.dosage ?? ''),
           category: matchedProduct?.category || category,
           qtySold: 0,
+          qtyConfirmed: 0,
+          qtyPending: 0,
           totalRevenue: 0,
+          revenueConfirmed: 0,
+          revenuePending: 0,
           ordersCount: 0,
           currentStock: matchedProduct?.stock,
           unitPriceAverage: itemPrice,
@@ -221,7 +245,15 @@ export const SalesReportsTab: React.FC = () => {
         };
 
         existing.qtySold += itemQty;
-        existing.totalRevenue += itemPrice * itemQty;
+        existing.totalRevenue += itemLineTotal;
+
+        if (isPendingOrder) {
+          existing.qtyPending += itemQty;
+          existing.revenuePending += itemLineTotal;
+        } else {
+          existing.qtyConfirmed += itemQty;
+          existing.revenueConfirmed += itemLineTotal;
+        }
 
         if (!orderProductsInThisOrder.has(key)) {
           existing.ordersCount += 1;
@@ -491,7 +523,7 @@ export const SalesReportsTab: React.FC = () => {
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full overflow-hidden">
       
       {/* Top Filter Bar & Real-Time Sync */}
-      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl">
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           
           {/* Header Title */}
@@ -541,46 +573,103 @@ export const SalesReportsTab: React.FC = () => {
               ))}
             </div>
 
-            {/* Status Filter Dropdown */}
-            <div className="flex items-center gap-2">
-              <select
-                value={statusFilterMode}
-                onChange={(e) => setStatusFilterMode(e.target.value as any)}
-                className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer"
-                title="Filtrar status dos pedidos computados no relatório"
-              >
-                <option value="confirmed_paid">✓ Pagos & Em Separação / Envio</option>
-                <option value="fully_paid">✓ Apenas 100% Quitados</option>
-                <option value="all_active">Todos os Pedidos Ativos</option>
-                <option value="pending">Apenas Pendentes (Aguardando)</option>
-              </select>
+            {/* WhatsApp Report Button */}
+            <button
+              onClick={() => setIsWhatsAppModalOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[38px] shrink-0"
+              title="Gerar relatório formatado e enviar para o WhatsApp"
+            >
+              <MessageSquare className="w-3.5 h-3.5 fill-current shrink-0" />
+              <span className="hidden sm:inline">Relatório WhatsApp</span>
+              <span className="sm:hidden">WhatsApp</span>
+            </button>
 
-              {/* WhatsApp Report Button */}
-              <button
-                onClick={() => setIsWhatsAppModalOpen(true)}
-                className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[38px] shrink-0"
-                title="Gerar relatório formatado e enviar para o WhatsApp"
-              >
-                <MessageSquare className="w-3.5 h-3.5 fill-current shrink-0" />
-                <span className="hidden sm:inline">Relatório WhatsApp</span>
-                <span className="sm:hidden">WhatsApp</span>
-              </button>
+            {/* Sync Button */}
+            <button
+              onClick={handleSync}
+              disabled={isSyncing}
+              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center shrink-0 self-center sm:self-auto"
+              title="Atualizar dados em tempo real"
+            >
+              <RefreshCw className={`w-4 h-4 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
 
-              {/* Sync Button */}
-              <button
-                onClick={handleSync}
-                disabled={isSyncing}
-                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center shrink-0"
-                title="Atualizar dados em tempo real"
-              >
-                <RefreshCw className={`w-4 h-4 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
-              </button>
-            </div>
+        {/* ------------------------------------------------------------------- */}
+        {/* BOTÕES DE CONTROLE: COM PEDIDOS PENDENTES VS SEM PEDIDOS PENDENTES */}
+        {/* ------------------------------------------------------------------- */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80">
+          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold">
+            <Filter className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Filtro de Pedidos no Relatório:</span>
+          </div>
+
+          {/* Segmented Button Bar for Pending vs Confirmed */}
+          <div className="grid grid-cols-3 sm:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+            
+            {/* 1. SEM PEDIDOS PENDENTES (APENAS CONFIRMADOS) */}
+            <button
+              onClick={() => setStatusFilterMode('confirmed_paid')}
+              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                statusFilterMode === 'confirmed_paid'
+                  ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+              title="Mostrar apenas pedidos confirmados e pagos (exclui pedidos pendentes)"
+            >
+              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Sem Pendentes</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                statusFilterMode === 'confirmed_paid' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'
+              }`}>
+                {periodOrdersStats.confirmedCount}
+              </span>
+            </button>
+
+            {/* 2. COM PEDIDOS PENDENTES (TOTAL DE DEMANDA) */}
+            <button
+              onClick={() => setStatusFilterMode('all_active')}
+              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                statusFilterMode === 'all_active'
+                  ? 'bg-purple-500 text-white shadow-md font-black'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+              title="Mostrar todos os produtos incluindo os que estão em pedidos pendentes"
+            >
+              <Layers className="w-3.5 h-3.5 shrink-0" />
+              <span>Com Pendentes</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                statusFilterMode === 'all_active' ? 'bg-white/20 text-white font-bold' : 'bg-slate-900 text-slate-400'
+              }`}>
+                {periodOrdersStats.totalActiveCount}
+              </span>
+            </button>
+
+            {/* 3. APENAS PEDIDOS PENDENTES */}
+            <button
+              onClick={() => setStatusFilterMode('pending')}
+              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                statusFilterMode === 'pending'
+                  ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+              }`}
+              title="Mostrar exclusivamente a demanda de produtos em pedidos pendentes aguardando baixa"
+            >
+              <Clock className="w-3.5 h-3.5 shrink-0" />
+              <span>Apenas Pendentes</span>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+                statusFilterMode === 'pending' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-900 text-amber-400/80'
+              }`}>
+                {periodOrdersStats.pendingCount}
+              </span>
+            </button>
+
           </div>
         </div>
 
         {/* Real-Time KPI Cards Banner */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mt-4 pt-3.5 border-t border-slate-800">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-2">
           
           <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80">
             <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
@@ -638,8 +727,8 @@ export const SalesReportsTab: React.FC = () => {
          ========================================================================= */}
       <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
         
-        {/* Section Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 pb-4 border-b border-slate-800">
+        {/* Section Header & Quick Switch Button */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-4 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
               <span className="p-2 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl">
@@ -649,16 +738,57 @@ export const SalesReportsTab: React.FC = () => {
                 Produtos Mais Vendidos (Saída de Estoque)
               </h4>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Análise detalhada de volume de saída, faturamento por frasco e share de vendas.
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              <p className="text-xs text-slate-400">
+                Análise detalhada de volume de saída, faturamento por frasco e share de vendas.
+              </p>
+              
+              {/* Active Mode Tag */}
+              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
+                statusFilterMode === 'confirmed_paid'
+                  ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30'
+                  : statusFilterMode === 'all_active'
+                  ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                  : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+              }`}>
+                {statusFilterMode === 'confirmed_paid' && <CheckCircle className="w-3 h-3 text-cyan-400" />}
+                {statusFilterMode === 'all_active' && <Layers className="w-3 h-3 text-purple-400" />}
+                {statusFilterMode === 'pending' && <Clock className="w-3 h-3 text-amber-400" />}
+                {statusFilterMode === 'confirmed_paid'
+                  ? 'Modo: Sem Pendentes (Apenas Confirmados)'
+                  : statusFilterMode === 'all_active'
+                  ? 'Modo: Com Pedidos Pendentes Incluídos'
+                  : 'Modo: Apenas Pedidos Pendentes'}
+              </span>
+            </div>
           </div>
 
-          {/* Search, Category Filter & Sorting */}
+          {/* Quick Action Toggle Button & Search / Filters */}
           <div className="flex flex-wrap items-center gap-2">
             
+            {/* Quick Toggle Button between With Pending and Without Pending */}
+            {statusFilterMode === 'confirmed_paid' ? (
+              <button
+                onClick={() => setStatusFilterMode('all_active')}
+                className="px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-200 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                title="Alternar para ver com os produtos em pedidos pendentes incluídos"
+              >
+                <Layers className="w-3.5 h-3.5 text-purple-400" />
+                <span>+ Ver COM Pendentes ({periodOrdersStats.pendingCount})</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setStatusFilterMode('confirmed_paid')}
+                className="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                title="Alternar para ver sem os produtos em pedidos pendentes"
+              >
+                <CheckCircle className="w-3.5 h-3.5 text-cyan-400" />
+                <span>✓ Ver SEM Pendentes (Confirmados)</span>
+              </button>
+            )}
+
             {/* Search Input */}
-            <div className="relative w-full sm:w-48">
+            <div className="relative w-full sm:w-44">
               <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -747,9 +877,20 @@ export const SalesReportsTab: React.FC = () => {
                       <span className="text-base sm:text-lg font-black text-cyan-300 font-mono">
                         {prod.qtySold} un.
                       </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        {shareOfVolume}% do total
-                      </span>
+                      {statusFilterMode === 'all_active' && prod.qtyPending > 0 ? (
+                        <div className="text-[10px] text-slate-400 mt-0.5 space-y-0.5">
+                          <span className="text-emerald-400 font-bold block">{prod.qtyConfirmed} conf.</span>
+                          <span className="text-purple-300 font-bold block">+{prod.qtyPending} pend.</span>
+                        </div>
+                      ) : statusFilterMode === 'pending' ? (
+                        <span className="text-[10px] text-amber-400 font-bold block mt-0.5">
+                          100% pendente
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {shareOfVolume}% do total
+                        </span>
+                      )}
                     </div>
 
                     <div className="p-2 bg-slate-900/80 rounded-xl text-right">
@@ -757,9 +898,15 @@ export const SalesReportsTab: React.FC = () => {
                       <span className="text-base sm:text-lg font-black text-emerald-400 font-mono">
                         R$ {prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
-                      <span className="text-[10px] text-slate-400 block mt-0.5">
-                        {shareOfRevenue}% da receita
-                      </span>
+                      {statusFilterMode === 'all_active' && prod.revenuePending > 0 ? (
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          R$ {prod.revenueConfirmed.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} conf.
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 block mt-0.5">
+                          {shareOfRevenue}% da receita
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -841,6 +988,20 @@ export const SalesReportsTab: React.FC = () => {
                         <span className="text-xs font-mono font-bold text-emerald-400 block">
                           R$ {prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </span>
+                        
+                        {/* Pending vs Confirmed Details */}
+                        {statusFilterMode === 'all_active' && prod.qtyPending > 0 && (
+                          <div className="flex items-center gap-1.5 justify-end text-[10px] mt-0.5 font-mono">
+                            <span className="text-emerald-400 font-semibold">{prod.qtyConfirmed} conf.</span>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-purple-300 font-semibold">+{prod.qtyPending} pend.</span>
+                          </div>
+                        )}
+                        {statusFilterMode === 'pending' && (
+                          <span className="text-[10px] text-amber-400 font-mono font-semibold block mt-0.5">
+                            Aguardando baixa
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1069,6 +1230,39 @@ export const SalesReportsTab: React.FC = () => {
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   Opções de Formatação do Relatório:
                 </span>
+
+                {/* Pending vs Confirmed in WhatsApp Report */}
+                <div className="space-y-1.5 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <span className="font-bold text-slate-200 text-xs block">
+                    Tipo de Pedidos Computados:
+                  </span>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilterMode('confirmed_paid')}
+                      className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        statusFilterMode === 'confirmed_paid'
+                          ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>Sem Pendentes ({periodOrdersStats.confirmedCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilterMode('all_active')}
+                      className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        statusFilterMode === 'all_active'
+                          ? 'bg-purple-500 text-white shadow-md font-black'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <Layers className="w-3.5 h-3.5" />
+                      <span>Com Pendentes ({periodOrdersStats.totalActiveCount})</span>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Optional Customer Ranking Checkbox */}
                 <label className="flex items-center gap-2.5 cursor-pointer select-none p-2 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-colors">
