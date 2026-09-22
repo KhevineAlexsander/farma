@@ -36,7 +36,7 @@ export interface Address {
   zipCode: string;
 }
 
-export type OrderStatus = 'Pendente' | 'Pago' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
+export type OrderStatus = 'Pendente' | 'Pago' | 'Pago Parcial' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
 
 export interface Order {
   id: string;
@@ -54,6 +54,8 @@ export interface Order {
   shipping: number;
   discount: number;
   total: number;
+  paidAmount?: number; // Valor pago (entrada ou baixa parcial)
+  remainingAmount?: number; // Saldo devedor pendente
   status: OrderStatus;
   paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
   trackingCode?: string;

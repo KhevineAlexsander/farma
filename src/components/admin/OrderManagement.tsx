@@ -32,6 +32,10 @@ import {
   Edit3,
   Tag,
   DollarSign,
+  Copy,
+  Send,
+  Share2,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
@@ -333,6 +337,7 @@ export const OrderManagement: React.FC = () => {
   const [isEditProdSearchOpen, setIsEditProdSearchOpen] = useState<boolean>(false);
   const [editShipping, setEditShipping] = useState<number>(0);
   const [editDiscount, setEditDiscount] = useState<number>(0);
+  const [editPaidAmount, setEditPaidAmount] = useState<string | number>('');
   const [editPaymentMethod, setEditPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
   const [editStatus, setEditStatus] = useState<OrderStatus>('Pago');
   const [editOperator, setEditOperator] = useState('');
@@ -391,6 +396,12 @@ export const OrderManagement: React.FC = () => {
 
     setEditShipping(order.shipping || 0);
     setEditDiscount(order.discount || 0);
+
+    const initialPaid = order.paidAmount !== undefined 
+      ? order.paidAmount 
+      : (order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Em Separação' || order.status === 'Enviado' ? (order.total || 0) : 0);
+    setEditPaidAmount(initialPaid);
+
     setEditPaymentMethod(order.paymentMethod || 'PIX');
     setEditStatus(order.status || 'Pendente');
     setEditOperator(order.clearedBy || currentUser?.name || 'Administrador');
@@ -518,6 +529,8 @@ export const OrderManagement: React.FC = () => {
           };
 
       const isNowPaid = editStatus === 'Pago' || editStatus === 'Entregue' || editStatus === 'Em Separação' || editStatus === 'Enviado';
+      const parsedPaidAmount = editPaidAmount !== '' && !isNaN(Number(editPaidAmount)) ? Math.max(0, Number(editPaidAmount)) : (isNowPaid ? editTotal : 0);
+      const computedRemaining = Math.max(0, Number((editTotal - parsedPaidAmount).toFixed(2)));
 
       const updatedPayload: Partial<Order> = {
         customer: {
@@ -533,11 +546,13 @@ export const OrderManagement: React.FC = () => {
         shipping: Number(editShipping) || 0,
         discount: Number(editDiscount) || 0,
         total: editTotal,
+        paidAmount: parsedPaidAmount,
+        remainingAmount: computedRemaining,
         paymentMethod: editPaymentMethod,
         status: editStatus,
         notes: editNotes.trim() || undefined,
-        clearedBy: isNowPaid ? (editOperator.trim() || currentUser?.name || 'Administrador') : undefined,
-        clearedManuallyAt: isNowPaid ? (editingOrder.clearedManuallyAt || new Date().toLocaleString('pt-BR')) : undefined,
+        clearedBy: (isNowPaid || editStatus === 'Pago Parcial') ? (editOperator.trim() || currentUser?.name || 'Administrador') : undefined,
+        clearedManuallyAt: (isNowPaid || editStatus === 'Pago Parcial') ? (editingOrder.clearedManuallyAt || new Date().toLocaleString('pt-BR')) : undefined,
       };
 
       await updateOrder(editingOrder.id, updatedPayload);
@@ -566,11 +581,17 @@ export const OrderManagement: React.FC = () => {
     }
   };
 
-  // Manual clearance modal state
+  // Manual clearance modal state (supports full or partial clearance)
   const [clearingOrder, setClearingOrder] = useState<Order | null>(null);
   const [clearStatus, setClearStatus] = useState<OrderStatus>('Pago');
+  const [clearPaidAmount, setClearPaidAmount] = useState<string | number>('');
   const [clearNotes, setClearNotes] = useState('');
   const [operatorName, setOperatorName] = useState(currentUser?.name || 'Administrador');
+
+  // WhatsApp Order Summary / Relatório Modal State
+  const [summaryOrder, setSummaryOrder] = useState<Order | null>(null);
+  const [summaryWhatsAppPhone, setSummaryWhatsAppPhone] = useState('');
+  const [summaryCopied, setSummaryCopied] = useState(false);
 
   // Delete Order with Password 8817 state
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
@@ -580,6 +601,7 @@ export const OrderManagement: React.FC = () => {
 
   const statuses: OrderStatus[] = [
     'Pendente',
+    'Pago Parcial',
     'Pago',
     'Em Separação',
     'Enviado',
@@ -589,6 +611,7 @@ export const OrderManagement: React.FC = () => {
 
   const statusOptions: { status: OrderStatus; label: string; icon: any; color: string; desc: string }[] = [
     { status: 'Pendente', label: 'Pendente', icon: Clock, color: 'border-amber-500/50 bg-amber-500/10 text-amber-400', desc: 'Aguardando baixa' },
+    { status: 'Pago Parcial', label: 'Pago Parcial', icon: DollarSign, color: 'border-orange-500/50 bg-orange-500/10 text-orange-400', desc: 'Baixa parcial (resta saldo)' },
     { status: 'Pago', label: 'Pago', icon: CheckCircle, color: 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400', desc: 'Comprovante conferido' },
     { status: 'Em Separação', label: 'Em Separação', icon: Package, color: 'border-purple-500/50 bg-purple-500/10 text-purple-400', desc: 'Embalagem térmica' },
     { status: 'Enviado', label: 'Enviado', icon: Truck, color: 'border-blue-500/50 bg-blue-500/10 text-blue-400', desc: 'Despachado' },
@@ -599,7 +622,7 @@ export const OrderManagement: React.FC = () => {
   const filteredOrders = orders.filter((order) => {
     let matchesStatus = true;
     if (statusFilter === 'Aguardando Baixa') {
-      matchesStatus = order.status === 'Pendente' || !order.clearedManuallyAt;
+      matchesStatus = order.status === 'Pendente' || order.status === 'Pago Parcial' || !order.clearedManuallyAt;
     } else if (statusFilter !== 'Todos') {
       matchesStatus = order.status === statusFilter;
     }
@@ -624,6 +647,8 @@ export const OrderManagement: React.FC = () => {
         return { bg: 'bg-purple-500/15 text-purple-300 border-purple-500/40', text: 'Em Separação' };
       case 'Pago':
         return { bg: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40', text: 'Pago' };
+      case 'Pago Parcial':
+        return { bg: 'bg-orange-500/15 text-orange-300 border-orange-500/40', text: 'Pago Parcial' };
       case 'Cancelado':
         return { bg: 'bg-red-500/15 text-red-300 border-red-500/40', text: 'Cancelado' };
       default:
@@ -650,7 +675,8 @@ export const OrderManagement: React.FC = () => {
     if (e) e.stopPropagation();
     setClearingOrder(order);
     setClearStatus('Pago');
-    setClearNotes(order.notes || 'Comprovante conferido e validado via WhatsApp. Pagamento recebido.');
+    setClearPaidAmount(order.paidAmount !== undefined ? order.paidAmount : (order.total || 0));
+    setClearNotes(order.notes || 'Comprovante conferido e validado via WhatsApp.');
     setOperatorName(currentUser?.name || 'Administrador');
   };
 
@@ -658,12 +684,22 @@ export const OrderManagement: React.FC = () => {
     e.preventDefault();
     if (!clearingOrder) return;
 
-    clearOrderManually(clearingOrder.id, clearStatus, operatorName, clearNotes);
+    const parsedPaid = clearPaidAmount !== '' && !isNaN(Number(clearPaidAmount))
+      ? Math.max(0, Number(clearPaidAmount))
+      : (clearStatus === 'Pago' || clearStatus === 'Entregue' ? clearingOrder.total : clearingOrder.paidAmount);
+    
+    const parsedRemaining = parsedPaid !== undefined
+      ? Math.max(0, Number(((clearingOrder.total || 0) - parsedPaid).toFixed(2)))
+      : clearingOrder.remainingAmount;
+
+    clearOrderManually(clearingOrder.id, clearStatus, operatorName, clearNotes, parsedPaid, parsedRemaining);
 
     if (selectedOrder && selectedOrder.id === clearingOrder.id) {
       setSelectedOrder({
         ...selectedOrder,
         status: clearStatus,
+        paidAmount: parsedPaid,
+        remainingAmount: parsedRemaining,
         clearedManuallyAt: new Date().toLocaleString('pt-BR'),
         clearedBy: operatorName,
         notes: clearNotes,
@@ -671,6 +707,89 @@ export const OrderManagement: React.FC = () => {
     }
 
     setClearingOrder(null);
+  };
+
+  // WhatsApp Order Summary Generation & Dispatch
+  const generateOrderSummaryText = (order: Order): string => {
+    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const dateFormatted = new Date(order.createdAt).toLocaleDateString('pt-BR');
+    const timeFormatted = new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    
+    const isPickupAddr = !order.address?.street || order.address?.street.toLowerCase().includes('balcão') || order.address?.street.toLowerCase().includes('retirada');
+    const deliveryType = isPickupAddr ? 'Retirada no Balcão' : 'Envio / Entrega';
+
+    const itemsText = (order.items || [])
+      .map((it, idx) => {
+        const itemTotal = ((it.product?.price || 0) * (it.quantity || 1)).toFixed(2).replace('.', ',');
+        return `${idx + 1}. *${it.quantity}x* ${it.product?.name || 'Produto'} ${it.product?.dosage || ''} - R$ ${itemTotal}`;
+      })
+      .join('\n');
+
+    const subtotalFormatted = (order.subtotal ?? order.total ?? 0).toFixed(2).replace('.', ',');
+    const shippingFormatted = (order.shipping || 0).toFixed(2).replace('.', ',');
+    const discountFormatted = (order.discount || 0) > 0 ? `\n• *Desconto:* -R$ ${(order.discount || 0).toFixed(2).replace('.', ',')}` : '';
+    const totalFormatted = (order.total || 0).toFixed(2).replace('.', ',');
+
+    const paidInfo = order.paidAmount !== undefined
+      ? `\n• *Valor Pago:* R$ ${Number(order.paidAmount).toFixed(2).replace('.', ',')}`
+      : (order.status === 'Pago' || order.status === 'Entregue' ? `\n• *Valor Pago:* R$ ${totalFormatted}` : '');
+
+    const remainingInfo = order.remainingAmount !== undefined && order.remainingAmount > 0
+      ? `\n• *SALDO PENDENTE:* R$ ${Number(order.remainingAmount).toFixed(2).replace('.', ',')}`
+      : (order.status === 'Pago Parcial' && order.paidAmount !== undefined ? `\n• *SALDO PENDENTE:* R$ ${Math.max(0, (order.total || 0) - (order.paidAmount || 0)).toFixed(2).replace('.', ',')}` : '');
+
+    return `*RESUMO DO PEDIDO - ${brand}*
+📋 *Pedido:* ${order.orderNumber}
+📅 *Data:* ${dateFormatted} às ${timeFormatted}
+🏷️ *Status:* ${order.status}
+
+👤 *DADOS DO CLIENTE:*
+• *Nome:* ${order.customer?.name || 'Cliente'}
+• *WhatsApp:* ${order.customer?.phone || '-'}${order.customer?.email ? `\n• *E-mail:* ${order.customer.email}` : ''}${order.customer?.cpf ? `\n• *CPF:* ${order.customer.cpf}` : ''}
+
+📦 *ENTREGA & ENDEREÇO:*
+• *Modalidade:* ${deliveryType}
+• *Endereço:* ${order.address?.street || 'Balcão'}, ${order.address?.number || 'S/N'}${order.address?.complement ? ` (${order.address.complement})` : ''} - ${order.address?.neighborhood || ''}, ${order.address?.city || ''}/${order.address?.state || ''}
+• *CEP:* ${order.address?.zipCode || '-'}${order.trackingCode ? `\n• *Código de Rastreio:* ${order.trackingCode}` : ''}
+
+🛒 *ITENS DO PEDIDO:*
+${itemsText || 'Nenhum item discriminado'}
+
+💰 *VALORES & PAGAMENTO:*
+• *Subtotal:* R$ ${subtotalFormatted}
+• *Frete:* R$ ${shippingFormatted}${discountFormatted}
+• *VALOR TOTAL:* R$ ${totalFormatted}
+• *Forma de Pagamento:* ${order.paymentMethod || 'A Combinar'}${paidInfo}${remainingInfo}${order.notes ? `\n\n📝 *Observações:* ${order.notes}` : ''}
+-------------------------------------------
+_Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
+  };
+
+  const handleOpenOrderSummaryModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSummaryOrder(order);
+    setSummaryWhatsAppPhone(order.customer?.phone || '');
+    setSummaryCopied(false);
+  };
+
+  const handleSendOrderWhatsApp = () => {
+    if (!summaryOrder) return;
+    const cleanPhone = (summaryWhatsAppPhone || summaryOrder.customer?.phone || '').replace(/\D/g, '');
+    if (!cleanPhone) {
+      alert('Por favor, informe um número de WhatsApp válido.');
+      return;
+    }
+    const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
+    const summaryText = generateOrderSummaryText(summaryOrder);
+    const waUrl = `https://wa.me/${finalPhone}?text=${encodeURIComponent(summaryText)}`;
+    window.open(waUrl, '_blank');
+  };
+
+  const handleCopyOrderSummary = () => {
+    if (!summaryOrder) return;
+    const summaryText = generateOrderSummaryText(summaryOrder);
+    navigator.clipboard.writeText(summaryText);
+    setSummaryCopied(true);
+    setTimeout(() => setSummaryCopied(false), 2500);
   };
 
   const handleOpenDeleteModal = (order: Order, e?: React.MouseEvent) => {
@@ -929,10 +1048,10 @@ export const OrderManagement: React.FC = () => {
                 )}
 
                 {/* Mobile Action Buttons */}
-                <div className="grid grid-cols-4 gap-1.5 pt-1">
+                <div className="grid grid-cols-5 gap-1.5 pt-1">
                   <button
                     onClick={(e) => handleOpenClearModal(order, e)}
-                    className="px-2 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[38px]"
+                    className="px-1.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[38px]"
                     title="Dar baixa no pedido"
                   >
                     <CheckCircle className="w-3.5 h-3.5 shrink-0" />
@@ -940,7 +1059,7 @@ export const OrderManagement: React.FC = () => {
                   </button>
                   <button
                     onClick={() => handleOpenDetail(order)}
-                    className="px-2 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[38px] cursor-pointer"
+                    className="px-1.5 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[38px] cursor-pointer"
                     title="Ver detalhes"
                   >
                     <Eye className="w-3.5 h-3.5 shrink-0" />
@@ -948,15 +1067,23 @@ export const OrderManagement: React.FC = () => {
                   </button>
                   <button
                     onClick={(e) => handleOpenEditModal(order, e)}
-                    className="px-2 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/30 cursor-pointer min-h-[38px]"
+                    className="px-1.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/30 cursor-pointer min-h-[38px]"
                     title="Editar informações do pedido"
                   >
                     <Edit3 className="w-3.5 h-3.5 shrink-0" />
                     <span>Editar</span>
                   </button>
                   <button
+                    onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                    className="px-1.5 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-teal-500/30 cursor-pointer min-h-[38px]"
+                    title="Enviar resumo do pedido para o WhatsApp"
+                  >
+                    <Share2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Relatório</span>
+                  </button>
+                  <button
                     onClick={(e) => handleOpenDeleteModal(order, e)}
-                    className="px-2 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[38px]"
+                    className="px-1.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[38px]"
                     title="Excluir pedido"
                   >
                     <Trash2 className="w-3.5 h-3.5 shrink-0" />
@@ -1120,6 +1247,14 @@ export const OrderManagement: React.FC = () => {
                             <span>Editar</span>
                           </button>
                           <button
+                            onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                            className="px-2.5 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-xs font-semibold flex items-center gap-1 transition-all border border-teal-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                            title="Gerar e enviar resumo do pedido para o WhatsApp"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                            <span>Relatório</span>
+                          </button>
+                          <button
                             onClick={(e) => handleOpenDeleteModal(order, e)}
                             className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all border border-red-500/20 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
                             title="Excluir pedido (Requer senha 8817)"
@@ -1176,15 +1311,129 @@ export const OrderManagement: React.FC = () => {
                   <p className="text-slate-400 text-[11px]">{clearingOrder.customer?.phone || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">VALOR TOTAL</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">VALOR TOTAL DO PEDIDO</span>
                   <p className="font-extrabold text-cyan-400 text-xs sm:text-sm mt-0.5 font-tech">
                     R$ {(clearingOrder.total || 0).toFixed(2).replace('.', ',')}
                   </p>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">PAGAMENTO</span>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">FORMA PAGAMENTO</span>
                   <p className="font-bold text-slate-200 text-xs mt-0.5 truncate">{clearingOrder.paymentMethod || 'A Combinar'}</p>
                 </div>
+              </div>
+
+              {/* Baixa Parcial / Valor Pago */}
+              <div className="p-3.5 bg-slate-950/90 rounded-xl sm:rounded-2xl border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-200 font-bold text-xs flex items-center gap-1.5">
+                    <DollarSign className="w-4 h-4 text-emerald-400" />
+                    <span>Valor Pago pelo Cliente (Baixa Total ou Parcial)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    Total: R$ {(clearingOrder.total || 0).toFixed(2).replace('.', ',')}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                  <div className="sm:col-span-6 relative">
+                    <span className="absolute left-3 top-2.5 text-slate-500 font-bold text-xs">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={clearingOrder.total || 999999}
+                      value={clearPaidAmount}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setClearPaidAmount(val);
+                        const numVal = parseFloat(val) || 0;
+                        if (numVal >= (clearingOrder.total || 0)) {
+                          setClearStatus('Pago');
+                        } else if (numVal > 0) {
+                          setClearStatus('Pago Parcial');
+                        } else {
+                          setClearStatus('Pendente');
+                        }
+                      }}
+                      className="w-full px-3 py-2 pl-9 bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-xl text-white font-mono font-bold text-sm focus:outline-none min-h-[40px]"
+                      placeholder="0,00"
+                    />
+                  </div>
+
+                  {/* Preset quick buttons */}
+                  <div className="sm:col-span-6 flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClearPaidAmount(clearingOrder.total || 0);
+                        setClearStatus('Pago');
+                      }}
+                      className="px-2.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                    >
+                      100% (Total)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const half = Number(((clearingOrder.total || 0) / 2).toFixed(2));
+                        setClearPaidAmount(half);
+                        setClearStatus('Pago Parcial');
+                      }}
+                      className="px-2.5 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                    >
+                      50% (Entrada)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setClearPaidAmount(0);
+                        setClearStatus('Pendente');
+                      }}
+                      className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                    >
+                      Zerar (0)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Calculation indicator */}
+                {(() => {
+                  const paid = clearPaidAmount !== '' && !isNaN(Number(clearPaidAmount)) ? Number(clearPaidAmount) : 0;
+                  const total = clearingOrder.total || 0;
+                  const remaining = Math.max(0, Number((total - paid).toFixed(2)));
+                  const isPartial = paid > 0 && paid < total;
+                  const isFullyPaid = paid >= total && total > 0;
+
+                  return (
+                    <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400">Status financeiro:</span>
+                        {isFullyPaid && (
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
+                            ✓ Pagamento 100% Quitado
+                          </span>
+                        )}
+                        {isPartial && (
+                          <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[11px] font-bold">
+                            ⚠️ Baixa Parcial (Resta Saldo)
+                          </span>
+                        )}
+                        {paid === 0 && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold">
+                            Pendente Integral
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="font-mono text-right text-[11px]">
+                        <span className="text-slate-400">Saldo Pendente (A Pagar): </span>
+                        <strong className={remaining > 0 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                          R$ {remaining.toFixed(2).replace('.', ',')}
+                        </strong>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Status Selection Cards */}
@@ -1356,6 +1605,14 @@ export const OrderManagement: React.FC = () => {
                   <span>Editar</span>
                 </button>
                 <button
+                  onClick={() => handleOpenOrderSummaryModal(selectedOrder)}
+                  className="px-3.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
+                  title="Enviar resumo do pedido para o WhatsApp"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Relatório WhatsApp</span>
+                </button>
+                <button
                   onClick={() => handleOpenDeleteModal(selectedOrder)}
                   className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-600 text-red-400 hover:text-white text-xs font-bold flex items-center gap-1 transition-all border border-red-500/30 cursor-pointer"
                   title="Excluir este pedido definitivamente (requer senha 8817)"
@@ -1514,6 +1771,24 @@ export const OrderManagement: React.FC = () => {
                 <span>Total Faturado</span>
                 <span className="text-cyan-400 font-tech">R$ {(selectedOrder.total || 0).toFixed(2).replace('.', ',')}</span>
               </div>
+
+              {/* Partial Payment info if applicable */}
+              {(selectedOrder.paidAmount !== undefined || selectedOrder.remainingAmount !== undefined || selectedOrder.status === 'Pago Parcial') && (
+                <div className="pt-2 border-t border-slate-800/80 space-y-1 bg-slate-900/60 p-2.5 rounded-xl mt-2">
+                  <div className="flex justify-between text-emerald-400 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <CheckCircle className="w-3.5 h-3.5" /> Valor Pago pelo Cliente:
+                    </span>
+                    <span className="font-mono">R$ {(selectedOrder.paidAmount ?? (selectedOrder.status === 'Pago' ? selectedOrder.total : 0) ?? 0).toFixed(2).replace('.', ',')}</span>
+                  </div>
+                  <div className="flex justify-between text-amber-400 font-bold">
+                    <span className="flex items-center gap-1">
+                      <AlertTriangle className="w-3.5 h-3.5" /> Saldo Pendente (A Receber):
+                    </span>
+                    <span className="font-mono">R$ {(selectedOrder.remainingAmount ?? Math.max(0, (selectedOrder.total || 0) - (selectedOrder.paidAmount || 0))).toFixed(2).replace('.', ',')}</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Change Status Fast Buttons */}
@@ -2839,17 +3114,137 @@ export const OrderManagement: React.FC = () => {
                     <label className="block text-slate-400 font-medium mb-1">Status do Pedido</label>
                     <select
                       value={editStatus}
-                      onChange={(e) => setEditStatus(e.target.value as OrderStatus)}
+                      onChange={(e) => {
+                        const newSt = e.target.value as OrderStatus;
+                        setEditStatus(newSt);
+                        if (newSt === 'Pago') {
+                          setEditPaidAmount(editTotal);
+                        } else if (newSt === 'Pendente') {
+                          setEditPaidAmount(0);
+                        }
+                      }}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500 min-h-[40px] cursor-pointer"
                     >
                       <option value="Pendente">Pendente (Aguardando Pagamento)</option>
-                      <option value="Pago">Pago (Comprovante OK / Baixa)</option>
+                      <option value="Pago Parcial">Pago Parcial (Baixa Parcial / Resta Saldo)</option>
+                      <option value="Pago">Pago (Comprovante OK / Baixa 100%)</option>
                       <option value="Em Separação">Em Separação (Embalagem Térmica)</option>
                       <option value="Enviado">Enviado (Despachado)</option>
                       <option value="Entregue">Entregue (Concluído)</option>
                       <option value="Cancelado">Cancelado</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Baixa Parcial e Controle de Pagamento */}
+                <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-200 font-bold text-xs flex items-center gap-1.5">
+                      <DollarSign className="w-4 h-4 text-emerald-400" />
+                      <span>Baixa Parcial / Valor Pago pelo Cliente</span>
+                    </label>
+                    <span className="text-[11px] text-cyan-400 font-mono font-bold">
+                      Total Pedido: R$ {editTotal.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                    <div className="sm:col-span-6 relative">
+                      <span className="absolute left-3 top-2.5 text-slate-500 font-bold text-xs">R$</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={editPaidAmount}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditPaidAmount(val);
+                          const num = parseFloat(val) || 0;
+                          if (num >= editTotal && editTotal > 0) {
+                            setEditStatus('Pago');
+                          } else if (num > 0) {
+                            setEditStatus('Pago Parcial');
+                          } else {
+                            setEditStatus('Pendente');
+                          }
+                        }}
+                        placeholder="0,00"
+                        className="w-full px-3 py-2 pl-9 bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl text-white font-mono font-bold text-sm focus:outline-none min-h-[40px]"
+                      />
+                    </div>
+
+                    <div className="sm:col-span-6 flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditPaidAmount(editTotal);
+                          setEditStatus('Pago');
+                        }}
+                        className="px-2.5 py-1.5 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        100% (Quitado)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const half = Number((editTotal / 2).toFixed(2));
+                          setEditPaidAmount(half);
+                          setEditStatus('Pago Parcial');
+                        }}
+                        className="px-2.5 py-1.5 bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        50% (Entrada)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditPaidAmount(0);
+                          setEditStatus('Pendente');
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        Zerar (Pendente)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Calculated Balance Indicator */}
+                  {(() => {
+                    const paid = editPaidAmount !== '' && !isNaN(Number(editPaidAmount)) ? Number(editPaidAmount) : 0;
+                    const remaining = Math.max(0, Number((editTotal - paid).toFixed(2)));
+                    const isPartial = paid > 0 && paid < editTotal;
+                    const isFullyPaid = paid >= editTotal && editTotal > 0;
+
+                    return (
+                      <div className="pt-2 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400">Status financeiro:</span>
+                          {isFullyPaid && (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold">
+                              ✓ 100% Quitado
+                            </span>
+                          )}
+                          {isPartial && (
+                            <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/40 text-[11px] font-bold">
+                              ⚠️ Baixa Parcial (Resta Saldo)
+                            </span>
+                          )}
+                          {paid === 0 && (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold">
+                              Pendente Integral
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="font-mono text-right text-[11px]">
+                          <span className="text-slate-400">Saldo Pendente: </span>
+                          <strong className={remaining > 0 ? 'text-amber-400 font-bold' : 'text-emerald-400 font-bold'}>
+                            R$ {remaining.toFixed(2).replace('.', ',')}
+                          </strong>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
@@ -2926,6 +3321,123 @@ export const OrderManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Relatório do Pedido via WhatsApp */}
+      {summaryOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl max-h-[92vh] overflow-y-auto">
+            <button
+              onClick={() => setSummaryOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4 pr-10">
+              <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl sm:rounded-2xl border border-emerald-500/30 shrink-0">
+                <Share2 className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] sm:text-xs text-emerald-400 font-bold uppercase tracking-wider block">
+                  Envio de Resumo / Relatório
+                </span>
+                <h3 className="text-base sm:text-xl font-extrabold font-tech text-white">
+                  Relatório do Pedido: {summaryOrder.orderNumber}
+                </h3>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* WhatsApp Destination Phone Input */}
+              <div className="p-3.5 bg-slate-950 rounded-xl sm:rounded-2xl border border-slate-800 space-y-2">
+                <label className="block text-slate-200 font-bold text-xs flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Número de WhatsApp para Envio:</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={summaryWhatsAppPhone}
+                    onChange={(e) => setSummaryWhatsAppPhone(e.target.value)}
+                    placeholder="Ex: (11) 99999-9999 ou 5511999999999"
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Você pode digitar ou alterar o número acima para quem deseja enviar o relatório do pedido.
+                </p>
+              </div>
+
+              {/* Message Preview */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Prévia do Resumo Formatado:</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleCopyOrderSummary}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {summaryCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar Texto</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-mono text-[11px] leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap select-all selection:bg-cyan-500 selection:text-slate-950">
+                  {generateOrderSummaryText(summaryOrder)}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSummaryOrder(null)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyOrderSummary}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors cursor-pointer text-xs font-bold flex items-center justify-center gap-1.5 min-h-[42px]"
+                >
+                  {summaryCopied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-extrabold">Copiado com Sucesso!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Resumo</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendOrderWhatsApp}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[42px]"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Enviar no WhatsApp</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

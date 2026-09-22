@@ -111,7 +111,7 @@ interface AppContextType {
   }) => Promise<Order>;
   updateOrder: (orderId: string, updatedData: Partial<Order>) => Promise<boolean>;
   updateOrderStatus: (orderId: string, status: OrderStatus, trackingCode?: string) => void;
-  clearOrderManually: (orderId: string, status: OrderStatus, clearedBy: string, notes?: string) => void;
+  clearOrderManually: (orderId: string, status: OrderStatus, clearedBy: string, notes?: string, paidAmount?: number, remainingAmount?: number) => void;
   deleteOrder: (orderId: string) => Promise<boolean>;
   clearAllOrders: () => Promise<void>;
   clearAllFinances: () => Promise<void>;
@@ -2097,7 +2097,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Status do pedido atualizado para: ${status}`);
   };
 
-  const clearOrderManually = async (orderId: string, status: OrderStatus, clearedBy: string, notes?: string) => {
+  const clearOrderManually = async (
+    orderId: string,
+    status: OrderStatus,
+    clearedBy: string,
+    notes?: string,
+    paidAmount?: number,
+    remainingAmount?: number
+  ) => {
     const timestamp = new Date().toLocaleString('pt-BR');
     const isoTimestamp = new Date().toISOString();
     const operator = clearedBy || currentUser?.name || 'Administrador';
@@ -2107,9 +2114,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) => {
       updatedList = prev.map((order) => {
         if (order.id === orderId) {
+          const finalPaid = paidAmount !== undefined ? paidAmount : (status === 'Pago' || status === 'Entregue' ? order.total : order.paidAmount);
+          const finalRemaining = remainingAmount !== undefined ? remainingAmount : (finalPaid !== undefined ? Math.max(0, order.total - finalPaid) : order.remainingAmount);
           return {
             ...order,
             status,
+            paidAmount: finalPaid,
+            remainingAmount: finalRemaining,
             clearedManuallyAt: timestamp,
             clearedBy: operator,
             notes: noteText,
@@ -2125,15 +2136,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updatedList;
     });
 
+    const targetOrder = updatedList.find((o) => o.id === orderId);
+
     const supabase = getSupabaseClient();
     if (supabase) {
-      supabase.from('orders').update({
+      const updateData: Record<string, any> = {
         status,
         cleared_manually_at: isoTimestamp,
         cleared_by: operator,
         notes: noteText,
         updated_at: isoTimestamp,
-      }).eq('id', orderId).then((res) => {
+      };
+      if (targetOrder?.paidAmount !== undefined) updateData.paid_amount = targetOrder.paidAmount;
+      if (targetOrder?.remainingAmount !== undefined) updateData.remaining_amount = targetOrder.remainingAmount;
+
+      supabase.from('orders').update(updateData).eq('id', orderId).then((res) => {
         if (res.error) console.log('Supabase clear order info:', res.error.message);
       });
     }
@@ -2143,6 +2160,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         doc(db, 'orders', orderId),
         cleanUndefinedForFirestore({
           status,
+          paidAmount: targetOrder?.paidAmount,
+          remainingAmount: targetOrder?.remainingAmount,
           clearedManuallyAt: timestamp,
           clearedBy: operator,
           notes: noteText,
