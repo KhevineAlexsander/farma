@@ -39,6 +39,21 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Order } from '../../types';
 
+// Helper to normalize product names (fix common typos such as Ephitalon -> Epithalon, multiple spaces, etc.)
+function normalizeProductName(name: string): string {
+  if (!name) return '';
+  const trimmed = name.trim().replace(/\s+/g, ' ');
+  if (/^ephitalon$/i.test(trimmed)) {
+    return 'EPITHALON';
+  }
+  return trimmed;
+}
+
+function normalizeDosage(dosage: string): string {
+  if (!dosage) return '';
+  return dosage.trim().replace(/\s+/g, ' ');
+}
+
 export interface SalesReportsTabProps {
   onOpenEditOrder?: (orderId: string) => void;
 }
@@ -84,7 +99,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     return localStorage.getItem('last_sales_report_wa_phone') || storeSettings.whatsappNumber || '';
   });
   const [includeCustomerRankingInWhatsApp, setIncludeCustomerRankingInWhatsApp] = useState<boolean>(false);
-  const [whatsAppTopProductsLimit, setWhatsAppTopProductsLimit] = useState<number>(5);
+  const [whatsAppTopProductsLimit, setWhatsAppTopProductsLimit] = useState<number>(0); // 0 = Todos os produtos vendidos
   const [copiedSummary, setCopiedSummary] = useState(false);
 
   // Period statistics before status filter (to display exact counts of pending vs confirmed in the time window)
@@ -234,30 +249,51 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       const isPendingOrder = order.status === 'Pendente';
 
       items.forEach((item) => {
-        const prodName = (item.product?.name || (item as any).name || 'Produto').trim();
-        const dosage = (item.product?.dosage || (item as any).dosage || '').trim();
-        const category = (item.product?.category || (item as any).category || 'Geral').trim();
+        const prodId = item.product?.id || (item as any).productId;
+        const rawProdName = (item.product?.name || (item as any).name || 'Produto').trim();
+        const rawDosage = (item.product?.dosage || (item as any).dosage || '').trim();
+        const normalizedName = normalizeProductName(rawProdName);
+        const normalizedDosage = normalizeDosage(rawDosage);
+
+        // Priority 1: Match catalog product by exact ID if available
+        let matchedProduct = prodId ? products.find((p) => p.id === prodId) : undefined;
+
+        // Priority 2: Match catalog product by normalized name and dosage
+        if (!matchedProduct) {
+          matchedProduct = products.find(
+            (p) =>
+              normalizeProductName(p.name).toUpperCase() === normalizedName.toUpperCase() &&
+              (!normalizedDosage || normalizeDosage(p.dosage).toUpperCase() === normalizedDosage.toUpperCase())
+          );
+        }
+
+        // Priority 3: Match catalog product by normalized name alone if dosage missing
+        if (!matchedProduct && !normalizedDosage) {
+          matchedProduct = products.find(
+            (p) => normalizeProductName(p.name).toUpperCase() === normalizedName.toUpperCase()
+          );
+        }
+
+        const canonicalId = matchedProduct?.id || prodId;
+        const canonicalName = matchedProduct ? matchedProduct.name : normalizedName;
+        const canonicalDosage = matchedProduct ? matchedProduct.dosage : normalizedDosage;
+        const category = (matchedProduct?.category || item.product?.category || (item as any).category || 'Geral').trim();
         if (category) categoriesSet.add(category);
 
-        // Normalize matching key
-        const key = `${prodName.toUpperCase()}_${dosage.toUpperCase()}`;
-
-        // Find match in catalog for accurate real-time stock
-        const matchedProduct = products.find(
-          (p) =>
-            p.name.trim().toUpperCase() === prodName.toUpperCase() &&
-            (!dosage || p.dosage.trim().toUpperCase() === dosage.toUpperCase())
-        );
+        // Normalize matching key: if catalog item exists, group by canonical ID, otherwise canonical name + dosage
+        const key = canonicalId
+          ? `ID_${canonicalId}`
+          : `${canonicalName.toUpperCase()}_${canonicalDosage.toUpperCase()}`;
 
         const itemQty = Math.max(1, Number(item.quantity) || 1);
         const itemPrice = Number(item.product?.price) || Number((item as any).price) || (itemQty > 0 ? (order.subtotal || order.total) / (items.length || 1) : 0);
         const itemLineTotal = itemPrice * itemQty;
 
         const existing = productMap.get(key) || {
-          id: item.product?.id || matchedProduct?.id,
-          name: prodName,
-          dosage: dosage || (matchedProduct?.dosage ?? ''),
-          category: matchedProduct?.category || category,
+          id: canonicalId,
+          name: canonicalName,
+          dosage: canonicalDosage,
+          category: category,
           qtySold: 0,
           qtyConfirmed: 0,
           qtyPending: 0,
@@ -476,18 +512,24 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       text += `• *Saldo a Receber (Parcial):* R$ ${metrics.totalPendingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     }
 
-    text += `\n📦 *PRODUTOS MAIS VENDIDOS (RANKING DE SAÍDA):*\n`;
+    const isShowingAll = whatsAppTopProductsLimit === 0 || whatsAppTopProductsLimit >= rankedProducts.length;
+    const listToShow = whatsAppTopProductsLimit > 0 ? rankedProducts.slice(0, whatsAppTopProductsLimit) : rankedProducts;
+
+    const sectionTitle = isShowingAll
+      ? `📦 *PRODUTOS VENDIDOS (${rankedProducts.length} itens no período):*`
+      : `📦 *PRODUTOS MAIS VENDIDOS (TOP ${listToShow.length} de ${rankedProducts.length}):*`;
+
+    text += `\n${sectionTitle}\n`;
     if (rankedProducts.length === 0) {
       text += `_Nenhum produto computado no período selecionado_\n`;
     } else {
-      const listToShow = whatsAppTopProductsLimit > 0 ? rankedProducts.slice(0, whatsAppTopProductsLimit) : rankedProducts;
       listToShow.forEach((prod, idx) => {
         const dosageStr = prod.dosage ? ` (${prod.dosage})` : '';
         const pct = totalUnitsSold > 0 ? ((prod.qtySold / totalUnitsSold) * 100).toFixed(1) : '0';
         text += `${idx + 1}º *${prod.name}${dosageStr}*\n`;
-        text += `   └ *${prod.qtySold} un.* vendidas (${pct}%) • R$ ${prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+        text += `   └ *${prod.qtySold} un.* vendida(s) (${pct}%) • R$ ${prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
       });
-      if (rankedProducts.length > listToShow.length) {
+      if (!isShowingAll && rankedProducts.length > listToShow.length) {
         text += `_... e mais ${rankedProducts.length - listToShow.length} produto(s) vendidos_\n`;
       }
     }
@@ -551,8 +593,9 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       return { allOrders: [], pendingCount: 0, confirmedCount: 0, totalUnits: 0, totalRevenue: 0 };
     }
 
-    const targetName = (selectedProductForOrders.name || '').toLowerCase().trim();
-    const targetDosage = (selectedProductForOrders.dosage || '').toLowerCase().trim();
+    const targetId = selectedProductForOrders.id;
+    const targetName = normalizeProductName(selectedProductForOrders.name || '').toUpperCase();
+    const targetDosage = normalizeDosage(selectedProductForOrders.dosage || '').toUpperCase();
 
     // Check all time-matched orders in the current period window
     const matches: Array<{
@@ -566,13 +609,15 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     (periodOrdersStats.timeMatched || []).forEach((ord) => {
       const items = ord.items || [];
       const matchedItems = items.filter((it) => {
-        const pName = (it.product?.name || (it as any).name || '').toLowerCase().trim();
-        const pDosage = (it.product?.dosage || (it as any).dosage || '').toLowerCase().trim();
-
-        if (selectedProductForOrders.id && it.product?.id === selectedProductForOrders.id) {
+        const itId = it.product?.id || (it as any).productId;
+        if (targetId && itId && targetId === itId) {
           return true;
         }
-        return pName === targetName && pDosage === targetDosage;
+
+        const pName = normalizeProductName(it.product?.name || (it as any).name || '').toUpperCase();
+        const pDosage = normalizeDosage(it.product?.dosage || (it as any).dosage || '').toUpperCase();
+
+        return pName === targetName && (!targetDosage || pDosage === targetDosage);
       });
 
       if (matchedItems.length > 0) {
@@ -1760,7 +1805,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                     Enviar Relatório de Vendas via WhatsApp
                   </h3>
                   <p className="text-[11px] sm:text-xs text-slate-400">
-                    Relatório focado nos produtos mais vendidos com opção de compradores.
+                    Relatório detalhado com todos os produtos vendidos no período e faturamento.
                   </p>
                 </div>
               </div>
@@ -1861,23 +1906,30 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                   </div>
                 </label>
 
-                {/* Top Products Limit selector */}
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-slate-300 font-semibold text-xs">Exibir no WhatsApp:</span>
-                  <div className="flex items-center gap-1.5">
+                {/* Products in WhatsApp Selector */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                  <div>
+                    <span className="text-slate-200 font-bold text-xs block">Lista de Produtos Vendidos:</span>
+                    <span className="text-[10px] text-slate-400">
+                      {whatsAppTopProductsLimit === 0
+                        ? `Mostrando todos os ${rankedProducts.length} produtos vendidos`
+                        : `Mostrando os Top ${Math.min(whatsAppTopProductsLimit, rankedProducts.length)} de ${rankedProducts.length} produtos`}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
                     {[
-                      { id: 3, label: 'Top 3' },
-                      { id: 5, label: 'Top 5' },
+                      { id: 0, label: `Todos (${rankedProducts.length})` },
                       { id: 10, label: 'Top 10' },
-                      { id: 0, label: 'Todos' },
+                      { id: 5, label: 'Top 5' },
+                      { id: 3, label: 'Top 3' },
                     ].map((opt) => (
                       <button
                         key={opt.id}
                         type="button"
                         onClick={() => setWhatsAppTopProductsLimit(opt.id)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors cursor-pointer ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                           whatsAppTopProductsLimit === opt.id
-                            ? 'bg-cyan-500 text-slate-950'
+                            ? 'bg-cyan-500 text-slate-950 shadow-sm font-black ring-1 ring-cyan-400'
                             : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
                         }`}
                       >
