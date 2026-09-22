@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Search,
   Eye,
@@ -57,6 +57,7 @@ export const OrderManagement: React.FC = () => {
   } = useApp();
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
+  const [productSearchFilter, setProductSearchFilter] = useState<string>('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [trackingInput, setTrackingInput] = useState('');
   const [isSavingOrders, setIsSavingOrders] = useState(false);
@@ -619,23 +620,65 @@ export const OrderManagement: React.FC = () => {
     { status: 'Cancelado', label: 'Cancelado', icon: X, color: 'border-red-500/50 bg-red-500/10 text-red-400', desc: 'Cancelado' },
   ];
 
-  const filteredOrders = orders.filter((order) => {
-    let matchesStatus = true;
-    if (statusFilter === 'Aguardando Baixa') {
-      matchesStatus = order.status === 'Pendente' || order.status === 'Pago Parcial' || !order.clearedManuallyAt;
-    } else if (statusFilter !== 'Todos') {
-      matchesStatus = order.status === statusFilter;
-    }
+  // Distinct list of products available across catalog and existing orders
+  const availableProductOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    products.forEach((p) => {
+      const label = `${p.name}${p.dosage ? ` (${p.dosage})` : ''}`.trim();
+      if (label) map.set(label.toLowerCase(), label);
+    });
+    orders.forEach((o) => {
+      (o.items || []).forEach((item) => {
+        const pName = (item.product?.name || (item as any).name || '').trim();
+        const pDosage = (item.product?.dosage || (item as any).dosage || '').trim();
+        if (pName) {
+          const label = `${pName}${pDosage ? ` (${pDosage})` : ''}`.trim();
+          map.set(label.toLowerCase(), label);
+        }
+      });
+    });
+    return Array.from(map.values()).sort();
+  }, [products, orders]);
 
-    const q = (searchTerm || '').toLowerCase().trim();
-    const matchesSearch =
-      !q ||
-      (order.orderNumber || '').toLowerCase().includes(q) ||
-      (order.customer?.name || '').toLowerCase().includes(q) ||
-      (order.customer?.email || '').toLowerCase().includes(q) ||
-      (typeof order.customer?.phone === 'string' && order.customer.phone.includes(q));
-    return matchesStatus && matchesSearch;
-  });
+  const filteredOrders = useMemo(() => {
+    return orders.filter((order) => {
+      let matchesStatus = true;
+      if (statusFilter === 'Aguardando Baixa') {
+        matchesStatus = order.status === 'Pendente' || order.status === 'Pago Parcial' || !order.clearedManuallyAt;
+      } else if (statusFilter !== 'Todos') {
+        matchesStatus = order.status === statusFilter;
+      }
+
+      // Filter by dedicated product selection / search
+      const pFilter = (productSearchFilter || '').toLowerCase().trim();
+      const matchesProductFilter =
+        !pFilter ||
+        (order.items || []).some((item) => {
+          const pName = (item.product?.name || (item as any).name || '').toLowerCase();
+          const pDosage = (item.product?.dosage || (item as any).dosage || '').toLowerCase();
+          const pCategory = (item.product?.category || (item as any).category || '').toLowerCase();
+          const combined = `${pName} ${pDosage} ${pCategory}`.toLowerCase();
+          return pName.includes(pFilter) || pDosage.includes(pFilter) || combined.includes(pFilter);
+        });
+
+      // General search term matches order #, client name, email, phone OR any product item inside the order
+      const q = (searchTerm || '').toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (order.orderNumber || '').toLowerCase().includes(q) ||
+        (order.customer?.name || '').toLowerCase().includes(q) ||
+        (order.customer?.email || '').toLowerCase().includes(q) ||
+        (typeof order.customer?.phone === 'string' && order.customer.phone.includes(q)) ||
+        (order.items || []).some((item) => {
+          const pName = (item.product?.name || (item as any).name || '').toLowerCase();
+          const pDosage = (item.product?.dosage || (item as any).dosage || '').toLowerCase();
+          const combined = `${pName} ${pDosage}`.toLowerCase();
+          return pName.includes(q) || combined.includes(q);
+        });
+
+      return matchesStatus && matchesSearch && matchesProductFilter;
+    });
+  }, [orders, statusFilter, searchTerm, productSearchFilter]);
 
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
@@ -892,26 +935,91 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
         </div>
       </div>
 
-      {/* Search and Horizontal Filter Pills (Mobile Optimized) */}
+      {/* Search and Horizontal Filter Pills (Mobile & Desktop Optimized) */}
       <div className="space-y-2.5 bg-slate-900/70 border border-slate-800 p-3 sm:p-4 rounded-2xl">
-        <div className="relative w-full">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar por nº do pedido, cliente ou telefone..."
-            className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
-          />
-          {searchTerm && (
-            <button
-              onClick={() => setSearchTerm('')}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
+        
+        {/* Search Bar & Product Filter Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+          
+          {/* General Search Input */}
+          <div className="sm:col-span-7 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar por nº, cliente, telefone ou produto..."
+              className="w-full pl-10 pr-9 py-2 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md"
+                title="Limpar busca"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Dedicated Product Filter Dropdown & Search */}
+          <div className="sm:col-span-5 relative flex items-center gap-1.5">
+            <div className="relative flex-1">
+              <Package className="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={productSearchFilter}
+                onChange={(e) => setProductSearchFilter(e.target.value)}
+                className={`w-full pl-9 pr-8 py-2 sm:py-2.5 bg-slate-950 border rounded-xl text-xs focus:outline-none focus:border-cyan-500 min-h-[40px] cursor-pointer appearance-none ${
+                  productSearchFilter
+                    ? 'border-cyan-500/60 text-cyan-300 font-bold bg-cyan-950/20'
+                    : 'border-slate-800 text-slate-300'
+                }`}
+                title="Filtrar pedidos pelo produto comprado"
+              >
+                <option value="">📦 Todos os Produtos (Sem filtro)</option>
+                {availableProductOptions.map((prodName, idx) => (
+                  <option key={idx} value={prodName}>
+                    {prodName}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[10px]">
+                ▼
+              </div>
+            </div>
+
+            {productSearchFilter && (
+              <button
+                onClick={() => setProductSearchFilter('')}
+                className="p-2.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                title="Remover filtro de produto"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
         </div>
+
+        {/* Active Product Filter Pill indicator */}
+        {productSearchFilter && (
+          <div className="flex items-center justify-between bg-cyan-950/30 border border-cyan-500/30 rounded-xl px-3 py-1.5 text-xs text-cyan-300 animate-in fade-in">
+            <div className="flex items-center gap-2 truncate">
+              <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="text-slate-400">Filtrando por produto:</span>
+              <strong className="text-white truncate">{productSearchFilter}</strong>
+              <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-mono">
+                {filteredOrders.length} {filteredOrders.length === 1 ? 'pedido' : 'pedidos'}
+              </span>
+            </div>
+            <button
+              onClick={() => setProductSearchFilter('')}
+              className="text-xs text-cyan-400 hover:text-white underline ml-2 shrink-0 cursor-pointer"
+            >
+              Limpar Filtro
+            </button>
+          </div>
+        )}
 
         {/* Scrollable Pills for Mobile */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
