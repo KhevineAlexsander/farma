@@ -474,6 +474,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, () => {});
 
       unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
+        if (isSupabaseConfigured()) {
+          // Supabase is the primary active database; do not overwrite with stale Firestore orders
+          return;
+        }
         if (!snapshot.empty) {
           const list: Order[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Order), id: d.id }));
@@ -1379,6 +1383,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 1. Fetch from Supabase if configured
       const supabase = getSupabaseClient();
+      let fetchedFromSupabase = false;
       if (supabase && isSupabaseConfigured()) {
         try {
           const { data: ordData, error: ordErr } = await supabase
@@ -1387,6 +1392,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .order('created_at', { ascending: false });
           if (!ordErr && ordData) {
             fetchedOrders = ordData.map(mapDBToOrder);
+            fetchedFromSupabase = true;
           }
 
           const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
@@ -1398,26 +1404,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // 2. Fetch from Firestore fallback or complement
-      try {
-        const snap = await getDocs(collection(db, 'orders'));
-        if (!snap.empty) {
-          const firestoreOrders: Order[] = [];
-          snap.forEach((d) => {
-            firestoreOrders.push({ ...(d.data() as Order), id: d.id });
-          });
-
-          if (fetchedOrders.length === 0) {
+      // 2. Fetch from Firestore ONLY as fallback when Supabase is not active or unreachable
+      if (!fetchedFromSupabase) {
+        try {
+          const snap = await getDocs(collection(db, 'orders'));
+          if (!snap.empty) {
+            const firestoreOrders: Order[] = [];
+            snap.forEach((d) => {
+              firestoreOrders.push({ ...(d.data() as Order), id: d.id });
+            });
             fetchedOrders = firestoreOrders;
-          } else {
-            const map = new Map<string, Order>();
-            firestoreOrders.forEach((o) => map.set(o.id, o));
-            fetchedOrders.forEach((o) => map.set(o.id, o));
-            fetchedOrders = Array.from(map.values());
           }
+        } catch (fireErr) {
+          console.log('Firestore fetchSalesData notice:', fireErr);
         }
-      } catch (fireErr) {
-        console.log('Firestore fetchSalesData notice:', fireErr);
       }
 
       // Update state if we got data or need to sync
