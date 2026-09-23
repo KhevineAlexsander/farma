@@ -250,13 +250,13 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     const averageTicket = ordersCount > 0 ? totalRevenue / ordersCount : 0;
 
     return {
-      totalRevenue,
-      totalPaidInCash,
-      totalPendingBalance,
-      totalDiscount,
-      totalShipping,
+      totalRevenue: Number(totalRevenue.toFixed(2)),
+      totalPaidInCash: Number(totalPaidInCash.toFixed(2)),
+      totalPendingBalance: Number(totalPendingBalance.toFixed(2)),
+      totalDiscount: Number(totalDiscount.toFixed(2)),
+      totalShipping: Number(totalShipping.toFixed(2)),
       ordersCount,
-      averageTicket,
+      averageTicket: Number(averageTicket.toFixed(2)),
       paymentMethodsCount,
     };
   }, [filteredOrders]);
@@ -306,13 +306,15 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         const category = (matchedProduct?.category || item.product?.category || (item as any).category || 'Geral').trim();
         if (category) categoriesSet.add(category);
 
-        // Normalize matching key: if catalog item exists, group by canonical ID, otherwise canonical name + dosage
-        const key = canonicalId
-          ? `ID_${canonicalId}`
-          : `${canonicalName.toUpperCase()}_${canonicalDosage.toUpperCase()}`;
+        // Group by canonical name + dosage to guarantee that all sales for the exact same substance/dosage are aggregated into a single row
+        const key = `${canonicalName.toUpperCase()}___${canonicalDosage.toUpperCase()}`;
 
         const itemQty = Math.max(1, Number(item.quantity) || 1);
-        const itemPrice = Number(item.product?.price) || Number((item as any).price) || (itemQty > 0 ? (order.subtotal || order.total) / (items.length || 1) : 0);
+        const itemPrice =
+          Number(item.product?.price) ||
+          Number((item as any).price) ||
+          Number(matchedProduct?.price) ||
+          (itemQty > 0 ? (order.subtotal || order.total) / (items.length || 1) : 0);
         const itemLineTotal = itemPrice * itemQty;
 
         const existing = productMap.get(key) || {
@@ -331,6 +333,11 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           unitPriceAverage: itemPrice,
           imageUrl: item.product?.imageUrl || matchedProduct?.imageUrl,
         };
+
+        if (!existing.id && canonicalId) existing.id = canonicalId;
+        if (existing.currentStock === undefined && matchedProduct?.stock !== undefined) {
+          existing.currentStock = matchedProduct.stock;
+        }
 
         existing.qtySold += itemQty;
         existing.totalRevenue += itemLineTotal;
@@ -659,8 +666,12 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
 
       if (matchedItems.length > 0) {
         const itemQty = matchedItems.reduce((acc, i) => acc + (Number(i.quantity) || 1), 0);
-        const itemPrice = Number(matchedItems[0]?.product?.price) || Number((matchedItems[0] as any)?.price) || 0;
-        const itemSubtotal = itemPrice * itemQty;
+        const itemSubtotal = matchedItems.reduce((acc, i) => {
+          const q = Number(i.quantity) || 1;
+          const p = Number(i.product?.price) || Number((i as any)?.price) || 0;
+          return acc + p * q;
+        }, 0);
+        const itemPrice = itemQty > 0 ? itemSubtotal / itemQty : 0;
         const otherItemsCount = items.length - matchedItems.length;
 
         matches.push({
