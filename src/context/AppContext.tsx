@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon, ProductRequest } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_TRANSACTIONS, CURRENT_CLIENT_USER, ADMIN_USER, INITIAL_EMPLOYEES, INITIAL_SETTINGS, INITIAL_COUPONS } from '../data/mockData';
 import {
@@ -1369,7 +1369,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  const refreshSalesData = async (silent = false): Promise<{ success: boolean; count: number }> => {
+  const refreshSalesData = useCallback(async (silent = false): Promise<{ success: boolean; count: number }> => {
     try {
       if (!silent) {
         showToast('Atualizando dados de vendas em tempo real...');
@@ -1442,9 +1442,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!silent) {
         showToast('Erro ao atualizar dados de vendas.');
       }
-      return { success: false, count: orders.length };
+      return { success: false, count: 0 };
     }
-  };
+  }, []);
 
   const saveAllOrdersToCloud = async (): Promise<boolean> => {
     try {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Package,
   Trophy,
@@ -72,7 +72,12 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>(() => new Date());
   const [secondsUntilNextRefresh, setSecondsUntilNextRefresh] = useState<number>(60);
 
-  // Auto-refresh: Runs immediately on tab mount/click, and every 60 seconds (1 min) while tab is open
+  const refreshSalesDataRef = useRef(refreshSalesData);
+  useEffect(() => {
+    refreshSalesDataRef.current = refreshSalesData;
+  }, [refreshSalesData]);
+
+  // Auto-refresh: Runs immediately on tab mount/click, and strictly once every 60 seconds (1 min) while tab is open
   useEffect(() => {
     let isMounted = true;
 
@@ -80,7 +85,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       if (!isMounted) return;
       setIsRefreshing(true);
       try {
-        await refreshSalesData(silent);
+        await refreshSalesDataRef.current(silent);
         if (isMounted) {
           setLastUpdatedAt(new Date());
           setSecondsUntilNextRefresh(60);
@@ -94,15 +99,15 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       }
     };
 
-    // 1. Immediate refresh on mount (when clicking the tab)
+    // 1. Initial refresh on mount (silent, once)
     doRefresh(true);
 
-    // 2. Refresh every 60 seconds (1 minute) continuously while open
+    // 2. Refresh strictly every 60 seconds (1 minute)
     const refreshInterval = setInterval(() => {
       doRefresh(true);
     }, 60000);
 
-    // 3. Countdown timer tick for smooth user feedback
+    // 3. Visual countdown timer tick
     const countdownInterval = setInterval(() => {
       setSecondsUntilNextRefresh((prev) => (prev <= 1 ? 60 : prev - 1));
     }, 1000);
@@ -112,7 +117,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       clearInterval(refreshInterval);
       clearInterval(countdownInterval);
     };
-  }, [refreshSalesData]);
+  }, []);
 
   // Modal: View and edit orders for a specific selected product
   const [selectedProductForOrders, setSelectedProductForOrders] = useState<{
@@ -753,20 +758,20 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full overflow-hidden">
       
       {/* Top Filter Bar & Real-Time Sync */}
-      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-3.5 sm:p-5 shadow-xl space-y-3.5 sm:space-y-4">
+        <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 sm:gap-4">
           
           {/* Header Title */}
-          <div className="flex items-center gap-3">
-            <span className="p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shrink-0 shadow-md shadow-cyan-500/10">
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <span className="p-2 sm:p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 shrink-0 shadow-md shadow-cyan-500/10 mt-0.5 sm:mt-0">
               <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6" />
             </span>
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base sm:text-xl font-black text-white tracking-tight">
                   Relatório de Vendas em Tempo Real
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-sm">
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-sm shrink-0">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
@@ -774,20 +779,20 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                   Auto-sync 1 min ({secondsUntilNextRefresh}s)
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
-                <span>Métricas atualizadas automaticamente ao abrir a aba e a cada 1 minuto.</span>
+              <p className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span>Métricas atualizadas automaticamente ao abrir e a cada 1 min.</span>
                 <span className="text-slate-500 hidden sm:inline">•</span>
                 <span className="text-slate-300 font-medium">
-                  Última atualização: <strong className="text-cyan-400">{lastUpdatedAt.toLocaleTimeString('pt-BR')}</strong>
+                  Última atualização: <strong className="text-cyan-400 font-mono">{lastUpdatedAt.toLocaleTimeString('pt-BR')}</strong>
                 </span>
               </p>
             </div>
           </div>
 
           {/* Controls: Periods & Actions */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full 2xl:w-auto justify-start 2xl:justify-end">
             {/* Period Selector */}
-            <div className="grid grid-cols-3 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="grid grid-cols-3 xs:grid-cols-6 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full sm:w-auto">
               {[
                 { id: 'today', label: 'Hoje' },
                 { id: 'yesterday', label: 'Ontem' },
@@ -799,7 +804,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                 <button
                   key={t.id}
                   onClick={() => setTimeFilter(t.id as any)}
-                  className={`py-1.5 px-2 sm:px-3 rounded-lg text-xs font-bold text-center transition-all cursor-pointer min-h-[36px] sm:min-h-0 flex items-center justify-center ${
+                  className={`py-1.5 px-2 sm:px-3 rounded-lg text-xs font-bold text-center transition-all cursor-pointer min-h-[36px] sm:min-h-0 flex items-center justify-center flex-1 sm:flex-initial ${
                     timeFilter === t.id
                       ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
                       : 'text-slate-400 hover:text-white active:bg-slate-800'
@@ -810,55 +815,57 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               ))}
             </div>
 
-            {/* WhatsApp Report Button */}
-            <button
-              onClick={() => setIsWhatsAppModalOpen(true)}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[38px] shrink-0"
-              title="Gerar relatório formatado e enviar para o WhatsApp"
-            >
-              <MessageSquare className="w-3.5 h-3.5 fill-current shrink-0" />
-              <span className="hidden sm:inline">Relatório WhatsApp</span>
-              <span className="sm:hidden">WhatsApp</span>
-            </button>
+            {/* Action Buttons: WhatsApp & Refresh */}
+            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+              <button
+                onClick={() => setIsWhatsAppModalOpen(true)}
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[38px] whitespace-nowrap"
+                title="Gerar relatório formatado e enviar para o WhatsApp"
+              >
+                <MessageSquare className="w-3.5 h-3.5 fill-current shrink-0" />
+                <span>Relatório WhatsApp</span>
+              </button>
 
-            {/* Manual Refresh Button */}
-            <button
-              onClick={handleManualRefresh}
-              disabled={isRefreshing || isSyncing}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] flex items-center justify-center gap-1.5 shrink-0 text-xs font-bold"
-              title="Recarregar dados de vendas agora"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing || isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar Agora'}</span>
-            </button>
+              <button
+                onClick={handleManualRefresh}
+                disabled={isRefreshing || isSyncing}
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] flex items-center justify-center gap-1.5 text-xs font-bold whitespace-nowrap"
+                title="Recarregar dados de vendas agora"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 shrink-0 ${isRefreshing || isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Atualizando...' : 'Atualizar Agora'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* ------------------------------------------------------------------- */}
         {/* BOTÕES DE CONTROLE: COM PEDIDOS PENDENTES VS SEM PEDIDOS PENDENTES */}
         {/* ------------------------------------------------------------------- */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-slate-800/80">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 pt-3 border-t border-slate-800/80">
           <div className="flex items-center gap-1.5 text-xs text-slate-400 font-semibold">
-            <Filter className="w-3.5 h-3.5 text-cyan-400" />
+            <Filter className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
             <span>Filtro de Pedidos no Relatório:</span>
           </div>
 
           {/* Segmented Button Bar for Pending vs Confirmed */}
-          <div className="grid grid-cols-3 sm:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+          <div className="grid grid-cols-1 xs:grid-cols-3 sm:flex items-stretch sm:items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs w-full lg:w-auto">
             
             {/* 1. SEM PEDIDOS PENDENTES (APENAS CONFIRMADOS) */}
             <button
               onClick={() => setStatusFilterMode('confirmed_paid')}
-              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-between sm:justify-center gap-2 transition-all cursor-pointer ${
                 statusFilterMode === 'confirmed_paid'
                   ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
               title="Mostrar apenas pedidos confirmados e pagos (exclui pedidos pendentes)"
             >
-              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>Sem Pendentes</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Sem Pendentes</span>
+              </div>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 statusFilterMode === 'confirmed_paid' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'
               }`}>
                 {periodOrdersStats.confirmedCount}
@@ -868,16 +875,18 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             {/* 2. COM PEDIDOS PENDENTES (TOTAL DE DEMANDA) */}
             <button
               onClick={() => setStatusFilterMode('all_active')}
-              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-between sm:justify-center gap-2 transition-all cursor-pointer ${
                 statusFilterMode === 'all_active'
                   ? 'bg-purple-500 text-white shadow-md font-black'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
               title="Mostrar todos os produtos incluindo os que estão em pedidos pendentes"
             >
-              <Layers className="w-3.5 h-3.5 shrink-0" />
-              <span>Com Pendentes</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+              <div className="flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 shrink-0" />
+                <span>Com Pendentes</span>
+              </div>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 statusFilterMode === 'all_active' ? 'bg-white/20 text-white font-bold' : 'bg-slate-900 text-slate-400'
               }`}>
                 {periodOrdersStats.totalActiveCount}
@@ -887,16 +896,18 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             {/* 3. APENAS PEDIDOS PENDENTES */}
             <button
               onClick={() => setStatusFilterMode('pending')}
-              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg font-bold flex items-center justify-between sm:justify-center gap-2 transition-all cursor-pointer ${
                 statusFilterMode === 'pending'
                   ? 'bg-amber-500 text-slate-950 shadow-md font-black'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
               }`}
               title="Mostrar exclusivamente a demanda de produtos em pedidos pendentes aguardando baixa"
             >
-              <Clock className="w-3.5 h-3.5 shrink-0" />
-              <span>Apenas Pendentes</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 shrink-0" />
+                <span>Apenas Pendentes</span>
+              </div>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                 statusFilterMode === 'pending' ? 'bg-slate-950/20 text-slate-950 font-bold' : 'bg-slate-900 text-amber-400/80'
               }`}>
                 {periodOrdersStats.pendingCount}
@@ -907,51 +918,51 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         </div>
 
         {/* Real-Time KPI Cards Banner */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 pt-2">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5 pt-2">
           
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+          <div className="p-3 sm:p-3.5 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 truncate">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               Faturamento
             </span>
-            <div className="mt-1">
-              <span className="text-base sm:text-xl font-black text-emerald-400 font-mono">
+            <div className="mt-1.5">
+              <span className="text-base sm:text-lg xl:text-xl font-black text-emerald-400 font-mono tracking-tight block truncate" title={`R$ ${metrics.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}>
                 R$ {metrics.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Flame className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="p-3 sm:p-3.5 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 truncate">
+              <Flame className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               Unidades Vendidas
             </span>
-            <div className="mt-1">
-              <span className="text-base sm:text-xl font-black text-cyan-300 font-mono">
+            <div className="mt-1.5">
+              <span className="text-base sm:text-lg xl:text-xl font-black text-cyan-300 font-mono tracking-tight block truncate">
                 {totalUnitsSold} <span className="text-xs font-normal text-slate-400">frascos</span>
               </span>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <ShoppingCart className="w-3.5 h-3.5 text-purple-400" />
+          <div className="p-3 sm:p-3.5 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 truncate">
+              <ShoppingCart className="w-3.5 h-3.5 text-purple-400 shrink-0" />
               Pedidos no Filtro
             </span>
-            <div className="mt-1">
-              <span className="text-base sm:text-xl font-black text-purple-300 font-mono">
+            <div className="mt-1.5">
+              <span className="text-base sm:text-lg xl:text-xl font-black text-purple-300 font-mono tracking-tight block truncate">
                 {metrics.ordersCount} <span className="text-xs font-normal text-slate-400">pedidos</span>
               </span>
             </div>
           </div>
 
-          <div className="p-3 bg-slate-950 rounded-xl border border-slate-800/80">
-            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+          <div className="p-3 sm:p-3.5 bg-slate-950 rounded-xl border border-slate-800/80 flex flex-col justify-between">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1 truncate">
+              <TrendingUp className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               Ticket Médio
             </span>
-            <div className="mt-1">
-              <span className="text-base sm:text-xl font-black text-amber-300 font-mono">
+            <div className="mt-1.5">
+              <span className="text-base sm:text-lg xl:text-xl font-black text-amber-300 font-mono tracking-tight block truncate" title={`R$ ${metrics.averageTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}>
                 R$ {metrics.averageTicket.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
             </div>
@@ -966,7 +977,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl space-y-5">
         
         {/* Section Header & Quick Switch Button */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5 pb-4 border-b border-slate-800">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3.5 pb-4 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
               <span className="p-2 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 text-cyan-400 border border-cyan-500/30 rounded-xl">
@@ -1002,13 +1013,13 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           </div>
 
           {/* Quick Action Toggle Button & Search / Filters */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto">
             
             {/* Quick Toggle Button between With Pending and Without Pending */}
             {statusFilterMode === 'confirmed_paid' ? (
               <button
                 onClick={() => setStatusFilterMode('all_active')}
-                className="px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-200 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 title="Alternar para ver com os produtos em pedidos pendentes incluídos"
               >
                 <Layers className="w-3.5 h-3.5 text-purple-400" />
@@ -1017,7 +1028,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             ) : (
               <button
                 onClick={() => setStatusFilterMode('confirmed_paid')}
-                className="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 hover:text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                className="w-full sm:w-auto px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-200 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm"
                 title="Alternar para ver sem os produtos em pedidos pendentes"
               >
                 <CheckCircle className="w-3.5 h-3.5 text-cyan-400" />
@@ -1026,7 +1037,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             )}
 
             {/* Search Input */}
-            <div className="relative w-full sm:w-44">
+            <div className="relative w-full sm:w-44 flex-1 sm:flex-initial">
               <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
@@ -1042,7 +1053,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer"
+                className="w-full sm:w-auto px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer"
               >
                 <option value="all">Todas Categorias</option>
                 {categoriesList.map((cat) => (
@@ -1057,7 +1068,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             <select
               value={productSortBy}
               onChange={(e) => setProductSortBy(e.target.value as any)}
-              className="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer"
+              className="w-full sm:w-auto px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs font-semibold text-slate-200 focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer"
             >
               <option value="qty">Ordenar por Quantidade (Mais Saem)</option>
               <option value="revenue">Ordenar por Faturamento (R$)</option>
