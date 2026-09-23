@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Package,
   Trophy,
@@ -35,6 +35,7 @@ import {
   Truck,
   ChevronRight,
   User,
+  Radio,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order } from '../../types';
@@ -50,7 +51,7 @@ export interface SalesReportsTabProps {
 }
 
 export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrder }) => {
-  const { orders, products, storeSettings, saveAllOrdersToCloud, showToast, updateOrderStatus } = useApp();
+  const { orders, products, storeSettings, saveAllOrdersToCloud, refreshSalesData, showToast, updateOrderStatus } = useApp();
 
   // Period and Status filters
   const [timeFilter, setTimeFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all'>('month');
@@ -65,8 +66,53 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   const [customerSearch, setCustomerSearch] = useState('');
   const [isCustomerRankingExpanded, setIsCustomerRankingExpanded] = useState<boolean>(false);
 
-  // Sync state
+  // Sync and Real-Time Auto-Refresh state
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date>(() => new Date());
+  const [secondsUntilNextRefresh, setSecondsUntilNextRefresh] = useState<number>(60);
+
+  // Auto-refresh: Runs immediately on tab mount/click, and every 60 seconds (1 min) while tab is open
+  useEffect(() => {
+    let isMounted = true;
+
+    const doRefresh = async (silent = true) => {
+      if (!isMounted) return;
+      setIsRefreshing(true);
+      try {
+        await refreshSalesData(silent);
+        if (isMounted) {
+          setLastUpdatedAt(new Date());
+          setSecondsUntilNextRefresh(60);
+        }
+      } catch (err) {
+        console.error('Erro no auto-refresh do relatório:', err);
+      } finally {
+        if (isMounted) {
+          setIsRefreshing(false);
+        }
+      }
+    };
+
+    // 1. Immediate refresh on mount (when clicking the tab)
+    doRefresh(true);
+
+    // 2. Refresh every 60 seconds (1 minute) continuously while open
+    const refreshInterval = setInterval(() => {
+      doRefresh(true);
+    }, 60000);
+
+    // 3. Countdown timer tick for smooth user feedback
+    const countdownInterval = setInterval(() => {
+      setSecondsUntilNextRefresh((prev) => (prev <= 1 ? 60 : prev - 1));
+    }, 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(refreshInterval);
+      clearInterval(countdownInterval);
+    };
+  }, [refreshSalesData]);
 
   // Modal: View and edit orders for a specific selected product
   const [selectedProductForOrders, setSelectedProductForOrders] = useState<{
@@ -400,11 +446,22 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       });
   }, [filteredOrders, customerSearch]);
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await refreshSalesData(false);
+    setLastUpdatedAt(new Date());
+    setSecondsUntilNextRefresh(60);
+    setIsRefreshing(false);
+  };
+
   const handleSync = async () => {
     setIsSyncing(true);
     await saveAllOrdersToCloud();
+    await refreshSalesData(true);
+    setLastUpdatedAt(new Date());
+    setSecondsUntilNextRefresh(60);
     setIsSyncing(false);
-    showToast('Relatório de vendas atualizado com a nuvem!');
+    showToast('Relatório de vendas sincronizado e salvo no banco!');
   };
 
   const getRankBadge = (index: number) => {
@@ -705,17 +762,24 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               <BarChart3 className="w-5 h-5 sm:w-6 sm:h-6" />
             </span>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base sm:text-xl font-black text-white tracking-tight">
                   Relatório de Vendas em Tempo Real
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider hidden sm:inline-flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Sync
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-sm">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500" />
+                  </span>
+                  Auto-sync 1 min ({secondsUntilNextRefresh}s)
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Métricas atualizadas automaticamente a cada pedido registrado.
+              <p className="text-xs text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                <span>Métricas atualizadas automaticamente ao abrir a aba e a cada 1 minuto.</span>
+                <span className="text-slate-500 hidden sm:inline">•</span>
+                <span className="text-slate-300 font-medium">
+                  Última atualização: <strong className="text-cyan-400">{lastUpdatedAt.toLocaleTimeString('pt-BR')}</strong>
+                </span>
               </p>
             </div>
           </div>
@@ -757,14 +821,15 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               <span className="sm:hidden">WhatsApp</span>
             </button>
 
-            {/* Sync Button */}
+            {/* Manual Refresh Button */}
             <button
-              onClick={handleSync}
-              disabled={isSyncing}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] min-w-[38px] flex items-center justify-center shrink-0 self-center sm:self-auto"
-              title="Atualizar dados em tempo real"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing || isSyncing}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] flex items-center justify-center gap-1.5 shrink-0 text-xs font-bold"
+              title="Recarregar dados de vendas agora"
             >
-              <RefreshCw className={`w-4 h-4 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isRefreshing || isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar Agora'}</span>
             </button>
           </div>
         </div>

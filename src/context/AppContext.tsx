@@ -129,6 +129,7 @@ interface AppContextType {
   deleteOrder: (orderId: string) => Promise<boolean>;
   clearAllOrders: () => Promise<void>;
   clearAllFinances: () => Promise<void>;
+  refreshSalesData: (silent?: boolean) => Promise<{ success: boolean; count: number }>;
 
   financialTransactions: FinancialTransaction[];
   addFinancialTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
@@ -1368,6 +1369,83 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
+  const refreshSalesData = async (silent = false): Promise<{ success: boolean; count: number }> => {
+    try {
+      if (!silent) {
+        showToast('Atualizando dados de vendas em tempo real...');
+      }
+      let fetchedOrders: Order[] = [];
+      let fetchedProducts: Product[] = [];
+
+      // 1. Fetch from Supabase if configured
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConfigured()) {
+        try {
+          const { data: ordData, error: ordErr } = await supabase
+            .from('orders')
+            .select('*')
+            .order('created_at', { ascending: false });
+          if (!ordErr && ordData) {
+            fetchedOrders = ordData.map(mapDBToOrder);
+          }
+
+          const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
+          if (!prodErr && prodData && prodData.length > 0) {
+            fetchedProducts = prodData.map(mapDBToProduct);
+          }
+        } catch (supErr) {
+          console.log('Supabase fetchSalesData notice:', supErr);
+        }
+      }
+
+      // 2. Fetch from Firestore fallback or complement
+      try {
+        const snap = await getDocs(collection(db, 'orders'));
+        if (!snap.empty) {
+          const firestoreOrders: Order[] = [];
+          snap.forEach((d) => {
+            firestoreOrders.push({ ...(d.data() as Order), id: d.id });
+          });
+
+          if (fetchedOrders.length === 0) {
+            fetchedOrders = firestoreOrders;
+          } else {
+            const map = new Map<string, Order>();
+            firestoreOrders.forEach((o) => map.set(o.id, o));
+            fetchedOrders.forEach((o) => map.set(o.id, o));
+            fetchedOrders = Array.from(map.values());
+          }
+        }
+      } catch (fireErr) {
+        console.log('Firestore fetchSalesData notice:', fireErr);
+      }
+
+      // Update state if we got data or need to sync
+      if (fetchedOrders.length > 0 || (supabase && isSupabaseConfigured())) {
+        fetchedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        setOrders(fetchedOrders);
+        localStorage.setItem('peptide_orders', JSON.stringify(fetchedOrders));
+      }
+
+      if (fetchedProducts.length > 0) {
+        setProducts(fetchedProducts);
+        localStorage.setItem('peptide_products', JSON.stringify(fetchedProducts));
+      }
+
+      if (!silent) {
+        showToast('Relatório de vendas 100% atualizado!');
+      }
+
+      return { success: true, count: fetchedOrders.length };
+    } catch (err) {
+      console.error('Erro ao atualizar dados de vendas:', err);
+      if (!silent) {
+        showToast('Erro ao atualizar dados de vendas.');
+      }
+      return { success: false, count: orders.length };
+    }
+  };
+
   const saveAllOrdersToCloud = async (): Promise<boolean> => {
     try {
       showToast('Sincronizando pedidos com o banco de dados...');
@@ -2454,6 +2532,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteOrder,
         clearAllOrders,
         clearAllFinances,
+        refreshSalesData,
         financialTransactions,
         addFinancialTransaction,
         deleteFinancialTransaction,
