@@ -187,6 +187,8 @@ interface AppContextType {
 
   currentView: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request';
   setCurrentView: (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request') => void;
+  isAdminLoading: boolean;
+  setIsAdminLoading: (loading: boolean) => void;
 
   activeNav: string;
   setActiveNav: (nav: string) => void;
@@ -766,7 +768,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
-  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request'>(() => {
+  const [currentView, setCurrentViewState] = useState<'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const page = (params.get('page') || params.get('view') || params.get('p') || '').toLowerCase();
@@ -784,6 +786,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return 'store';
   });
+
+  const [isAdminLoading, setIsAdminLoading] = useState(false);
+  const adminLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const setCurrentView = useCallback(
+    (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request') => {
+      if (view === 'admin') {
+        setIsAdminLoading(true);
+        if (adminLoadingTimerRef.current) {
+          clearTimeout(adminLoadingTimerRef.current);
+        }
+        adminLoadingTimerRef.current = setTimeout(() => {
+          setIsAdminLoading(false);
+        }, 950);
+      }
+      setCurrentViewState(view);
+    },
+    []
+  );
 
   // URL query parameters and hash routing listener
   useEffect(() => {
@@ -2758,6 +2779,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getProductRequestShareUrl,
         currentView,
         setCurrentView,
+        isAdminLoading,
+        setIsAdminLoading,
         activeNav,
         setActiveNav,
         infoModal,

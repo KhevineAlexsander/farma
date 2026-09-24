@@ -20,9 +20,15 @@ import { InfoModals } from './components/InfoModals';
 import { MobileBottomBar } from './components/MobileBottomBar';
 import { ScientificGuide } from './components/ScientificGuide';
 import { ProductRequestPage } from './components/ProductRequestPage';
+import { AdminLoadingScreen } from './components/AdminLoadingScreen';
 
 const MainLayout: React.FC = () => {
-  const { currentView, currentUser } = useApp();
+  const { currentView, currentUser, isAdminLoading } = useApp();
+
+  // Loading Screen with stylish progress bar when navigating to Admin Panel
+  if (isAdminLoading) {
+    return <AdminLoadingScreen />;
+  }
 
   // Direct dedicated view for Product Registration Form
   if (currentView === 'product-request') {

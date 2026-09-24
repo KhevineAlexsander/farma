@@ -100,7 +100,17 @@ export const ClientAccountModal: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            {currentUser?.role === 'ADMIN' && (
+              <button
+                onClick={() => setCurrentView('admin')}
+                className="px-3.5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-cyan-400 font-bold text-xs flex items-center gap-1.5 shadow-sm border border-slate-700 transition-colors cursor-pointer"
+                title="Acessar Painel ERP"
+              >
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                <span>Painel ERP</span>
+              </button>
+            )}
             <span className="text-xs text-slate-500 font-medium">Cadastrado desde: <strong>Setembro/2026</strong></span>
           </div>
         </div>
