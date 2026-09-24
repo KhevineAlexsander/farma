@@ -333,20 +333,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await supabase.from('store_settings').upsert(mapSettingsToDB(INITIAL_SETTINGS));
           }
 
-          // Fetch Orders
+          // Fetch Orders (Always merge with Firestore/Local to prevent losing orders)
           const { data: ordData, error: ordErr } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
           if (!ordErr && ordData) {
             const mapped = ordData.map(mapDBToOrder);
-            setOrders(mapped);
-            localStorage.setItem('peptide_orders', JSON.stringify(mapped));
+            setOrders((prev) => {
+              const orderMap = new Map<string, Order>();
+              // 1. Keep all current orders (e.g. 53 from Firestore or localStorage)
+              prev.forEach((o) => {
+                const k = o.id || o.orderNumber;
+                if (k) orderMap.set(k, o);
+              });
+              // 2. Merge with Supabase orders
+              mapped.forEach((o) => {
+                const k = o.id || o.orderNumber;
+                if (k) {
+                  const existing = orderMap.get(k);
+                  orderMap.set(k, { ...existing, ...o });
+                }
+              });
+              const merged = Array.from(orderMap.values());
+              merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+              localStorage.setItem('peptide_orders', JSON.stringify(merged));
+
+              // 3. Auto-sync: if Firestore has more orders than Supabase, immediately upload missing orders to Supabase
+              if (merged.length > mapped.length) {
+                const missingForSupabase = merged
+                  .filter((o) => !mapped.some((so) => (so.id && so.id === o.id) || (so.orderNumber && so.orderNumber === o.orderNumber)))
+                  .map(mapOrderToDB);
+                if (missingForSupabase.length > 0) {
+                  supabase.from('orders').upsert(missingForSupabase).then(({ error: upErr }) => {
+                    if (upErr) console.warn('Supabase missing orders replication note:', upErr.message);
+                    else console.log(`Auto-replicated ${missingForSupabase.length} missing orders to Supabase!`);
+                  });
+                }
+              }
+
+              return merged;
+            });
           }
 
-          // Fetch Financial Transactions
+          // Fetch Financial Transactions (Always merge to prevent truncating history)
           const { data: finData, error: finErr } = await supabase.from('financial_transactions').select('*').order('date', { ascending: false });
           if (!finErr && finData) {
             const mapped = finData.map(mapDBToFin);
-            setFinancialTransactions(mapped);
-            localStorage.setItem('peptide_finances', JSON.stringify(mapped));
+            setFinancialTransactions((prev) => {
+              const finMap = new Map<string, FinancialTransaction>();
+              prev.forEach((t) => finMap.set(t.id, t));
+              mapped.forEach((t) => {
+                const existing = finMap.get(t.id);
+                finMap.set(t.id, { ...existing, ...t });
+              });
+              const merged = Array.from(finMap.values());
+              merged.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+              localStorage.setItem('peptide_finances', JSON.stringify(merged));
+              return merged;
+            });
           }
         } catch (e) {
           console.log('Error initializing Supabase sync:', e);
@@ -371,8 +413,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
             if (data) {
               const mapped = data.map(mapDBToOrder);
-              setOrders(mapped);
-              localStorage.setItem('peptide_orders', JSON.stringify(mapped));
+              setOrders((prev) => {
+                const orderMap = new Map<string, Order>();
+                prev.forEach((o) => {
+                  const k = o.id || o.orderNumber;
+                  if (k) orderMap.set(k, o);
+                });
+                mapped.forEach((o) => {
+                  const k = o.id || o.orderNumber;
+                  if (k) {
+                    const existing = orderMap.get(k);
+                    orderMap.set(k, { ...existing, ...o });
+                  }
+                });
+                const merged = Array.from(orderMap.values());
+                merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+                localStorage.setItem('peptide_orders', JSON.stringify(merged));
+                return merged;
+              });
             }
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, async () => {
@@ -475,18 +533,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, () => {});
 
       unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-        if (isSupabaseConfigured()) {
-          // Supabase is the primary active database; do not overwrite with stale Firestore orders
-          return;
-        }
         if (!snapshot.empty) {
           const list: Order[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Order), id: d.id }));
-          list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-          setOrders(list);
-          localStorage.setItem('peptide_orders', JSON.stringify(list));
+          
+          setOrders((prev) => {
+            const orderMap = new Map<string, Order>();
+            // Keep all current orders
+            prev.forEach((o) => {
+              const k = o.id || o.orderNumber;
+              if (k) orderMap.set(k, o);
+            });
+            // Merge with Firestore orders
+            list.forEach((o) => {
+              const k = o.id || o.orderNumber;
+              if (k) {
+                const existing = orderMap.get(k);
+                orderMap.set(k, { ...existing, ...o });
+              }
+            });
+            const merged = Array.from(orderMap.values());
+            merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            localStorage.setItem('peptide_orders', JSON.stringify(merged));
+
+            // If Supabase is active, ensure any missing orders from Firestore are synced into Supabase
+            const supabaseClient = getSupabaseClient();
+            if (supabaseClient && isSupabaseConfigured() && merged.length > 0) {
+              const dbOrders = merged.map(mapOrderToDB);
+              supabaseClient.from('orders').upsert(dbOrders).then(({ error: upErr }) => {
+                if (upErr) console.warn('Supabase auto-replicate note:', upErr.message);
+              });
+            }
+
+            return merged;
+          });
         }
-      }, () => {});
+      }, (error) => {
+        console.warn('Firestore orders sync note:', error);
+      });
 
       unsubFinances = onSnapshot(collection(db, 'financialTransactions'), (snapshot) => {
         if (!snapshot.empty) {
@@ -1379,12 +1463,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!silent) {
         showToast('Atualizando dados de vendas em tempo real...');
       }
-      let fetchedOrders: Order[] = [];
+      const orderMap = new Map<string, Order>();
       let fetchedProducts: Product[] = [];
 
-      // 1. Fetch from Supabase if configured
+      // 1. Fetch from Firestore (Source of Truth with all 53 real orders)
+      try {
+        const snap = await getDocs(collection(db, 'orders'));
+        if (!snap.empty) {
+          snap.forEach((d) => {
+            const o = { ...(d.data() as Order), id: d.id };
+            const k = o.id || o.orderNumber;
+            if (k) orderMap.set(k, o);
+          });
+        }
+      } catch (fireErr) {
+        console.log('Firestore fetchSalesData notice:', fireErr);
+      }
+
+      // 2. Fetch from Supabase (if configured) and merge
       const supabase = getSupabaseClient();
-      let fetchedFromSupabase = false;
       if (supabase && isSupabaseConfigured()) {
         try {
           const { data: ordData, error: ordErr } = await supabase
@@ -1392,8 +1489,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             .select('*')
             .order('created_at', { ascending: false });
           if (!ordErr && ordData) {
-            fetchedOrders = ordData.map(mapDBToOrder);
-            fetchedFromSupabase = true;
+            const mapped = ordData.map(mapDBToOrder);
+            mapped.forEach((o) => {
+              const k = o.id || o.orderNumber;
+              if (k) {
+                const existing = orderMap.get(k);
+                orderMap.set(k, { ...existing, ...o });
+              }
+            });
           }
 
           const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
@@ -1405,27 +1508,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // 2. Fetch from Firestore ONLY as fallback when Supabase is not active or unreachable
-      if (!fetchedFromSupabase) {
-        try {
-          const snap = await getDocs(collection(db, 'orders'));
-          if (!snap.empty) {
-            const firestoreOrders: Order[] = [];
-            snap.forEach((d) => {
-              firestoreOrders.push({ ...(d.data() as Order), id: d.id });
-            });
-            fetchedOrders = firestoreOrders;
-          }
-        } catch (fireErr) {
-          console.log('Firestore fetchSalesData notice:', fireErr);
-        }
-      }
+      // 3. Final combined orders list
+      const finalOrders = Array.from(orderMap.values());
+      finalOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-      // Update state if we got data or need to sync
-      if (fetchedOrders.length > 0 || (supabase && isSupabaseConfigured())) {
-        fetchedOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        setOrders(fetchedOrders);
-        localStorage.setItem('peptide_orders', JSON.stringify(fetchedOrders));
+      if (finalOrders.length > 0) {
+        setOrders(finalOrders);
+        localStorage.setItem('peptide_orders', JSON.stringify(finalOrders));
+
+        // Replicate any missing orders to Supabase if Supabase is active
+        if (supabase && isSupabaseConfigured()) {
+          const dbOrders = finalOrders.map(mapOrderToDB);
+          supabase.from('orders').upsert(dbOrders).then(({ error: upErr }) => {
+            if (!upErr) console.log(`Synced ${dbOrders.length} orders to Supabase.`);
+          });
+        }
       }
 
       if (fetchedProducts.length > 0) {
@@ -1434,10 +1531,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (!silent) {
-        showToast('Relatório de vendas 100% atualizado!');
+        showToast(`Relatório de vendas 100% atualizado! Total: ${finalOrders.length} pedidos.`);
       }
 
-      return { success: true, count: fetchedOrders.length };
+      return { success: true, count: finalOrders.length };
     } catch (err) {
       console.error('Erro ao atualizar dados de vendas:', err);
       if (!silent) {

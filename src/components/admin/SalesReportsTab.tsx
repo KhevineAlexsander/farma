@@ -36,9 +36,16 @@ import {
   ChevronRight,
   User,
   Radio,
+  FileSpreadsheet,
+  FileText,
+  Download,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order } from '../../types';
+import {
+  exportSalesReportToExcel,
+  exportSalesReportToTxt,
+} from '../../utils/exportUtils';
 import {
   normalizeProductName,
   normalizeDosage,
@@ -141,6 +148,8 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     return localStorage.getItem('last_sales_report_wa_phone') || storeSettings.whatsappNumber || '';
   });
   const [includeCustomerRankingInWhatsApp, setIncludeCustomerRankingInWhatsApp] = useState<boolean>(false);
+  const [includeOrdersListInWhatsApp, setIncludeOrdersListInWhatsApp] = useState<boolean>(false);
+  const [whatsAppFormatMode, setWhatsAppFormatMode] = useState<'compact' | 'detailed'>('compact');
   const [whatsAppTopProductsLimit, setWhatsAppTopProductsLimit] = useState<number>(0); // 0 = Todos os produtos vendidos
   const [copiedSummary, setCopiedSummary] = useState(false);
 
@@ -262,7 +271,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   }, [filteredOrders]);
 
   // --- 1. PRODUTOS QUE MAIS SAEM (FOCO PRINCIPAL DO RELATÓRIO) ---
-  const { rankedProducts, totalUnitsSold, categoriesList } = useMemo(() => {
+  const { allPeriodRankedProducts, rankedProducts, totalUnitsSold, categoriesList } = useMemo(() => {
     const productMap = new Map<
       string,
       {
@@ -391,7 +400,12 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         return b.qtySold - a.qtySold;
       });
 
+    const allPeriodList = [...list].sort(
+      (a, b) => b.qtySold - a.qtySold || b.totalRevenue - a.totalRevenue
+    );
+
     return {
+      allPeriodRankedProducts: allPeriodList,
       rankedProducts: filteredList,
       totalUnitsSold: totalUnits,
       categoriesList: Array.from(categoriesSet).sort(),
@@ -537,7 +551,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         ? 'Apenas 100% Quitados'
         : statusFilterMode === 'pending'
         ? 'Apenas Pendentes'
-        : 'Todos os Pedidos Ativos';
+        : 'Todos os Pedidos Ativos (Com Pendentes)';
 
     const nowFormatted = new Date().toLocaleString('pt-BR');
 
@@ -556,25 +570,49 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       text += `• *Saldo a Receber (Parcial):* R$ ${metrics.totalPendingBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     }
 
-    const isShowingAll = whatsAppTopProductsLimit === 0 || whatsAppTopProductsLimit >= rankedProducts.length;
-    const listToShow = whatsAppTopProductsLimit > 0 ? rankedProducts.slice(0, whatsAppTopProductsLimit) : rankedProducts;
+    // Always use all products sold in the period without being truncated by search or category filter
+    const baseProductsList = allPeriodRankedProducts && allPeriodRankedProducts.length > 0 ? allPeriodRankedProducts : rankedProducts;
+    const isShowingAll = whatsAppTopProductsLimit === 0 || whatsAppTopProductsLimit >= baseProductsList.length;
+    const listToShow = whatsAppTopProductsLimit > 0 ? baseProductsList.slice(0, whatsAppTopProductsLimit) : baseProductsList;
 
     const sectionTitle = isShowingAll
-      ? `📦 *PRODUTOS VENDIDOS (${rankedProducts.length} itens no período):*`
-      : `📦 *PRODUTOS MAIS VENDIDOS (TOP ${listToShow.length} de ${rankedProducts.length}):*`;
+      ? `📦 *PRODUTOS VENDIDOS (${baseProductsList.length} itens no período):*`
+      : `📦 *PRODUTOS MAIS VENDIDOS (TOP ${listToShow.length} de ${baseProductsList.length}):*`;
 
     text += `\n${sectionTitle}\n`;
-    if (rankedProducts.length === 0) {
+    if (baseProductsList.length === 0) {
       text += `_Nenhum produto computado no período selecionado_\n`;
     } else {
-      listToShow.forEach((prod, idx) => {
-        const dosageStr = prod.dosage ? ` (${prod.dosage})` : '';
-        const pct = totalUnitsSold > 0 ? ((prod.qtySold / totalUnitsSold) * 100).toFixed(1) : '0';
-        text += `${idx + 1}º *${prod.name}${dosageStr}*\n`;
-        text += `   └ *${prod.qtySold} un.* vendida(s) (${pct}%) • R$ ${prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-      });
-      if (!isShowingAll && rankedProducts.length > listToShow.length) {
-        text += `_... e mais ${rankedProducts.length - listToShow.length} produto(s) vendidos_\n`;
+      if (whatsAppFormatMode === 'compact') {
+        // Compact 1-line format guarantees that 100% of products fit in WhatsApp without hitting browser GET URL truncation
+        listToShow.forEach((prod, idx) => {
+          const dosageStr = prod.dosage ? ` (${prod.dosage})` : '';
+          text += `${idx + 1}. *${prod.name}${dosageStr}* — ${prod.qtySold} un. | R$ ${prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+        });
+      } else {
+        listToShow.forEach((prod, idx) => {
+          const dosageStr = prod.dosage ? ` (${prod.dosage})` : '';
+          const pct = totalUnitsSold > 0 ? ((prod.qtySold / totalUnitsSold) * 100).toFixed(1) : '0';
+          text += `${idx + 1}º *${prod.name}${dosageStr}*\n`;
+          text += `   └ *${prod.qtySold} un.* vendida(s) (${pct}%) • R$ ${prod.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+        });
+      }
+      if (!isShowingAll && baseProductsList.length > listToShow.length) {
+        text += `_... e mais ${baseProductsList.length - listToShow.length} produto(s) vendidos_\n`;
+      }
+    }
+
+    // Optional Complete Orders List (All orders with details)
+    if (includeOrdersListInWhatsApp) {
+      text += `\n📋 *RELAÇÃO DE PEDIDOS (${filteredOrders.length} pedidos):*\n`;
+      if (filteredOrders.length === 0) {
+        text += `_Nenhum pedido no período selecionado_\n`;
+      } else {
+        filteredOrders.forEach((o, idx) => {
+          const client = o.customer?.name || 'Cliente';
+          const tot = (o.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+          text += `${idx + 1}. *${o.orderNumber}* • ${client} • R$ ${tot} (${o.status})\n`;
+        });
       }
     }
 
@@ -595,7 +633,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     return text;
   };
 
-  const handleSendSummaryToWhatsApp = () => {
+  const handleSendSummaryToWhatsApp = async () => {
     if (!whatsAppPhone.trim()) {
       showToast('Informe um número de WhatsApp com DDD.');
       return;
@@ -611,12 +649,25 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
 
     const fullNumber = cleanNumber.startsWith('55') && cleanNumber.length >= 12 ? cleanNumber : `55${cleanNumber}`;
     const text = generateSalesSummaryText();
+
+    // 1. Always copy the 100% complete text to clipboard so that no character is ever lost if WhatsApp limits URL query string
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedSummary(true);
+      setTimeout(() => setCopiedSummary(false), 3000);
+    } catch {}
+
     const encodedText = encodeURIComponent(text);
     const waUrl = `https://api.whatsapp.com/send?phone=${fullNumber}&text=${encodedText}`;
 
     window.open(waUrl, '_blank');
     setIsWhatsAppModalOpen(false);
-    showToast('Abrindo WhatsApp com o relatório de vendas!');
+
+    if (encodedText.length > 2000) {
+      showToast('Abrindo WhatsApp! Relatório 100% copiado para a Área de Transferência. Se o WhatsApp cortar o final pelo tamanho do link, basta dar Colar (Ctrl+V)!');
+    } else {
+      showToast('Abrindo WhatsApp com o relatório completo!');
+    }
   };
 
   const handleCopySummary = async () => {
@@ -628,6 +679,84 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       setTimeout(() => setCopiedSummary(false), 2500);
     } catch {
       showToast('Não foi possível copiar o texto automaticamente.');
+    }
+  };
+
+  const activePeriodLabel = useMemo(() => {
+    return timeFilter === 'today'
+      ? 'Hoje'
+      : timeFilter === 'yesterday'
+      ? 'Ontem'
+      : timeFilter === 'week'
+      ? 'Últimos 7 Dias'
+      : timeFilter === 'month'
+      ? 'Mês Atual'
+      : timeFilter === 'last_month'
+      ? 'Mês Anterior'
+      : 'Geral (Todo o Histórico)';
+  }, [timeFilter]);
+
+  const activeStatusLabel = useMemo(() => {
+    return statusFilterMode === 'confirmed_paid'
+      ? 'Apenas Pedidos Pagos & Em Andamento'
+      : statusFilterMode === 'fully_paid'
+      ? 'Apenas 100% Quitados'
+      : statusFilterMode === 'pending'
+      ? 'Apenas Pendentes'
+      : 'Todos os Pedidos Ativos (Com Pendentes)';
+  }, [statusFilterMode]);
+
+  const handleExportExcel = () => {
+    try {
+      const filename = exportSalesReportToExcel({
+        orders: filteredOrders,
+        rankedProducts: allPeriodRankedProducts && allPeriodRankedProducts.length > 0 ? allPeriodRankedProducts : rankedProducts,
+        metrics: {
+          totalRevenue: metrics.totalRevenue,
+          totalPaid: metrics.totalPaidInCash,
+          totalPendingBalance: metrics.totalPendingBalance,
+          ordersCount: metrics.ordersCount,
+          totalUnitsSold: totalUnitsSold,
+          averageTicket: metrics.averageTicket,
+          totalDiscounts: metrics.totalDiscount,
+          totalShipping: metrics.totalShipping,
+          paymentMethodsBreakdown: metrics.paymentMethodsCount,
+        },
+        timeFilterLabel: activePeriodLabel,
+        statusFilterLabel: activeStatusLabel,
+        storeName: storeSettings?.storeName || 'Peptide Imports Farma',
+      });
+      showToast(`📊 Relatório em Excel baixado: ${filename}`);
+    } catch (err: any) {
+      console.error('Erro ao exportar Excel:', err);
+      showToast('Erro ao gerar planilha Excel.');
+    }
+  };
+
+  const handleExportTxt = () => {
+    try {
+      const filename = exportSalesReportToTxt({
+        orders: filteredOrders,
+        rankedProducts: allPeriodRankedProducts && allPeriodRankedProducts.length > 0 ? allPeriodRankedProducts : rankedProducts,
+        metrics: {
+          totalRevenue: metrics.totalRevenue,
+          totalPaid: metrics.totalPaidInCash,
+          totalPendingBalance: metrics.totalPendingBalance,
+          ordersCount: metrics.ordersCount,
+          totalUnitsSold: totalUnitsSold,
+          averageTicket: metrics.averageTicket,
+          totalDiscounts: metrics.totalDiscount,
+          totalShipping: metrics.totalShipping,
+          paymentMethodsBreakdown: metrics.paymentMethodsCount,
+        },
+        timeFilterLabel: activePeriodLabel,
+        statusFilterLabel: activeStatusLabel,
+        storeName: storeSettings?.storeName || 'Peptide Imports Farma',
+      });
+      showToast(`📄 Relatório em TXT baixado: ${filename}`);
+    } catch (err: any) {
+      console.error('Erro ao exportar TXT:', err);
+      showToast('Erro ao gerar arquivo TXT.');
     }
   };
 
@@ -826,8 +955,8 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               ))}
             </div>
 
-            {/* Action Buttons: WhatsApp & Refresh */}
-            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            {/* Action Buttons: WhatsApp, Excel, TXT & Refresh */}
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
               <button
                 onClick={() => setIsWhatsAppModalOpen(true)}
                 className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[38px] whitespace-nowrap"
@@ -838,13 +967,31 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               </button>
 
               <button
+                onClick={handleExportExcel}
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 active:bg-emerald-800 text-emerald-300 border border-emerald-500/40 hover:border-emerald-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer min-h-[38px] whitespace-nowrap"
+                title="Exportar relatório completo em planilha Excel (.xlsx) com abas de Resumo, Produtos, Pedidos e Clientes"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Exportar Excel</span>
+              </button>
+
+              <button
+                onClick={handleExportTxt}
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 active:bg-cyan-800 text-cyan-300 border border-cyan-500/40 hover:border-cyan-400 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm cursor-pointer min-h-[38px] whitespace-nowrap"
+                title="Exportar relatório completo em arquivo de texto formatado (.txt)"
+              >
+                <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span>Exportar TXT</span>
+              </button>
+
+              <button
                 onClick={handleManualRefresh}
                 disabled={isRefreshing || isSyncing}
                 className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-700 text-slate-200 border border-slate-700 transition-colors cursor-pointer min-h-[38px] flex items-center justify-center gap-1.5 text-xs font-bold whitespace-nowrap"
                 title="Recarregar dados de vendas agora"
               >
                 <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 shrink-0 ${isRefreshing || isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? 'Atualizando...' : 'Atualizar Agora'}</span>
+                <span className="hidden xl:inline">{isRefreshing ? 'Atualizando...' : 'Atualizar'}</span>
               </button>
             </div>
           </div>
@@ -1911,11 +2058,44 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                 </div>
               </div>
 
-              {/* Options Box: Customer Ranking Optional & Product Limit */}
+              {/* Options Box: Period, Status, Format, Orders List, Products Limit */}
               <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
                   Opções de Formatação do Relatório:
                 </span>
+
+                {/* Period Selector in WhatsApp Modal */}
+                <div className="space-y-1.5 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-200 text-xs block">
+                      Período de Vendas:
+                    </span>
+                    <span className="text-[10px] text-cyan-400 font-mono">
+                      {orders.length} pedidos no sistema
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'all', label: `Geral (Todos)` },
+                      { id: 'month', label: 'Mês Atual' },
+                      { id: 'week', label: '7 Dias' },
+                      { id: 'today', label: 'Hoje' },
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setTimeFilter(p.id as any)}
+                        className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                          timeFilter === p.id
+                            ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                            : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {/* Pending vs Confirmed in WhatsApp Report */}
                 <div className="space-y-1.5 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
@@ -1923,18 +2103,6 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                     Tipo de Pedidos Computados:
                   </span>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setStatusFilterMode('confirmed_paid')}
-                      className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                        statusFilterMode === 'confirmed_paid'
-                          ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>Sem Pendentes ({periodOrdersStats.confirmedCount})</span>
-                    </button>
                     <button
                       type="button"
                       onClick={() => setStatusFilterMode('all_active')}
@@ -1947,26 +2115,56 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                       <Layers className="w-3.5 h-3.5" />
                       <span>Com Pendentes ({periodOrdersStats.totalActiveCount})</span>
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilterMode('confirmed_paid')}
+                      className={`p-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                        statusFilterMode === 'confirmed_paid'
+                          ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <CheckCircle className="w-3.5 h-3.5" />
+                      <span>Sem Pendentes ({periodOrdersStats.confirmedCount})</span>
+                    </button>
                   </div>
                 </div>
 
-                {/* Optional Customer Ranking Checkbox */}
-                <label className="flex items-center gap-2.5 cursor-pointer select-none p-2 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={includeCustomerRankingInWhatsApp}
-                    onChange={(e) => setIncludeCustomerRankingInWhatsApp(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-500 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
-                  />
-                  <div className="min-w-0 flex-1">
+                {/* Anti-Cut Message Format Selector */}
+                <div className="space-y-1.5 p-2 rounded-xl bg-slate-900/80 border border-slate-800">
+                  <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-200 text-xs block">
-                      Incluir Ranking de Maiores Compradores (Clientes)
+                      Formato da Mensagem (Anti-Corte WhatsApp):
                     </span>
-                    <span className="text-[10px] text-slate-400 block">
-                      {includeCustomerRankingInWhatsApp ? 'Ativado: O Top 5 clientes será incluído.' : 'Desativado: O relatório focará apenas nos produtos e números gerais.'}
+                    <span className="text-[10px] text-emerald-400 font-mono">
+                      {whatsAppFormatMode === 'compact' ? '✓ Modo Compacto (Cabe Tudo)' : 'Modo Detalhado'}
                     </span>
                   </div>
-                </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setWhatsAppFormatMode('compact')}
+                      className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                        whatsAppFormatMode === 'compact'
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      ⚡ Compacto (Anti-Corte)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setWhatsAppFormatMode('detailed')}
+                      className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                        whatsAppFormatMode === 'detailed'
+                          ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      Detalhado (2 Linhas/Item)
+                    </button>
+                  </div>
+                </div>
 
                 {/* Products in WhatsApp Selector */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
@@ -1974,13 +2172,13 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                     <span className="text-slate-200 font-bold text-xs block">Lista de Produtos Vendidos:</span>
                     <span className="text-[10px] text-slate-400">
                       {whatsAppTopProductsLimit === 0
-                        ? `Mostrando todos os ${rankedProducts.length} produtos vendidos`
-                        : `Mostrando os Top ${Math.min(whatsAppTopProductsLimit, rankedProducts.length)} de ${rankedProducts.length} produtos`}
+                        ? `Mostrando todos os ${allPeriodRankedProducts.length} produtos vendidos`
+                        : `Mostrando os Top ${Math.min(whatsAppTopProductsLimit, allPeriodRankedProducts.length)} de ${allPeriodRankedProducts.length} produtos`}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
                     {[
-                      { id: 0, label: `Todos (${rankedProducts.length})` },
+                      { id: 0, label: `Todos (${allPeriodRankedProducts.length})` },
                       { id: 10, label: 'Top 10' },
                       { id: 5, label: 'Top 5' },
                       { id: 3, label: 'Top 3' },
@@ -2000,6 +2198,42 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                     ))}
                   </div>
                 </div>
+
+                {/* Checkbox: Complete Orders List */}
+                <label className="flex items-center gap-2.5 cursor-pointer select-none p-2 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={includeOrdersListInWhatsApp}
+                    onChange={(e) => setIncludeOrdersListInWhatsApp(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-500 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-slate-200 text-xs block">
+                      Incluir Relação Completa de Pedidos ({filteredOrders.length} pedidos)
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {includeOrdersListInWhatsApp ? 'Ativado: Cada pedido com nº, cliente, valor e status será listado.' : 'Desativado: Exibe apenas o resumo financeiro e os produtos.'}
+                    </span>
+                  </div>
+                </label>
+
+                {/* Optional Customer Ranking Checkbox */}
+                <label className="flex items-center gap-2.5 cursor-pointer select-none p-2 rounded-xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={includeCustomerRankingInWhatsApp}
+                    onChange={(e) => setIncludeCustomerRankingInWhatsApp(e.target.checked)}
+                    className="w-4 h-4 rounded text-emerald-500 bg-slate-950 border-slate-700 focus:ring-0 cursor-pointer"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-bold text-slate-200 text-xs block">
+                      Incluir Ranking de Maiores Compradores (Clientes)
+                    </span>
+                    <span className="text-[10px] text-slate-400 block">
+                      {includeCustomerRankingInWhatsApp ? 'Ativado: O Top 5 clientes será incluído.' : 'Desativado: Focará nos produtos e métricas gerais.'}
+                    </span>
+                  </div>
+                </label>
               </div>
 
               {/* Preview Box */}
@@ -2031,43 +2265,78 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                 <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 font-mono text-[11px] leading-relaxed text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap select-all">
                   {generateSalesSummaryText()}
                 </div>
+
+                {generateSalesSummaryText().length > 1500 && (
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400 mt-0.5" />
+                    <div className="space-y-1">
+                      <strong className="block text-amber-200">Garantia Anti-Corte do WhatsApp:</strong>
+                      <p className="text-[11px] leading-relaxed text-amber-300/90">
+                        O relatório completo possui <strong>{generateSalesSummaryText().length} caracteres</strong>. Os navegadores ou o WhatsApp Web podem limitar mensagens enviadas via link direto. Por segurança, ao clicar em <strong>Enviar no WhatsApp</strong> (ou <strong>Copiar Relatório</strong>), o texto 100% completo é <strong>copiado automaticamente para sua Área de Transferência</strong>. Se o texto abrir encurtado, basta dar <strong>Colar (Ctrl+V)</strong> na conversa!
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Modal Actions Footer */}
-            <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-slate-800 shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsWhatsAppModalOpen(false)}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
-              >
-                Fechar
-              </button>
-              <button
-                type="button"
-                onClick={handleCopySummary}
-                className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors cursor-pointer text-xs font-bold flex items-center justify-center gap-1.5 min-h-[42px]"
-              >
-                {copiedSummary ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-400" />
-                    <span className="text-emerald-400 font-extrabold">Copiado com Sucesso!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Copiar Relatório</span>
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleSendSummaryToWhatsApp}
-                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[42px]"
-              >
-                <Send className="w-4 h-4" />
-                <span>Enviar no WhatsApp</span>
-              </button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 pt-3 border-t border-slate-800 shrink-0">
+              <div className="flex items-center gap-1.5 order-2 sm:order-1">
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[40px]"
+                  title="Exportar dados completos deste relatório em planilha Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Baixar Excel</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportTxt}
+                  className="flex-1 sm:flex-initial px-3 py-2 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/80 text-cyan-300 border border-cyan-500/40 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer min-h-[40px]"
+                  title="Exportar dados completos deste relatório em arquivo de texto (.txt)"
+                >
+                  <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Baixar TXT</span>
+                </button>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-center gap-2 order-1 sm:order-2">
+                <button
+                  type="button"
+                  onClick={() => setIsWhatsAppModalOpen(false)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[40px]"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopySummary}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors cursor-pointer text-xs font-bold flex items-center justify-center gap-1.5 min-h-[40px]"
+                >
+                  {copiedSummary ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-extrabold">Copiado com Sucesso!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Relatório</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendSummaryToWhatsApp}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[40px]"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Enviar no WhatsApp</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

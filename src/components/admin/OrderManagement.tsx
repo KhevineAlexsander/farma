@@ -37,10 +37,15 @@ import {
   Share2,
   Check,
   ArrowLeft,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
+import {
+  exportOrdersListToExcel,
+  exportOrdersListToTxt,
+} from '../../utils/exportUtils';
 
 export interface OrderManagementProps {
   initialEditingOrderId?: string | null;
@@ -65,6 +70,8 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     currentUser,
     storeSettings,
     saveAllOrdersToCloud,
+    refreshSalesData,
+    showToast,
   } = useApp();
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
@@ -318,6 +325,9 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
   const handleSaveOrdersToCloud = async () => {
     setIsSavingOrders(true);
+    // 1. Refresh from both Firestore and Supabase to ensure all 53 orders are unified
+    await refreshSalesData(true);
+    // 2. Persist full list to both cloud storages
     const success = await saveAllOrdersToCloud();
     setIsSavingOrders(false);
     if (success) {
@@ -704,6 +714,28 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     });
   }, [orders, statusFilter, searchTerm, productSearchFilter]);
 
+  const handleExportOrdersExcel = () => {
+    try {
+      const title = statusFilter === 'Todos' ? 'todos_pedidos' : statusFilter.toLowerCase().replace(/\s+/g, '_');
+      const filename = exportOrdersListToExcel(filteredOrders, title, storeSettings?.storeName || 'Peptide Imports Farma');
+      showToast(`📊 Planilha Excel com ${filteredOrders.length} pedidos baixada: ${filename}`);
+    } catch (err: any) {
+      console.error(err);
+      showToast('Erro ao exportar pedidos em Excel.');
+    }
+  };
+
+  const handleExportOrdersTxt = () => {
+    try {
+      const title = statusFilter === 'Todos' ? 'todos_pedidos' : statusFilter.toLowerCase().replace(/\s+/g, '_');
+      const filename = exportOrdersListToTxt(filteredOrders, title, storeSettings?.storeName || 'Peptide Imports Farma');
+      showToast(`📄 Arquivo TXT com ${filteredOrders.length} pedidos baixado: ${filename}`);
+    } catch (err: any) {
+      console.error(err);
+      showToast('Erro ao exportar pedidos em TXT.');
+    }
+  };
+
   const getStatusBadge = (status: OrderStatus) => {
     switch (status) {
       case 'Entregue':
@@ -955,6 +987,24 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
             <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSavingOrders ? 'animate-spin' : ''}`} />
             <span className="hidden sm:inline">{isSavingOrders ? 'Salvando...' : 'Nuvem'}</span>
             {lastSaved && <span className="text-[10px] text-emerald-400 font-mono hidden md:inline">({lastSaved})</span>}
+          </button>
+
+          <button
+            onClick={handleExportOrdersExcel}
+            className="px-3 py-1.5 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+            title="Exportar pedidos da listagem em planilha Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+
+          <button
+            onClick={handleExportOrdersTxt}
+            className="px-3 py-1.5 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+            title="Exportar pedidos da listagem em arquivo TXT (.txt)"
+          >
+            <FileText className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">TXT</span>
           </button>
         </div>
       </div>
