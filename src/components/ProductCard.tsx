@@ -13,7 +13,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
   return (
-    <div className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col justify-between overflow-hidden group relative ${
+    <div className={`bg-white rounded-2xl border apple-card-hover flex flex-col justify-between overflow-hidden group relative ${
       product.isPromotion
         ? 'border-rose-300 shadow-md shadow-rose-500/5 hover:border-rose-400'
         : product.featured

@@ -175,7 +175,7 @@ export const Navbar: React.FC = () => {
             {/* Search Button & Search input */}
             <div className="relative">
               {isSearchOpen ? (
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center bg-slate-900 border border-cyan-500/50 rounded-full px-3 py-1.5 shadow-lg w-64 z-50">
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center bg-slate-900 border border-cyan-500/50 rounded-full px-3 py-1.5 shadow-lg w-64 z-50 apple-dropdown-menu">
                   <Search className="w-4 h-4 text-cyan-400 mr-2 shrink-0" />
                   <input
                     type="text"
@@ -233,7 +233,7 @@ export const Navbar: React.FC = () => {
                   </button>
 
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-[#0F172A] border border-slate-700 rounded-xl shadow-2xl py-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-0 mt-2 w-56 bg-[#0F172A] border border-slate-700 rounded-xl shadow-2xl py-2 z-50 apple-dropdown-menu">
                       <div className="px-4 py-2 border-b border-slate-800">
                         <p className="text-xs text-slate-400">Logado como</p>
                         <p className="text-sm font-semibold text-white truncate">{currentUser.name || 'Usuário'}</p>
@@ -326,7 +326,7 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Slide-down Navigation Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-[#0B0F17] border-b border-slate-800 px-4 pt-2 pb-6 space-y-3">
+        <div className="lg:hidden bg-[#0B0F17] border-b border-slate-800 px-4 pt-2 pb-6 space-y-3 apple-dropdown-menu">
           <div className="flex flex-col space-y-2">
             {[
               { id: 'Início', label: 'Início' },

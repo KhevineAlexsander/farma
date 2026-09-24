@@ -1,6 +1,13 @@
 @import "tailwindcss";
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   }
@@ -9,6 +16,159 @@
     font-family: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
   }
 }
+
+/* ==========================================================================
+   MICROINTERAÇÕES & ANIMAÇÕES APPLE/MACBOOK (FLUIDEZ & NATURALIDADE)
+   ========================================================================== */
+
+:root {
+  --ease-apple: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-apple-spring: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Sensação física e natural aos botões padrão Apple (hover translateY(-1px) & active scale(0.98)) */
+button, [role="button"] {
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):hover,
+  [role="button"]:not([aria-disabled="true"]):hover {
+    transform: translateY(-1px);
+  }
+}
+
+button:not(:disabled):active,
+[role="button"]:not([aria-disabled="true"]):active {
+  transform: scale(0.98);
+}
+
+/* Transições fluidas para inputs, selects e textareas */
+input, select, textarea {
+  transition: border-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              background-color 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+              transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+input:focus, select:focus, textarea:focus {
+  transform: translateY(-0.5px);
+}
+
+/* ==========================================================================
+   KEYFRAMES E CLASSES DE MOVIMENTO SUAVE
+   ========================================================================== */
+
+/* Entrada suave de modais (opacity: 0 -> 1, scale: 0.98 -> 1, translateY: 8px -> 0) */
+@keyframes appleModalIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Entrada de overlay com desfoque progressivo */
+@keyframes appleOverlayIn {
+  0% {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    backdrop-filter: blur(4px);
+  }
+}
+
+/* Entrada suave de dropdowns e menus (opacity: 0 -> 1, scale: 0.98 -> 1, translateY: -4px -> 0) */
+@keyframes appleDropdownIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Entrada suave do carrinho slide-over lateral */
+@keyframes appleDrawerIn {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+/* Entrada suave em cascata para elementos na tela (opacity: 0 -> 1, translateY: 15px -> 0) */
+@keyframes appleFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.apple-modal-content {
+  animation: appleModalIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.apple-overlay-bg {
+  animation: appleOverlayIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: opacity, backdrop-filter;
+}
+
+.apple-dropdown-menu {
+  animation: appleDropdownIn 0.24s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  transform-origin: top right;
+  will-change: transform, opacity;
+}
+
+.apple-drawer-panel {
+  animation: appleDrawerIn 0.38s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform;
+}
+
+.apple-fade-in-up {
+  animation: appleFadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Microinteração elegante para cards de produtos e benefícios */
+.apple-card-hover {
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .apple-card-hover:hover {
+    transform: translateY(-2px) scale(1.01);
+  }
+}
+
+.apple-card-hover:active {
+  transform: scale(0.995);
+}
+
+/* Delays escalonados para entradas harmoniosas */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
 
 /* Custom stylish scrollbar */
 ::-webkit-scrollbar {
@@ -72,5 +232,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
   .barra__trilho { animation: none; width: 100%; opacity: 0.5; }
+  .apple-card-hover:hover,
+  button:not(:disabled):hover,
+  [role="button"]:not([aria-disabled="true"]):hover,
+  input:focus, select:focus, textarea:focus {
+    transform: none !important;
+  }
 }

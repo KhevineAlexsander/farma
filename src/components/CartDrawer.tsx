@@ -54,11 +54,11 @@ export const CartDrawer: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 overflow-hidden bg-black/60 backdrop-blur-xs apple-overlay-bg">
       <div className="absolute inset-0" onClick={() => setIsCartOpen(false)} />
 
       <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-        <div className="w-screen max-w-md bg-white text-slate-900 shadow-2xl flex flex-col justify-between">
+        <div className="w-screen max-w-md bg-white text-slate-900 shadow-2xl flex flex-col justify-between apple-drawer-panel">
           
           {/* Header */}
           <div className="p-5 sm:p-6 border-b border-slate-200 flex items-center justify-between bg-slate-50">
