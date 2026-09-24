@@ -231,8 +231,8 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Right Header Actions */}
             <div className="flex items-center gap-2.5">
-              {/* Cashier & Purchases Suspension Button */}
-              {permissions.canManageSettings && (
+              {/* Cashier & Purchases Suspension Button (Exclusivo Adm Master) */}
+              {isMasterAdmin && (
                 <button
                   onClick={() => {
                     setCustomSuspensionMsg(storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. Voltaremos em breve!');

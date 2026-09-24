@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Settings,
   MessageSquare,
@@ -37,7 +37,8 @@ import { INITIAL_SETTINGS } from '../../data/mockData';
 import { isSupabaseConfigured, setSupabaseCredentials, testSupabaseConnection } from '../../lib/supabase';
 
 export const StoreSettingsTab: React.FC = () => {
-  const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast, isSupabaseActive } = useApp();
+  const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast, isSupabaseActive, currentUser } = useApp();
+  const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
   const [isSaving, setIsSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -85,6 +86,34 @@ export const StoreSettingsTab: React.FC = () => {
     suspensionMessage: storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!',
     suspensionEstimatedReturn: storeSettings.suspensionEstimatedReturn || 'Voltaremos em breve',
   });
+
+  // Keep form synchronized when storeSettings is updated from Firebase Firestore in real-time
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      storeName: storeSettings.storeName ?? prev.storeName,
+      whatsappNumber: storeSettings.whatsappNumber ?? prev.whatsappNumber,
+      whatsappDisplay: storeSettings.whatsappDisplay ?? prev.whatsappDisplay,
+      supportEmail: storeSettings.supportEmail ?? prev.supportEmail,
+      heroBadge: storeSettings.heroBadge ?? prev.heroBadge,
+      heroTitle: storeSettings.heroTitle ?? prev.heroTitle,
+      heroSubtitle: storeSettings.heroSubtitle ?? prev.heroSubtitle,
+      announcementBar: storeSettings.announcementBar ?? prev.announcementBar,
+      checkoutNotice: storeSettings.checkoutNotice ?? prev.checkoutNotice,
+      deliveryFee: storeSettings.deliveryFee ?? prev.deliveryFee,
+      pickupEnabled: storeSettings.pickupEnabled ?? prev.pickupEnabled,
+      pickupAddress: storeSettings.pickupAddress ?? prev.pickupAddress,
+      pickupEstimatedTime: storeSettings.pickupEstimatedTime ?? prev.pickupEstimatedTime,
+      couponsEnabled: storeSettings.couponsEnabled ?? prev.couponsEnabled,
+      siteUrl: storeSettings.siteUrl ?? prev.siteUrl,
+      vercelDomain: storeSettings.vercelDomain ?? prev.vercelDomain,
+      customDomainNotes: storeSettings.customDomainNotes ?? prev.customDomainNotes,
+      purchasesSuspended: storeSettings.purchasesSuspended ?? prev.purchasesSuspended,
+      suspensionTitle: storeSettings.suspensionTitle || prev.suspensionTitle,
+      suspensionMessage: storeSettings.suspensionMessage || prev.suspensionMessage,
+      suspensionEstimatedReturn: storeSettings.suspensionEstimatedReturn || prev.suspensionEstimatedReturn,
+    }));
+  }, [storeSettings]);
 
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -557,15 +586,26 @@ export const StoreSettingsTab: React.FC = () => {
                 </div>
 
                 {/* Switch Toggle */}
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.purchasesSuspended}
-                    onChange={(e) => handleChange('purchasesSuspended', e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
-                </label>
+                <div className="flex items-center gap-2">
+                  {!isMasterAdmin && (
+                    <span className="text-[10px] text-amber-400 font-semibold bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
+                      Exclusivo ADM Master
+                    </span>
+                  )}
+                  <label className={`relative inline-flex items-center ${isMasterAdmin ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    <input
+                      type="checkbox"
+                      disabled={!isMasterAdmin}
+                      checked={formData.purchasesSuspended}
+                      onChange={(e) => {
+                        if (!isMasterAdmin) return;
+                        handleChange('purchasesSuspended', e.target.checked);
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-12 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
               </div>
 
               {formData.purchasesSuspended && (

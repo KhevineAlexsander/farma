@@ -328,6 +328,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...INITIAL_SETTINGS,
               ...prev,
               ...mapped,
+              purchasesSuspended: settData.purchases_suspended !== undefined && settData.purchases_suspended !== null
+                ? Boolean(settData.purchases_suspended)
+                : Boolean(prev.purchasesSuspended),
             }));
           } else if (!settData) {
             await supabase.from('store_settings').upsert(mapSettingsToDB(INITIAL_SETTINGS));
@@ -516,19 +519,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }, () => {});
 
+      // Direct initial hydration of settings from Firebase Firestore
+      getDoc(doc(db, 'settings', 'config'))
+        .then((docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data() as StoreSettings;
+            setStoreSettings((prev) => {
+              const merged: StoreSettings = {
+                ...INITIAL_SETTINGS,
+                ...prev,
+                ...data,
+                purchasesSuspended: data.purchasesSuspended !== undefined ? Boolean(data.purchasesSuspended) : Boolean(prev.purchasesSuspended),
+                suspensionTitle: data.suspensionTitle || prev.suspensionTitle || INITIAL_SETTINGS.suspensionTitle,
+                suspensionMessage: data.suspensionMessage || prev.suspensionMessage || INITIAL_SETTINGS.suspensionMessage,
+                suspensionEstimatedReturn: data.suspensionEstimatedReturn || prev.suspensionEstimatedReturn || INITIAL_SETTINGS.suspensionEstimatedReturn,
+                deliveryFee: typeof data.deliveryFee === 'number' ? data.deliveryFee : prev.deliveryFee,
+              };
+              localStorage.setItem('peptide_settings', JSON.stringify(merged));
+              return merged;
+            });
+          }
+        })
+        .catch(() => {});
+
       unsubSettings = onSnapshot(doc(db, 'settings', 'config'), async (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data() as StoreSettings;
           setStoreSettings((prev) => {
-            const merged = {
+            const merged: StoreSettings = {
               ...INITIAL_SETTINGS,
               ...prev,
               ...data,
+              purchasesSuspended: data.purchasesSuspended !== undefined ? Boolean(data.purchasesSuspended) : Boolean(prev.purchasesSuspended),
+              suspensionTitle: data.suspensionTitle || prev.suspensionTitle || INITIAL_SETTINGS.suspensionTitle,
+              suspensionMessage: data.suspensionMessage || prev.suspensionMessage || INITIAL_SETTINGS.suspensionMessage,
+              suspensionEstimatedReturn: data.suspensionEstimatedReturn || prev.suspensionEstimatedReturn || INITIAL_SETTINGS.suspensionEstimatedReturn,
               deliveryFee: typeof data.deliveryFee === 'number' ? data.deliveryFee : prev.deliveryFee,
             };
             localStorage.setItem('peptide_settings', JSON.stringify(merged));
             return merged;
           });
+        } else {
+          try {
+            const current = localStorage.getItem('peptide_settings');
+            const toSave = current ? JSON.parse(current) : INITIAL_SETTINGS;
+            await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(toSave), { merge: true });
+          } catch (e) {
+            console.log('Error initializing settings in Firestore:', e);
+          }
         }
       }, () => {});
 
@@ -1645,21 +1683,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setStoreSettings(updated);
       localStorage.setItem('peptide_settings', JSON.stringify(updated));
 
+      // 1. Primary write to Firebase Firestore
+      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(updated), { merge: true });
+
+      // 2. Secondary write to Supabase if configured
       const supabase = getSupabaseClient();
       if (supabase) {
         await supabase.from('store_settings').upsert(mapSettingsToDB(updated));
       }
-      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(updated), { merge: true });
 
       if (nextState) {
-        showToast('⏸️ Caixa em Fechamento: Compras suspensas temporariamente no site!');
+        showToast('⏸️ Caixa em Fechamento: Compras suspensas e fixadas no Firebase Firestore!');
       } else {
-        showToast('🟢 Loja Reaberta: Compras e checkout liberados com sucesso!');
+        showToast('🟢 Loja Reaberta: Compras liberadas e sincronizadas no Firebase!');
       }
       return true;
     } catch (err) {
       console.error('Erro ao alterar status de suspensão de compras:', err);
-      showToast('Erro ao atualizar status do caixa da loja.');
+      showToast('Erro ao atualizar status do caixa no Firebase.');
       return false;
     }
   };
@@ -1669,20 +1710,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const merged: StoreSettings = {
         ...storeSettings,
         ...(customSettings || {}),
+        purchasesSuspended: customSettings?.purchasesSuspended !== undefined 
+          ? Boolean(customSettings.purchasesSuspended) 
+          : Boolean(storeSettings.purchasesSuspended),
       };
       setStoreSettings(merged);
       localStorage.setItem('peptide_settings', JSON.stringify(merged));
 
+      // 1. Primary write to Firebase Firestore
+      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(merged), { merge: true });
+
+      // 2. Secondary write to Supabase if configured
       const supabase = getSupabaseClient();
       if (supabase) {
         await supabase.from('store_settings').upsert(mapSettingsToDB(merged));
       }
-      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(merged), { merge: true });
-      showToast('Configurações da loja salvas no banco e aplicadas ao site em tempo real!');
+      showToast('Configurações salvas e sincronizadas no Firebase Firestore!');
       return true;
     } catch (err) {
       console.error('Erro ao salvar configurações:', err);
-      showToast('Erro ao salvar configurações no banco de dados.');
+      showToast('Erro ao salvar configurações no Firebase.');
       return false;
     }
   };

@@ -73,6 +73,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     refreshSalesData,
     showToast,
   } = useApp();
+  const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [productSearchFilter, setProductSearchFilter] = useState<string>('');
@@ -978,16 +979,18 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
             <span>Aguardando Baixa: <strong>{pendingCount}</strong></span>
           </button>
 
-          <button
-            onClick={handleSaveOrdersToCloud}
-            disabled={isSavingOrders}
-            className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
-            title="Sincronizar pedidos com a nuvem"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSavingOrders ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">{isSavingOrders ? 'Salvando...' : 'Nuvem'}</span>
-            {lastSaved && <span className="text-[10px] text-emerald-400 font-mono hidden md:inline">({lastSaved})</span>}
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={handleSaveOrdersToCloud}
+              disabled={isSavingOrders}
+              className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+              title="Sincronizar pedidos com a nuvem (Exclusivo ADM Master)"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSavingOrders ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{isSavingOrders ? 'Salvando...' : 'Nuvem'}</span>
+              {lastSaved && <span className="text-[10px] text-emerald-400 font-mono hidden md:inline">({lastSaved})</span>}
+            </button>
+          )}
 
           <button
             onClick={handleExportOrdersExcel}

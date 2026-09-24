@@ -65,11 +65,24 @@
     },
     "settings": {
       "title": "Store Settings",
-      "description": "Global store configuration",
+      "description": "Global store configuration and cashier suspension state",
       "type": "object",
       "properties": {
         "storeName": { "type": "string" },
-        "freeShippingMinAmount": { "type": "number" }
+        "freeShippingMinAmount": { "type": "number" },
+        "purchasesSuspended": { "type": "boolean" },
+        "suspensionTitle": { "type": "string" },
+        "suspensionMessage": { "type": "string" },
+        "suspensionEstimatedReturn": { "type": "string" },
+        "whatsappNumber": { "type": "string" },
+        "whatsappDisplay": { "type": "string" },
+        "supportEmail": { "type": "string" },
+        "deliveryFee": { "type": "number" },
+        "pickupEnabled": { "type": "boolean" },
+        "announcementBar": { "type": "string" },
+        "checkoutNotice": { "type": "string" },
+        "siteUrl": { "type": "string" },
+        "updatedAt": { "type": "string" }
       }
     },
     "financialTransactions": {
