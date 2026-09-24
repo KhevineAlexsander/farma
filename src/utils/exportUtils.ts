@@ -658,3 +658,121 @@ export function exportOrdersListToTxt(
 
   return filename;
 }
+
+export interface ExportCashFlowOptions {
+  periodLabel: string;
+  storeName?: string;
+  metrics: {
+    totalSalesRevenue: number;
+    totalExtraIncome: number;
+    totalExpenses: number;
+    netCashBalance: number;
+    ordersCount: number;
+    paidOrdersCount: number;
+    averageTicket: number;
+  };
+  expenses: Array<{
+    id: string;
+    date: string;
+    category: string;
+    description: string;
+    amount: number;
+    paymentMethod?: string;
+    notes?: string;
+  }>;
+  transactions: Array<{
+    id: string;
+    date: string;
+    type: 'ENTRADA' | 'SAIDA';
+    category: string;
+    description: string;
+    amount: number;
+    paymentMethod?: string;
+  }>;
+  expensesByCategory: Record<string, number>;
+}
+
+/**
+ * Exports complete Cash Flow and Expenses Report to Excel
+ */
+export function exportCashFlowToExcel(options: ExportCashFlowOptions) {
+  const {
+    periodLabel,
+    storeName = 'Peptide Imports Farma',
+    metrics,
+    expenses,
+    transactions,
+    expensesByCategory,
+  } = options;
+
+  const wb = XLSX.utils.book_new();
+  const dateStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+
+  // Sheet 1: Resumo do Caixa
+  const summaryAoa: any[][] = [
+    [`${storeName.toUpperCase()} - CONTROLE DE CAIXA & FLUXO FINANCEIRO`],
+    ['Emitido em:', `${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR')}`],
+    ['Período:', periodLabel],
+    [''],
+    ['INDICADOR DE CAIXA', 'VALOR (R$)'],
+    ['(+) Faturamento Total de Vendas', metrics.totalSalesRevenue],
+    ['(+) Outras Entradas / Aportes', metrics.totalExtraIncome],
+    ['(=) TOTAL DE ENTRADAS EM CAIXA', metrics.totalSalesRevenue + metrics.totalExtraIncome],
+    ['(-) TOTAL DE DESPESAS / SAÍDAS', metrics.totalExpenses],
+    ['(=) SALDO LÍQUIDO DO CAIXA', metrics.netCashBalance],
+    [''],
+    ['Total de Pedidos Faturados', metrics.paidOrdersCount],
+    ['Ticket Médio de Vendas', metrics.averageTicket],
+    [''],
+    ['DESPESAS POR CATEGORIA', 'VALOR TOTAL (R$)', '% DO TOTAL'],
+  ];
+
+  const totalExp = metrics.totalExpenses || 1;
+  Object.entries(expensesByCategory).forEach(([cat, val]) => {
+    const pct = ((val / totalExp) * 100).toFixed(1) + '%';
+    summaryAoa.push([cat, val, pct]);
+  });
+
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryAoa);
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo do Caixa');
+
+  // Sheet 2: Despesas Detalhadas
+  const expensesAoa: any[][] = [
+    ['Data', 'Categoria', 'Descrição / Fornecedor', 'Forma de Pagamento', 'Valor (R$)', 'Observações'],
+  ];
+  expenses.forEach((e) => {
+    expensesAoa.push([
+      new Date(e.date).toLocaleDateString('pt-BR'),
+      e.category || 'Geral',
+      e.description || '—',
+      e.paymentMethod || '—',
+      e.amount || 0,
+      e.notes || '',
+    ]);
+  });
+  const wsExpenses = XLSX.utils.aoa_to_sheet(expensesAoa);
+  XLSX.utils.book_append_sheet(wb, wsExpenses, 'Despesas Lançadas');
+
+  // Sheet 3: Extrato Geral de Caixa
+  const txAoa: any[][] = [
+    ['Data', 'Tipo', 'Categoria', 'Descrição / Origem', 'Forma Pagto', 'Entrada (R$)', 'Saída (R$)'],
+  ];
+  transactions.forEach((t) => {
+    const isEntrada = t.type === 'ENTRADA';
+    txAoa.push([
+      new Date(t.date).toLocaleDateString('pt-BR'),
+      isEntrada ? 'ENTRADA' : 'SAÍDA',
+      t.category || '—',
+      t.description || '—',
+      t.paymentMethod || '—',
+      isEntrada ? t.amount : 0,
+      !isEntrada ? t.amount : 0,
+    ]);
+  });
+  const wsTx = XLSX.utils.aoa_to_sheet(txAoa);
+  XLSX.utils.book_append_sheet(wb, wsTx, 'Extrato Completo');
+
+  const filename = `controle_de_caixa_${dateStr}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  return filename;
+}

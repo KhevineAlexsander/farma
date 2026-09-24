@@ -72,6 +72,10 @@ export interface FinancialTransaction {
   category: string;
   amount: number;
   orderId?: string;
+  paymentMethod?: string;
+  notes?: string;
+  createdBy?: string;
+  supplier?: string;
 }
 
 export type UserRole = 'CLIENTE' | 'ADMIN';

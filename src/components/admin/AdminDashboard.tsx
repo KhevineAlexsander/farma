@@ -154,7 +154,7 @@ export const AdminDashboard: React.FC = () => {
     },
     {
       id: 'finances' as const,
-      label: 'Finanças & DRE',
+      label: 'Controle de Caixa & Despesas',
       icon: DollarSign,
       badge: null,
       visible: permissions.canManageFinances,
