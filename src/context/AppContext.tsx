@@ -154,6 +154,7 @@ interface AppContextType {
 
   storeSettings: StoreSettings;
   updateStoreSettings: (settings: Partial<StoreSettings>) => void;
+  toggleStorePurchasesSuspension: (targetSuspended?: boolean, customMessage?: string, customTitle?: string) => Promise<boolean>;
   deliveryFee: number;
 
   // Supabase & Database State
@@ -1530,6 +1531,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const toggleStorePurchasesSuspension = async (
+    targetSuspended?: boolean,
+    customMessage?: string,
+    customTitle?: string
+  ): Promise<boolean> => {
+    try {
+      const nextState = targetSuspended !== undefined ? targetSuspended : !storeSettings.purchasesSuspended;
+      const updated: StoreSettings = {
+        ...storeSettings,
+        purchasesSuspended: nextState,
+        ...(customMessage ? { suspensionMessage: customMessage } : {}),
+        ...(customTitle ? { suspensionTitle: customTitle } : {}),
+      };
+
+      setStoreSettings(updated);
+      localStorage.setItem('peptide_settings', JSON.stringify(updated));
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        await supabase.from('store_settings').upsert(mapSettingsToDB(updated));
+      }
+      await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(updated), { merge: true });
+
+      if (nextState) {
+        showToast('⏸️ Caixa em Fechamento: Compras suspensas temporariamente no site!');
+      } else {
+        showToast('🟢 Loja Reaberta: Compras e checkout liberados com sucesso!');
+      }
+      return true;
+    } catch (err) {
+      console.error('Erro ao alterar status de suspensão de compras:', err);
+      showToast('Erro ao atualizar status do caixa da loja.');
+      return false;
+    }
+  };
+
   const saveAllSettingsToCloud = async (customSettings?: Partial<StoreSettings>): Promise<boolean> => {
     try {
       const merged: StoreSettings = {
@@ -2553,6 +2590,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         couponDiscount,
         storeSettings,
         updateStoreSettings,
+        toggleStorePurchasesSuspension,
         deliveryFee,
         isSupabaseActive,
         supabaseConfigured,

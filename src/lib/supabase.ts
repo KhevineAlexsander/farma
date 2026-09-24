@@ -289,6 +289,10 @@ export const mapSettingsToDB = (s: StoreSettings) => ({
   site_url: s.siteUrl || 'https://peptideimports.vercel.app',
   vercel_domain: s.vercelDomain || 'peptideimports.vercel.app',
   custom_domain_notes: s.customDomainNotes || '',
+  purchases_suspended: s.purchasesSuspended ?? false,
+  suspension_title: s.suspensionTitle || 'Estamos Fechando o Caixa',
+  suspension_message: s.suspensionMessage || 'Estamos fechando o caixa no momento. Voltaremos em breve!',
+  suspension_estimated_return: s.suspensionEstimatedReturn || 'Voltaremos em breve',
   updated_at: new Date().toISOString(),
 });
 
@@ -312,4 +316,8 @@ export const mapDBToSettings = (d: any): Partial<StoreSettings> => ({
   siteUrl: d.site_url || 'https://peptideimports.vercel.app',
   vercelDomain: d.vercel_domain || 'peptideimports.vercel.app',
   customDomainNotes: d.custom_domain_notes || '',
+  purchasesSuspended: Boolean(d.purchases_suspended),
+  suspensionTitle: d.suspension_title || 'Estamos Fechando o Caixa',
+  suspensionMessage: d.suspension_message || 'Estamos fechando o caixa no momento. Voltaremos em breve!',
+  suspensionEstimatedReturn: d.suspension_estimated_return || 'Voltaremos em breve',
 });

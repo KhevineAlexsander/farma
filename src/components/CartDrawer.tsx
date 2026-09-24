@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, ShieldCheck, Tag } from 'lucide-react';
+import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, ShieldCheck, Tag, Lock, AlertTriangle } from 'lucide-react';
 import { PeptideVial } from './PeptideVial';
 import { useApp } from '../context/AppContext';
 
@@ -22,6 +22,8 @@ export const CartDrawer: React.FC = () => {
 
   const [couponInput, setCouponInput] = useState('');
   const [couponFeedback, setCouponFeedback] = useState<{ success?: string; error?: string }>({});
+
+  const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
   if (!isCartOpen) return null;
 
@@ -243,14 +245,38 @@ export const CartDrawer: React.FC = () => {
                 </div>
               </div>
 
-              {/* Checkout Button */}
-              <button
-                onClick={handleProceedToCheckout}
-                className="w-full py-3.5 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
-              >
-                <span>Finalizar Pedido</span>
-                <ArrowRight className="w-4 h-4 text-cyan-400 group-hover:translate-x-1 transition-transform" />
-              </button>
+              {/* Cashier Closing Notice or Checkout Button */}
+              {isSuspended ? (
+                <div className="space-y-2 pt-1">
+                  <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300/80 flex items-start gap-2.5">
+                    <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-950 uppercase tracking-tight">
+                        {storeSettings.suspensionTitle || 'Fechamento de Caixa'}
+                      </p>
+                      <p className="text-[11px] text-amber-800 mt-0.5 leading-relaxed">
+                        {storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    disabled
+                    className="w-full py-3.5 px-6 rounded-xl bg-slate-300 text-slate-600 font-bold text-xs sm:text-sm flex items-center justify-center gap-2 cursor-not-allowed shadow-none"
+                  >
+                    <Lock className="w-4 h-4 text-slate-500" />
+                    <span>Compras Suspensas Temporariamente</span>
+                  </button>
+                </div>
+              ) : (
+                /* Checkout Button */
+                <button
+                  onClick={handleProceedToCheckout}
+                  className="w-full py-3.5 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
+                >
+                  <span>Finalizar Pedido</span>
+                  <ArrowRight className="w-4 h-4 text-cyan-400 group-hover:translate-x-1 transition-transform" />
+                </button>
+              )}
             </div>
           )}
 

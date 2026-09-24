@@ -1,5 +1,31 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Package, ShoppingCart, DollarSign, ArrowLeft, ShieldAlert, Users, Bell, ExternalLink, Settings, Tag, LogOut, Crown, UploadCloud, CheckCircle2, RefreshCw, Database, BarChart3, FilePlus2 } from 'lucide-react';
+import {
+  LayoutDashboard,
+  Package,
+  ShoppingCart,
+  DollarSign,
+  ArrowLeft,
+  ShieldAlert,
+  Users,
+  Bell,
+  ExternalLink,
+  Settings,
+  Tag,
+  LogOut,
+  Crown,
+  UploadCloud,
+  CheckCircle2,
+  RefreshCw,
+  Database,
+  BarChart3,
+  FilePlus2,
+  Lock,
+  PauseCircle,
+  PlayCircle,
+  AlertTriangle,
+  X,
+  Store,
+} from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DnaLogo } from '../DnaLogo';
 import { ProductManagement } from './ProductManagement';
@@ -11,9 +37,36 @@ import { CouponManagement } from './CouponManagement';
 import { SalesReportsTab } from './SalesReportsTab';
 
 export const AdminDashboard: React.FC = () => {
-  const { currentUser, logoutUser, setCurrentView, orders, employees, saveEverythingToCloud, productRequests } = useApp();
+  const {
+    currentUser,
+    logoutUser,
+    setCurrentView,
+    orders,
+    employees,
+    saveEverythingToCloud,
+    productRequests,
+    storeSettings,
+    toggleStorePurchasesSuspension,
+  } = useApp();
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [showSuspensionModal, setShowSuspensionModal] = useState(false);
+  const [suspensionLoading, setSuspensionLoading] = useState(false);
+  const [customSuspensionMsg, setCustomSuspensionMsg] = useState(
+    storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. Voltaremos em breve!'
+  );
+  const [customSuspensionTitle, setCustomSuspensionTitle] = useState(
+    storeSettings.suspensionTitle || 'Estamos Fechando o Caixa'
+  );
+
+  const isPurchasesSuspended = Boolean(storeSettings.purchasesSuspended);
+
+  const handleToggleSuspension = async (targetState: boolean) => {
+    setSuspensionLoading(true);
+    await toggleStorePurchasesSuspension(targetState, customSuspensionMsg, customSuspensionTitle);
+    setSuspensionLoading(false);
+    setShowSuspensionModal(false);
+  };
 
   const handleSaveAll = async () => {
     setIsSavingAll(true);
@@ -178,10 +231,41 @@ export const AdminDashboard: React.FC = () => {
 
             {/* Right Header Actions */}
             <div className="flex items-center gap-2.5">
+              {/* Cashier & Purchases Suspension Button */}
+              {permissions.canManageSettings && (
+                <button
+                  onClick={() => {
+                    setCustomSuspensionMsg(storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. Voltaremos em breve!');
+                    setCustomSuspensionTitle(storeSettings.suspensionTitle || 'Estamos Fechando o Caixa');
+                    setShowSuspensionModal(true);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border shadow-sm ${
+                    isPurchasesSuspended
+                      ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-amber-500/50 shadow-amber-500/10 animate-pulse'
+                      : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                  }`}
+                  title="Clique para suspender compras ou fechar/reabrir caixa da loja"
+                >
+                  {isPurchasesSuspended ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span className="hidden sm:inline">Compras Suspensas</span>
+                      <span className="sm:hidden">Caixa Fechando</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                      <span className="hidden sm:inline">Loja Ativa • Suspender Compras</span>
+                      <span className="sm:hidden">Suspender</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               {/* Automatic Real-Time Sync Indicator */}
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-xs">
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-xs">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Firestore Conectado (Tempo Real)</span>
+                <span>Firestore Conectado</span>
               </div>
 
               {isMasterAdmin && (
@@ -306,6 +390,161 @@ export const AdminDashboard: React.FC = () => {
           </>
         )}
       </main>
+
+      {/* Cashier Closure & Purchases Suspension Modal */}
+      {showSuspensionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-700 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-2xl ${
+                  isPurchasesSuspended
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                    : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                }`}>
+                  {isPurchasesSuspended ? <Lock className="w-6 h-6" /> : <Store className="w-6 h-6" />}
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white font-tech">
+                    CONTROLE DE CAIXA & COMPRAS NO SITE
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Suspender ou reabrir as compras de produtos no site instantaneamente
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSuspensionModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Current State Highlight */}
+            <div className={`p-4 rounded-2xl border flex items-center justify-between ${
+              isPurchasesSuspended
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
+                : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200'
+            }`}>
+              <div className="flex items-center gap-3">
+                <span className={`w-3.5 h-3.5 rounded-full ${
+                  isPurchasesSuspended ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'
+                }`} />
+                <div>
+                  <p className="text-sm font-bold">
+                    Status Atual: {isPurchasesSuspended ? '⏸️ COMPRAS SUSPENSAS (CAIXA FECHANDO)' : '🟢 LOJA ABERTA (COMPRAS LIBERADAS)'}
+                  </p>
+                  <p className="text-xs opacity-80 mt-0.5">
+                    {isPurchasesSuspended
+                      ? 'Visitantes veem a mensagem de fechamento de caixa e botões de compra bloqueados.'
+                      : 'Todos os clientes podem adicionar ao carrinho e finalizar pedidos normalmente.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Custom Message & Title Inputs */}
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Título do Aviso no Topo do Site
+                </label>
+                <input
+                  type="text"
+                  value={customSuspensionTitle}
+                  onChange={(e) => setCustomSuspensionTitle(e.target.value)}
+                  placeholder="Ex: Estamos Fechando o Caixa"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">
+                  Mensagem aos Clientes *
+                </label>
+                <textarea
+                  rows={2}
+                  value={customSuspensionMsg}
+                  onChange={(e) => setCustomSuspensionMsg(e.target.value)}
+                  placeholder="Ex: Estamos fechando o caixa no momento. Voltaremos em breve!"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500 resize-none"
+                />
+              </div>
+
+              {/* Quick Presets */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] font-bold text-slate-400">Sugestões rápidas de mensagem:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomSuspensionTitle('Estamos Fechando o Caixa');
+                      setCustomSuspensionMsg('Estamos realizando o fechamento do caixa no momento. As compras pelo site estão temporariamente suspensas e voltaremos em breve!');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition-colors border border-slate-700"
+                  >
+                    🏪 Fechando o Caixa
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomSuspensionTitle('Balanço de Estoque');
+                      setCustomSuspensionMsg('Estamos realizando a conferência de estoque de peptídeos. Compras suspensas temporariamente, voltamos já!');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition-colors border border-slate-700"
+                  >
+                    📦 Balanço de Estoque
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomSuspensionTitle('Manutenção no Caixa');
+                      setCustomSuspensionMsg('Estamos fechando o caixa para atualização dos valores e lotes. Voltaremos em breve!');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] transition-colors border border-slate-700"
+                  >
+                    ⚙️ Manutenção Rápida
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowSuspensionModal(false)}
+                className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+
+              {isPurchasesSuspended ? (
+                <button
+                  type="button"
+                  disabled={suspensionLoading}
+                  onClick={() => handleToggleSuspension(false)}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 cursor-pointer"
+                >
+                  <PlayCircle className="w-4 h-4" />
+                  <span>{suspensionLoading ? 'Reabrindo...' : 'Reabrir Loja & Liberar Compras'}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={suspensionLoading}
+                  onClick={() => handleToggleSuspension(true)}
+                  className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-rose-600 hover:from-amber-500 hover:to-rose-500 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-lg shadow-amber-600/20 cursor-pointer"
+                >
+                  <PauseCircle className="w-4 h-4" />
+                  <span>{suspensionLoading ? 'Aplicando...' : 'Suspender Compras (Fechar Caixa)'}</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Admin Panel Footer */}
       <footer className="border-t border-slate-800/60 bg-slate-950/80 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">

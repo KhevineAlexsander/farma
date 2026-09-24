@@ -56,8 +56,30 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0B0F17]/95 backdrop-blur-md border-b border-slate-800/80 transition-colors">
-      {/* Top Dynamic Announcement Bar */}
-      {storeSettings.announcementBar && (
+      {/* Top Cashier Closing / Purchases Suspended Alert Banner */}
+      {storeSettings.purchasesSuspended ? (
+        <div className="bg-gradient-to-r from-amber-950/95 via-rose-950/95 to-amber-950/95 border-b border-amber-500/40 py-2 px-4 text-center shadow-lg animate-in slide-in-from-top duration-300">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm font-bold text-amber-200">
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] uppercase font-black tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              {storeSettings.suspensionTitle || 'FECHAMENTO DE CAIXA'}
+            </span>
+            <span>
+              {storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!'}
+            </span>
+            {storeSettings.whatsappNumber && (
+              <a
+                href={`https://wa.me/${storeSettings.whatsappNumber.replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Vi que o caixa do site está em fechamento no momento. Gostaria de tirar uma dúvida.')}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-amber-400 text-slate-950 hover:bg-amber-300 font-extrabold text-xs transition-colors shadow-xs ml-1"
+              >
+                Atendimento no WhatsApp
+              </a>
+            )}
+          </div>
+        </div>
+      ) : storeSettings.announcementBar ? (
         <div className="bg-gradient-to-r from-blue-900/60 via-cyan-900/40 to-blue-900/60 border-b border-cyan-500/20 py-1.5 px-4 text-center">
           <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-[11px] sm:text-xs font-semibold text-cyan-200">
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
@@ -74,7 +96,7 @@ export const Navbar: React.FC = () => {
             )}
           </div>
         </div>
-      )}
+      ) : null}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">

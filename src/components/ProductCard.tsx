@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ShoppingCart, Info, Star, Tag } from 'lucide-react';
+import { Check, ShoppingCart, Info, Star, Tag, Lock } from 'lucide-react';
 import { Product } from '../types';
 import { PeptideVial } from './PeptideVial';
 import { useApp } from '../context/AppContext';
@@ -9,7 +9,8 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
-  const { addToCart, setSelectedProductDetail } = useApp();
+  const { addToCart, setSelectedProductDetail, storeSettings, showToast } = useApp();
+  const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
   return (
     <div className={`bg-white rounded-2xl border transition-all duration-300 flex flex-col justify-between overflow-hidden group relative ${
@@ -108,20 +109,34 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
       {/* Card Footer: Full-width "Adicionar ao carrinho" Button */}
       <div className="p-3 pt-0 bg-white">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            addToCart(product);
-          }}
-          className={`w-full py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md cursor-pointer group/btn ${
-            product.isPromotion
-              ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
-              : 'bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600'
-          }`}
-        >
-          <ShoppingCart className="w-4 h-4 text-cyan-400 group-hover/btn:translate-x-0.5 transition-transform" />
-          <span>{product.isPromotion ? 'Aproveitar Oferta' : 'Adicionar ao carrinho'}</span>
-        </button>
+        {isSuspended ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              showToast(storeSettings.suspensionMessage || '⚠️ Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!');
+            }}
+            className="w-full py-2.5 px-3 rounded-xl bg-amber-500/15 border border-amber-500/40 hover:bg-amber-500/25 text-amber-900 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
+            title="Compras suspensas temporariamente para fechamento de caixa"
+          >
+            <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span className="truncate">Caixa Fechando • Compras Suspensas</span>
+          </button>
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              addToCart(product);
+            }}
+            className={`w-full py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md cursor-pointer group/btn ${
+              product.isPromotion
+                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
+                : 'bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600'
+            }`}
+          >
+            <ShoppingCart className="w-4 h-4 text-cyan-400 group-hover/btn:translate-x-0.5 transition-transform" />
+            <span>{product.isPromotion ? 'Aproveitar Oferta' : 'Adicionar ao carrinho'}</span>
+          </button>
+        )}
       </div>
     </div>
   );

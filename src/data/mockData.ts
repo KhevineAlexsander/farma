@@ -795,5 +795,9 @@ export const INITIAL_SETTINGS: StoreSettings = {
   siteUrl: 'https://peptideimports.vercel.app',
   vercelDomain: 'peptideimports.vercel.app',
   customDomainNotes: 'Para configurar seu domínio próprio na Vercel: adicione o registro CNAME apontando para cname.vercel-dns.com e adicione o domínio na aba Authorized Domains do Firebase.',
+  purchasesSuspended: false,
+  suspensionTitle: 'Estamos Fechando o Caixa',
+  suspensionMessage: 'Estamos realizando o fechamento do caixa no momento. As compras pelo site estão temporariamente suspensas e voltaremos em breve!',
+  suspensionEstimatedReturn: 'Voltaremos em breve com atendimento normal',
 };
 

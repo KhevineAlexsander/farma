@@ -154,6 +154,11 @@ export interface StoreSettings {
   siteUrl?: string; // Ex: "https://peptideimports.vercel.app" ou "https://seusite.com.br"
   vercelDomain?: string; // Ex: "peptideimports.vercel.app"
   customDomainNotes?: string;
+  // Suspensão Temporária de Compras / Fechamento de Caixa
+  purchasesSuspended?: boolean; // Se true, compras no site ficam temporariamente suspensas
+  suspensionTitle?: string; // Ex: "Estamos Fechando o Caixa"
+  suspensionMessage?: string; // Ex: "Estamos fechando o caixa no momento. Voltaremos em breve!"
+  suspensionEstimatedReturn?: string; // Ex: "Voltaremos em breve"
 }
 
 export type ProductRequestStatus = 'Pendente' | 'Aprovado' | 'Rejeitado';

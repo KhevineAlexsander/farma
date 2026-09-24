@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { X, Check, ShieldCheck, Thermometer, FileText, ShoppingCart, Plus, Minus, Sparkles } from 'lucide-react';
+import { X, Check, ShieldCheck, Thermometer, FileText, ShoppingCart, Plus, Minus, Sparkles, Lock, AlertTriangle } from 'lucide-react';
 import { PeptideVial } from './PeptideVial';
 import { useApp } from '../context/AppContext';
 
 export const ProductDetailModal: React.FC = () => {
-  const { selectedProductDetail, setSelectedProductDetail, addToCart } = useApp();
+  const { selectedProductDetail, setSelectedProductDetail, addToCart, storeSettings, showToast } = useApp();
   const [quantity, setQuantity] = useState(1);
+  const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
   if (!selectedProductDetail) return null;
 
@@ -119,36 +120,53 @@ export const ProductDetailModal: React.FC = () => {
 
         {/* Modal Footer Action */}
         <div className="p-4 sm:px-8 sm:py-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-          {/* Quantity Selector */}
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-center">
-            <span className="text-xs font-bold text-slate-700">Qtd:</span>
-            <div className="flex items-center border border-slate-300 rounded-xl bg-white overflow-hidden shadow-xs">
+          {isSuspended ? (
+            <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-3 p-3 rounded-2xl bg-amber-50 border border-amber-300/80">
+              <div className="flex items-center gap-2 text-amber-900 text-xs font-semibold">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                <span>{storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. As compras estão temporariamente suspensas!'}</span>
+              </div>
               <button
-                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                className="px-3 py-2 text-slate-600 hover:bg-slate-100 transition-colors"
-                aria-label="Diminuir quantidade"
+                onClick={() => setSelectedProductDetail(null)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs cursor-pointer whitespace-nowrap"
               >
-                <Minus className="w-3.5 h-3.5" />
-              </button>
-              <span className="px-4 py-1 text-sm font-bold text-slate-900">{quantity}</span>
-              <button
-                onClick={() => setQuantity((q) => Math.min(99, q + 1))}
-                className="px-3 py-2 text-slate-600 hover:bg-slate-100 transition-colors"
-                aria-label="Aumentar quantidade"
-              >
-                <Plus className="w-3.5 h-3.5" />
+                Entendido
               </button>
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Quantity Selector */}
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-center">
+                <span className="text-xs font-bold text-slate-700">Qtd:</span>
+                <div className="flex items-center border border-slate-300 rounded-xl bg-white overflow-hidden shadow-xs">
+                  <button
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    className="px-3 py-2 text-slate-600 hover:bg-slate-100 transition-colors"
+                    aria-label="Diminuir quantidade"
+                  >
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="px-4 py-1 text-sm font-bold text-slate-900">{quantity}</span>
+                  <button
+                    onClick={() => setQuantity((q) => Math.min(99, q + 1))}
+                    className="px-3 py-2 text-slate-600 hover:bg-slate-100 transition-colors"
+                    aria-label="Aumentar quantidade"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
 
-          {/* Add to Cart CTA */}
-          <button
-            onClick={handleAddToCart}
-            className="w-full sm:w-auto flex-1 py-3 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg cursor-pointer"
-          >
-            <ShoppingCart className="w-4 h-4 text-cyan-400" />
-            <span>Adicionar {(quantity > 1 ? `(${quantity})` : '')} por R$ {(product.price * quantity).toFixed(2).replace('.', ',')}</span>
-          </button>
+              {/* Add to Cart CTA */}
+              <button
+                onClick={handleAddToCart}
+                className="w-full sm:w-auto flex-1 py-3 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg cursor-pointer"
+              >
+                <ShoppingCart className="w-4 h-4 text-cyan-400" />
+                <span>Adicionar {(quantity > 1 ? `(${quantity})` : '')} por R$ {(product.price * quantity).toFixed(2).replace('.', ',')}</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

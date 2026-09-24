@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, QrCode, CreditCard, ShieldCheck, Truck, MessageSquare, ExternalLink, Store, Tag, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, QrCode, CreditCard, ShieldCheck, Truck, MessageSquare, ExternalLink, Store, Tag, ShoppingBag, Lock, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PeptideVial } from './PeptideVial';
 import { Order } from '../types';
@@ -18,7 +18,10 @@ export const CheckoutModal: React.FC = () => {
     couponDiscount,
     applyCouponCode,
     removeCoupon,
+    showToast,
   } = useApp();
+
+  const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
   useEffect(() => {
     if (currentView === 'checkout') {
@@ -136,6 +139,10 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
 
   const handlePlaceOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSuspended) {
+      showToast(storeSettings.suspensionMessage || '⚠️ Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!');
+      return;
+    }
     if (!customerName || !customerEmail || !street || !number || !city) {
       alert('Por favor, preencha todos os campos obrigatórios.');
       return;
@@ -317,14 +324,29 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
           {/* LEFT: Customer, Address & Payment */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* WhatsApp notice banner */}
-            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-emerald-900 text-xs">
-              <MessageSquare className="w-5 h-5 text-emerald-600 shrink-0" />
-              <span>
-                {storeSettings.checkoutNotice ||
-                  'Ao confirmar, você será direcionado ao nosso WhatsApp oficial para validação do pedido e envio imediato!'}
-              </span>
-            </div>
+            {/* Cashier Closing Notice Banner */}
+            {isSuspended ? (
+              <div className="p-4 bg-amber-500/15 border-2 border-amber-500/60 rounded-2xl flex items-start gap-3.5 text-amber-950">
+                <AlertTriangle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="text-sm font-bold uppercase tracking-tight text-amber-900">
+                    {storeSettings.suspensionTitle || 'FECHAMENTO DE CAIXA EM ANDAMENTO'}
+                  </h4>
+                  <p className="text-xs text-amber-800 font-medium mt-1 leading-relaxed">
+                    {storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. As finalizações pelo site estão temporariamente suspensas e voltaremos em breve!'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* WhatsApp notice banner */
+              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3 text-emerald-900 text-xs">
+                <MessageSquare className="w-5 h-5 text-emerald-600 shrink-0" />
+                <span>
+                  {storeSettings.checkoutNotice ||
+                    'Ao confirmar, você será direcionado ao nosso WhatsApp oficial para validação do pedido e envio imediato!'}
+                </span>
+              </div>
+            )}
 
             {/* 1. Customer Data */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
@@ -600,13 +622,29 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               </div>
 
               {/* WhatsApp Checkout Submit CTA */}
-              <button
-                type="submit"
-                className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-sm tracking-wide shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-              >
-                <MessageSquare className="w-5 h-5" />
-                <span>FINALIZAR E ENVIAR NO WHATSAPP</span>
-              </button>
+              {isSuspended ? (
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    disabled
+                    className="w-full py-4 px-6 rounded-xl bg-slate-300 text-slate-600 font-extrabold text-sm tracking-wide cursor-not-allowed flex items-center justify-center gap-2 shadow-none"
+                  >
+                    <Lock className="w-5 h-5 text-slate-500" />
+                    <span>COMPRAS SUSPENSAS (FECHANDO O CAIXA)</span>
+                  </button>
+                  <p className="text-[11px] text-amber-800 text-center font-medium">
+                    {storeSettings.suspensionMessage || 'Estamos fechando o caixa no momento. Voltaremos em breve!'}
+                  </p>
+                </div>
+              ) : (
+                <button
+                  type="submit"
+                  className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-sm tracking-wide shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span>FINALIZAR E ENVIAR NO WHATSAPP</span>
+                </button>
+              )}
 
               <p className="text-[11px] text-slate-500 text-center">
                 Ao clicar, o pedido será registrado com número de identificação e encaminhado para o WhatsApp oficial <strong>{storeSettings.whatsappDisplay}</strong>.
