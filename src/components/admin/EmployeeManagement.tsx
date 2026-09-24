@@ -404,22 +404,22 @@ export const EmployeeManagement: React.FC = () => {
                     )}
                     {emp.permissions.canManageFinances && (
                       <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-emerald-500/15 text-emerald-300 border-emerald-500/30">
-                        Financeiro
-                      </span>
-                    )}
-                    {emp.permissions.canManageStaff && (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-purple-500/15 text-purple-300 border-purple-500/30">
-                        Equipe
-                      </span>
-                    )}
-                    {emp.permissions.canManageCoupons && (
-                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-pink-500/15 text-pink-300 border-pink-500/30">
-                        Cupons de Desconto
+                        Controle de Caixa & Despesas
                       </span>
                     )}
                     {emp.permissions.canManageReports && (
                       <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-indigo-500/15 text-indigo-300 border-indigo-500/30">
                         Relatório de Vendas
+                      </span>
+                    )}
+                    {emp.permissions.canManageStaff && (
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-purple-500/15 text-purple-300 border-purple-500/30">
+                        Equipe & Acessos
+                      </span>
+                    )}
+                    {emp.permissions.canManageCoupons && (
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-pink-500/15 text-pink-300 border-pink-500/30">
+                        Cupons de Desconto
                       </span>
                     )}
                     {emp.permissions.canManageSettings && (
@@ -682,13 +682,85 @@ export const EmployeeManagement: React.FC = () => {
 
               {/* Permissions Checkboxes */}
               <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
-                <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4" />
-                  Módulos e Permissões de Acesso
-                </h4>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    Módulos e Permissões de Acesso do Funcionário
+                  </h4>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPermissions({
+                          canManageOrders: true,
+                          canManageProducts: true,
+                          canManageFinances: true,
+                          canManageStaff: true,
+                          canManageSettings: true,
+                          canManageCoupons: true,
+                          canManageReports: true,
+                        })
+                      }
+                      className="px-2 py-0.5 rounded-md bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-300 text-[10px] font-bold border border-cyan-500/30 cursor-pointer"
+                    >
+                      Liberar Tudo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPermissions({
+                          canManageOrders: true,
+                          canManageProducts: false,
+                          canManageFinances: false,
+                          canManageStaff: false,
+                          canManageSettings: false,
+                          canManageCoupons: false,
+                          canManageReports: true,
+                        })
+                      }
+                      className="px-2 py-0.5 rounded-md bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 text-[10px] font-bold border border-blue-500/30 cursor-pointer"
+                    >
+                      Apenas Vendas
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPermissions({
+                          canManageOrders: false,
+                          canManageProducts: false,
+                          canManageFinances: true,
+                          canManageStaff: false,
+                          canManageSettings: false,
+                          canManageCoupons: false,
+                          canManageReports: true,
+                        })
+                      }
+                      className="px-2 py-0.5 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 text-[10px] font-bold border border-emerald-500/30 cursor-pointer"
+                    >
+                      Caixa & Finanças
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPermissions({
+                          canManageOrders: false,
+                          canManageProducts: false,
+                          canManageFinances: false,
+                          canManageStaff: false,
+                          canManageSettings: false,
+                          canManageCoupons: false,
+                          canManageReports: false,
+                        })
+                      }
+                      className="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] font-bold border border-slate-700 cursor-pointer"
+                    >
+                      Nenhum
+                    </button>
+                  </div>
+                </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
                     <input
                       type="checkbox"
                       checked={permissions.canManageOrders}
@@ -697,22 +769,13 @@ export const EmployeeManagement: React.FC = () => {
                       }
                       className="accent-cyan-500 rounded"
                     />
-                    <span className="text-slate-200">Gestão de Pedidos & Baixas</span>
+                    <div>
+                      <span className="text-slate-200 font-bold block">Pedidos & Baixas</span>
+                      <span className="text-[10px] text-slate-500">Visualizar e dar baixa em pedidos do site</span>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={permissions.canManageProducts}
-                      onChange={(e) =>
-                        setPermissions({ ...permissions, canManageProducts: e.target.checked })
-                      }
-                      className="accent-cyan-500 rounded"
-                    />
-                    <span className="text-slate-200">Criar/Editar Produtos & Promoções</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
                     <input
                       type="checkbox"
                       checked={permissions.canManageFinances}
@@ -721,34 +784,13 @@ export const EmployeeManagement: React.FC = () => {
                       }
                       className="accent-cyan-500 rounded"
                     />
-                    <span className="text-slate-200">Visualizar Finanças & DRE</span>
+                    <div>
+                      <span className="text-emerald-300 font-bold block">Controle de Caixa & Despesas</span>
+                      <span className="text-[10px] text-slate-500">Lançar despesas, entradas e ver saldo em caixa</span>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={permissions.canManageStaff}
-                      onChange={(e) =>
-                        setPermissions({ ...permissions, canManageStaff: e.target.checked })
-                      }
-                      className="accent-cyan-500 rounded"
-                    />
-                    <span className="text-slate-200">Gerenciar Equipe / Funcionários</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={permissions.canManageCoupons}
-                      onChange={(e) =>
-                        setPermissions({ ...permissions, canManageCoupons: e.target.checked })
-                      }
-                      className="accent-cyan-500 rounded"
-                    />
-                    <span className="text-slate-200">Gestão de Cupons de Desconto</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
                     <input
                       type="checkbox"
                       checked={permissions.canManageReports}
@@ -757,10 +799,58 @@ export const EmployeeManagement: React.FC = () => {
                       }
                       className="accent-cyan-500 rounded"
                     />
-                    <span className="text-slate-200">Relatório de Vendas e Pedidos</span>
+                    <div>
+                      <span className="text-indigo-300 font-bold block">Relatório de Vendas</span>
+                      <span className="text-[10px] text-slate-500">Faturamento total, ranking e exportações</span>
+                    </div>
                   </label>
 
-                  <label className="flex items-center gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 sm:col-span-2">
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={permissions.canManageProducts}
+                      onChange={(e) =>
+                        setPermissions({ ...permissions, canManageProducts: e.target.checked })
+                      }
+                      className="accent-cyan-500 rounded"
+                    />
+                    <div>
+                      <span className="text-cyan-300 font-bold block">Produtos & Ofertas</span>
+                      <span className="text-[10px] text-slate-500">Criar, editar preços, estoque e promoções</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={permissions.canManageCoupons}
+                      onChange={(e) =>
+                        setPermissions({ ...permissions, canManageCoupons: e.target.checked })
+                      }
+                      className="accent-cyan-500 rounded"
+                    />
+                    <div>
+                      <span className="text-pink-300 font-bold block">Cupons de Desconto</span>
+                      <span className="text-[10px] text-slate-500">Criar e gerenciar códigos promocionais</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={permissions.canManageStaff}
+                      onChange={(e) =>
+                        setPermissions({ ...permissions, canManageStaff: e.target.checked })
+                      }
+                      className="accent-cyan-500 rounded"
+                    />
+                    <div>
+                      <span className="text-purple-300 font-bold block">Gerenciar Equipe / Funcionários</span>
+                      <span className="text-[10px] text-slate-500">Cadastrar e alterar permissões de outros usuários</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors sm:col-span-2">
                     <input
                       type="checkbox"
                       checked={permissions.canManageSettings}
@@ -769,7 +859,10 @@ export const EmployeeManagement: React.FC = () => {
                       }
                       className="accent-cyan-500 rounded"
                     />
-                    <span className="text-slate-200">Editar WhatsApp & Textos da Loja</span>
+                    <div>
+                      <span className="text-amber-300 font-bold block">Configurações da Loja & WhatsApp</span>
+                      <span className="text-[10px] text-slate-500">Alterar taxa de frete, endereço de retirada e contatos</span>
+                    </div>
                   </label>
                 </div>
               </div>
