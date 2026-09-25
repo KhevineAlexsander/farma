@@ -18,6 +18,7 @@ import {
   Trash2,
   Lock,
   AlertTriangle,
+  AlertCircle,
   KeyRound,
   UploadCloud,
   RefreshCw,
@@ -38,6 +39,9 @@ import {
   Check,
   ArrowLeft,
   FileSpreadsheet,
+  BellRing,
+  Calendar,
+  CalendarClock,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
@@ -111,6 +115,8 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   // Financials for Manual Order
   const [manualShipping, setManualShipping] = useState<number>(0);
   const [manualDiscount, setManualDiscount] = useState<number>(0);
+  const [manualPaidAmount, setManualPaidAmount] = useState<string | number>('');
+  const [manualDueDate, setManualDueDate] = useState<string>('');
   const [manualPaymentMethod, setManualPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
   const [manualStatus, setManualStatus] = useState<OrderStatus>('Pago');
   const [manualOperator, setManualOperator] = useState(currentUser?.name || 'Administrador');
@@ -250,6 +256,8 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsProdSearchOpen(false);
     setManualShipping(0);
     setManualDiscount(0);
+    setManualPaidAmount('');
+    setManualDueDate('');
     setManualPaymentMethod('PIX');
     setManualStatus('Pago');
     setManualOperator(currentUser?.name || 'Administrador');
@@ -296,6 +304,12 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
             zipCode: zipCode.trim() || '01000-000',
           };
 
+      const isPaid = manualStatus === 'Pago' || manualStatus === 'Entregue' || manualStatus === 'Em Separação' || manualStatus === 'Enviado';
+      const parsedPaid = manualPaidAmount !== '' && !isNaN(Number(manualPaidAmount))
+        ? Math.max(0, Number(manualPaidAmount))
+        : (isPaid ? manualTotal : 0);
+      const parsedRemaining = Math.max(0, Number((manualTotal - parsedPaid).toFixed(2)));
+
       await createManualOrder({
         customer: {
           name: custName.trim(),
@@ -310,6 +324,9 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         discount: Number(manualDiscount) || 0,
         paymentMethod: manualPaymentMethod,
         status: manualStatus,
+        paidAmount: parsedPaid,
+        remainingAmount: parsedRemaining,
+        dueDate: manualDueDate.trim() || undefined,
         notes: manualNotes.trim() || 'Pedido manual registrado via painel ERP.',
         clearedBy: manualOperator,
       });
@@ -361,6 +378,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [editShipping, setEditShipping] = useState<number>(0);
   const [editDiscount, setEditDiscount] = useState<number>(0);
   const [editPaidAmount, setEditPaidAmount] = useState<string | number>('');
+  const [editDueDate, setEditDueDate] = useState<string>('');
   const [editPaymentMethod, setEditPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
   const [editStatus, setEditStatus] = useState<OrderStatus>('Pago');
   const [editOperator, setEditOperator] = useState('');
@@ -424,6 +442,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       ? order.paidAmount 
       : (order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Em Separação' || order.status === 'Enviado' ? (order.total || 0) : 0);
     setEditPaidAmount(initialPaid);
+    setEditDueDate(order.dueDate || '');
 
     setEditPaymentMethod(order.paymentMethod || 'PIX');
     setEditStatus(order.status || 'Pendente');
@@ -584,6 +603,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         total: editTotal,
         paidAmount: parsedPaidAmount,
         remainingAmount: computedRemaining,
+        dueDate: editDueDate.trim() || undefined,
         paymentMethod: editPaymentMethod,
         status: editStatus,
         notes: editNotes.trim() || undefined,
@@ -621,6 +641,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [clearingOrder, setClearingOrder] = useState<Order | null>(null);
   const [clearStatus, setClearStatus] = useState<OrderStatus>('Pago');
   const [clearPaidAmount, setClearPaidAmount] = useState<string | number>('');
+  const [clearDueDate, setClearDueDate] = useState<string>('');
   const [clearNotes, setClearNotes] = useState('');
   const [operatorName, setOperatorName] = useState(currentUser?.name || 'Administrador');
 
@@ -628,6 +649,16 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [summaryOrder, setSummaryOrder] = useState<Order | null>(null);
   const [summaryWhatsAppPhone, setSummaryWhatsAppPhone] = useState('');
   const [summaryCopied, setSummaryCopied] = useState(false);
+
+  // WhatsApp Debt Collection (Cobrança de Pagamento Parcial & Vencimento) Modal State
+  const [chargeOrder, setChargeOrder] = useState<Order | null>(null);
+  const [chargeTemplate, setChargeTemplate] = useState<'friendly' | 'due_today' | 'overdue' | 'custom'>('friendly');
+  const [chargePixKey, setChargePixKey] = useState<string>(storeSettings?.supportEmail || 'pix@peptideimports.com.br');
+  const [chargeDueDate, setChargeDueDate] = useState<string>('');
+  const [chargeCustomText, setChargeCustomText] = useState<string>('');
+  const [chargeCopied, setChargeCopied] = useState<boolean>(false);
+  const [isSavingChargeDate, setIsSavingChargeDate] = useState<boolean>(false);
+  const [isSettlingOrder, setIsSettlingOrder] = useState<boolean>(false);
 
   // Delete Order with Password 8817 state
   const [orderToDelete, setOrderToDelete] = useState<Order | null>(null);
@@ -655,6 +686,168 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     { status: 'Cancelado', label: 'Cancelado', icon: X, color: 'border-red-500/50 bg-red-500/10 text-red-400', desc: 'Cancelado' },
   ];
 
+  // Helper to calculate due date status and overdue duration
+  const getDueDateInfo = (order: Order) => {
+    if (!order.dueDate) {
+      return {
+        status: 'none' as const,
+        label: 'Sem vencimento definido',
+        text: 'Sem vencimento',
+        badgeClass: 'bg-slate-800 text-slate-400 border-slate-700',
+        badgeColor: 'bg-slate-800 text-slate-400 border-slate-700',
+        daysDiff: 0,
+        dueDateFormatted: 'A combinar',
+      };
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let due: Date;
+    if (order.dueDate.includes('-')) {
+      const parts = order.dueDate.split('-');
+      due = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    } else {
+      due = new Date(order.dueDate);
+    }
+    due.setHours(0, 0, 0, 0);
+
+    const diffMs = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const dueDateFormatted = due.toLocaleDateString('pt-BR');
+
+    if (diffDays < 0) {
+      const absDays = Math.abs(diffDays);
+      const label = `Vencido há ${absDays} ${absDays === 1 ? 'dia' : 'dias'}`;
+      return {
+        status: 'overdue' as const,
+        label,
+        text: label,
+        badgeClass: 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse font-bold',
+        badgeColor: 'bg-red-500/20 text-red-300 border-red-500/40 animate-pulse font-bold',
+        daysDiff: diffDays,
+        dueDateFormatted,
+      };
+    } else if (diffDays === 0) {
+      return {
+        status: 'today' as const,
+        label: 'Vence Hoje',
+        text: 'Vence Hoje',
+        badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold',
+        badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold',
+        daysDiff: 0,
+        dueDateFormatted,
+      };
+    } else {
+      const label = `Vence em ${diffDays} ${diffDays === 1 ? 'dia' : 'dias'}`;
+      return {
+        status: 'upcoming' as const,
+        label,
+        text: label,
+        badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/40 font-semibold',
+        badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40 font-semibold',
+        daysDiff: diffDays,
+        dueDateFormatted,
+      };
+    }
+  };
+
+  // Helper to generate professional WhatsApp debt collection texts
+  const generateDebtCollectionText = (
+    order: Order,
+    template: 'friendly' | 'due_today' | 'overdue' | 'custom',
+    dueDateVal?: string,
+    pixKeyVal?: string
+  ): string => {
+    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const customerName = order.customer?.name || 'Prezado(a) Cliente';
+    const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
+    const paidStr = (order.paidAmount || 0).toFixed(2).replace('.', ',');
+    const remainingStr = (order.remainingAmount !== undefined ? order.remainingAmount : Math.max(0, (order.total || 0) - (order.paidAmount || 0))).toFixed(2).replace('.', ',');
+    const dueDateInfo = getDueDateInfo(dueDateVal ? { ...order, dueDate: dueDateVal } : order);
+    const dueDateStr = dueDateInfo.dueDateFormatted;
+    const pixKey = (pixKeyVal || storeSettings?.supportEmail || 'pix@peptideimports.com.br').trim();
+
+    if (template === 'friendly') {
+      return `Olá *${customerName}*, tudo bem? Esperamos que você esteja tendo um excelente dia! 😊
+
+Aqui é da equipe de atendimento da *${brand}*.
+
+Entramos em contato cordialmente para um lembrete amigável sobre o saldo pendente do seu pedido *${order.orderNumber}*.
+
+📋 *Resumo Financeiro do Pedido:*
+• *Valor Total:* R$ ${totalStr}
+• *Valor Já Pago (Entrada):* R$ ${paidStr}
+• *Saldo Restante a Quitar:* *R$ ${remainingStr}*
+• *Data de Vencimento:* ${dueDateStr}
+
+🔑 *Chave PIX para Quitação:*
+\`${pixKey}\`
+
+Assim que realizar o pagamento, basta nos enviar o comprovante por este WhatsApp para atualizarmos a quitação completa no seu cadastro! 🚀
+
+Qualquer dúvida estamos à disposição!`;
+    }
+
+    if (template === 'due_today') {
+      return `Olá *${customerName}*, tudo bem?
+
+Aqui é do setor financeiro da *${brand}*.
+
+Informamos que o vencimento do saldo pendente referente ao seu pedido *${order.orderNumber}* é *HOJE (${dueDateStr})*.
+
+💰 *Detalhes da Cobrança:*
+• *Pedido:* ${order.orderNumber}
+• *Valor Quitado:* R$ ${paidStr}
+• *Saldo a Pagar Hoje:* *R$ ${remainingStr}*
+• *Vencimento:* *Hoje (${dueDateStr})*
+
+🔑 *Chave PIX:*
+\`${pixKey}\`
+
+Pedimos a gentileza de realizar a transferência e nos enviar o comprovante para darmos a baixa definitiva no sistema. Caso já tenha realizado o pagamento, por favor desconsidere esta mensagem.
+
+Agradecemos a sua parceria e preferência! 🌟`;
+    }
+
+    if (template === 'overdue') {
+      const absDays = Math.abs(dueDateInfo.daysDiff);
+      const atrasoStr = absDays > 0 ? ` (em atraso há ${absDays} ${absDays === 1 ? 'dia' : 'dias'})` : '';
+      return `Olá *${customerName}*, tudo bem?
+
+Entramos em contato da equipe de atendimento e financeiro da *${brand}*.
+
+Notamos em nosso sistema que o saldo pendente do seu pedido *${order.orderNumber}* encontra-se com o vencimento em atraso${atrasoStr}.
+
+⚠️ *Informações da Cobrança:*
+• *Pedido:* ${order.orderNumber}
+• *Valor Total do Pedido:* R$ ${totalStr}
+• *Valor Já Pago:* R$ ${paidStr}
+• *SALDO PENDENTE EM ATRASO:* *R$ ${remainingStr}*
+• *Vencimento:* *${dueDateStr}*
+
+🔑 *Chave PIX para Quitação Imediata:*
+\`${pixKey}\`
+
+Pedimos a gentileza de regularizar a quitação do saldo e enviar o comprovante por este WhatsApp para atualizarmos o seu status cadastral e liberarmos novas solicitações.
+
+Se precisar de auxílio ou proposta de prorrogação, favor nos responder imediatamente por aqui. Obrigado!`;
+    }
+
+    return `Olá *${customerName}*, tudo bem?
+
+Mensagem de cobrança referente ao pedido *${order.orderNumber}* da *${brand}*.
+
+• *Valor Total:* R$ ${totalStr}
+• *Valor Já Pago:* R$ ${paidStr}
+• *Saldo Restante:* *R$ ${remainingStr}*
+• *Vencimento:* ${dueDateStr}
+
+🔑 *Chave PIX:* \`${pixKey}\`
+
+Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
+  };
+
   // Distinct list of products available across catalog and existing orders
   const availableProductOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -675,11 +868,59 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     return Array.from(map.values()).sort();
   }, [products, orders]);
 
+  // Partial orders & Debt Metrics
+  const partialOrders = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        (o.status === 'Pago Parcial' || (o.remainingAmount !== undefined && o.remainingAmount > 0)) &&
+        o.status !== 'Cancelado' &&
+        o.status !== 'Pago'
+    );
+  }, [orders]);
+
+  const overduePartialOrders = useMemo(() => {
+    return partialOrders.filter((o) => getDueDateInfo(o).status === 'overdue');
+  }, [partialOrders]);
+
+  const todayPartialOrders = useMemo(() => {
+    return partialOrders.filter((o) => getDueDateInfo(o).status === 'today');
+  }, [partialOrders]);
+
+  const upcomingPartialOrders = useMemo(() => {
+    return partialOrders.filter((o) => getDueDateInfo(o).status === 'upcoming');
+  }, [partialOrders]);
+
+  const totalRemainingDebt = useMemo(() => {
+    return partialOrders.reduce((sum, o) => {
+      const rem = o.remainingAmount !== undefined ? o.remainingAmount : Math.max(0, (o.total || 0) - (o.paidAmount || 0));
+      return sum + rem;
+    }, 0);
+  }, [partialOrders]);
+
+  const waitingClearanceCount = useMemo(() => {
+    return orders.filter((o) => !o.clearedManuallyAt && o.status !== 'Cancelado').length;
+  }, [orders]);
+
+  const pendingOnlyCount = useMemo(() => {
+    return orders.filter((o) => o.status === 'Pendente').length;
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       let matchesStatus = true;
       if (statusFilter === 'Aguardando Baixa') {
-        matchesStatus = order.status === 'Pendente' || order.status === 'Pago Parcial' || !order.clearedManuallyAt;
+        matchesStatus = !order.clearedManuallyAt && order.status !== 'Cancelado';
+      } else if (statusFilter === 'Pendente' || statusFilter === 'Pendentes') {
+        matchesStatus = order.status === 'Pendente';
+      } else if (statusFilter === 'Pago Parcial') {
+        matchesStatus = order.status === 'Pago Parcial';
+      } else if (statusFilter === 'Cobrança / Vencidos') {
+        if (order.status !== 'Pago Parcial' && (!order.remainingAmount || order.remainingAmount <= 0)) {
+          matchesStatus = false;
+        } else {
+          const info = getDueDateInfo(order);
+          matchesStatus = info.status === 'overdue' || info.status === 'today';
+        }
       } else if (statusFilter !== 'Todos') {
         matchesStatus = order.status === statusFilter;
       }
@@ -714,6 +955,292 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       return matchesStatus && matchesSearch && matchesProductFilter;
     });
   }, [orders, statusFilter, searchTerm, productSearchFilter]);
+
+  const partialCount = partialOrders.length;
+  const isSavingDueDate = isSavingChargeDate;
+  const [chargeWhatsAppPhone, setChargeWhatsAppPhone] = useState('');
+
+  const getCustomerWhatsappUrl = (order: Order) => {
+    const rawPhone = order.customer?.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    const phoneWithDDI = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const text = encodeURIComponent(`Olá ${order.customer?.name || 'Cliente'}, referente ao seu pedido ${order.orderNumber} na ${storeSettings.storeName || 'Peptide Imports Farma'}:`);
+    return `https://wa.me/${phoneWithDDI}?text=${text}`;
+  };
+
+  const handleOpenClearModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setClearingOrder(order);
+    const initialPaid = order.paidAmount !== undefined 
+      ? order.paidAmount 
+      : (order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Em Separação' || order.status === 'Enviado' ? (order.total || 0) : 0);
+    setClearPaidAmount(initialPaid);
+    setClearDueDate(order.dueDate || '');
+    setClearStatus(order.status === 'Pendente' ? 'Pago' : order.status);
+    setClearNotes(order.notes || '');
+    setOperatorName(currentUser?.name || 'Administrador');
+  };
+
+  const handleConfirmClear = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clearingOrder) return;
+    try {
+      const parsedPaid = clearPaidAmount !== '' && !isNaN(Number(clearPaidAmount)) ? Number(clearPaidAmount) : 0;
+      const total = clearingOrder.total || 0;
+      const remaining = Math.max(0, Number((total - parsedPaid).toFixed(2)));
+      
+      const payload: Partial<Order> = {
+        status: clearStatus,
+        paidAmount: parsedPaid,
+        remainingAmount: remaining,
+        dueDate: clearDueDate.trim() || undefined,
+        notes: clearNotes.trim() || clearingOrder.notes || undefined,
+        clearedBy: operatorName.trim() || currentUser?.name || 'Administrador',
+        clearedManuallyAt: new Date().toLocaleString('pt-BR'),
+      };
+
+      await updateOrder(clearingOrder.id, payload);
+
+      if (selectedOrder && selectedOrder.id === clearingOrder.id) {
+        setSelectedOrder({
+          ...selectedOrder,
+          ...payload,
+        } as Order);
+      }
+
+      showToast(`✅ Baixa realizada no pedido ${clearingOrder.orderNumber} (${clearStatus})`);
+      setClearingOrder(null);
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao realizar baixa no pedido.');
+    }
+  };
+
+  const handleOpenChargeModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setChargeOrder(order);
+    setChargeDueDate(order.dueDate || '');
+    setChargePixKey(storeSettings?.supportEmail || 'pix@peptideimports.com.br');
+    const rawPhone = order.customer?.phone || '';
+    setChargeWhatsAppPhone(rawPhone);
+    const dueInfo = getDueDateInfo(order);
+    if (dueInfo.status === 'overdue') {
+      setChargeTemplate('overdue');
+    } else if (dueInfo.status === 'today') {
+      setChargeTemplate('due_today');
+    } else {
+      setChargeTemplate('friendly');
+    }
+    setChargeCustomText('');
+    setChargeCopied(false);
+  };
+
+  const handleSaveChargeDueDate = async () => {
+    if (!chargeOrder) return;
+    try {
+      setIsSavingChargeDate(true);
+      const payload: Partial<Order> = {
+        dueDate: chargeDueDate.trim() || undefined,
+      };
+      await updateOrder(chargeOrder.id, payload);
+      setChargeOrder({
+        ...chargeOrder,
+        ...payload,
+      });
+      if (selectedOrder && selectedOrder.id === chargeOrder.id) {
+        setSelectedOrder({
+          ...selectedOrder,
+          ...payload,
+        });
+      }
+      showToast('📅 Data de vencimento atualizada com sucesso!');
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao atualizar data de vencimento.');
+    } finally {
+      setIsSavingChargeDate(false);
+    }
+  };
+
+  const handleCopyChargeMessage = async () => {
+    if (!chargeOrder) return;
+    const text = chargeTemplate === 'custom' && chargeCustomText 
+      ? chargeCustomText 
+      : generateDebtCollectionText(chargeOrder, chargeTemplate, chargeDueDate, chargePixKey);
+    try {
+      await navigator.clipboard.writeText(text);
+      setChargeCopied(true);
+      showToast('📋 Mensagem de cobrança copiada para a área de transferência!');
+      setTimeout(() => setChargeCopied(false), 2500);
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao copiar mensagem.');
+    }
+  };
+
+  const handleSendWhatsAppCollection = async () => {
+    if (!chargeOrder) return;
+    const rawPhone = chargeWhatsAppPhone || chargeOrder.customer?.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      showToast('⚠️ Telefone do cliente não informado para envio no WhatsApp.');
+      return;
+    }
+    const phoneWithDDI = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const text = chargeTemplate === 'custom' && chargeCustomText
+      ? chargeCustomText
+      : generateDebtCollectionText(chargeOrder, chargeTemplate, chargeDueDate, chargePixKey);
+    
+    // Update reminder stats
+    try {
+      const remindersCount = (chargeOrder.remindersCount || 0) + 1;
+      const lastReminderSentAt = new Date().toISOString();
+      await updateOrder(chargeOrder.id, {
+        remindersCount,
+        lastReminderSentAt,
+      });
+      setChargeOrder({
+        ...chargeOrder,
+        remindersCount,
+        lastReminderSentAt,
+      });
+    } catch (err) {
+      console.error(err);
+    }
+
+    const whatsappUrl = `https://wa.me/${phoneWithDDI}?text=${encodeURIComponent(text)}`;
+    window.open(whatsappUrl, '_blank');
+    showToast(`🚀 Mensagem de cobrança enviada para ${chargeOrder.customer?.name || 'Cliente'}!`);
+  };
+
+  const handleQuickSettleOrder = async (order: Order) => {
+    try {
+      const total = order.total || 0;
+      const payload: Partial<Order> = {
+        status: 'Pago',
+        paidAmount: total,
+        remainingAmount: 0,
+        clearedBy: currentUser?.name || 'Administrador',
+        clearedManuallyAt: new Date().toLocaleString('pt-BR'),
+      };
+      await updateOrder(order.id, payload);
+      if (selectedOrder && selectedOrder.id === order.id) {
+        setSelectedOrder({
+          ...selectedOrder,
+          ...payload,
+        });
+      }
+      setChargeOrder(null);
+      showToast(`🎉 Pedido ${order.orderNumber} quitado 100% com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao quitar pedido.');
+    }
+  };
+
+  // WhatsApp Order Summary / Relatório Handlers
+  const handleOpenOrderSummaryModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSummaryOrder(order);
+    setSummaryWhatsAppPhone(order.customer?.phone || '');
+    setSummaryCopied(false);
+  };
+
+  const generateOrderSummaryText = (order: Order): string => {
+    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const customerName = order.customer?.name || 'Cliente';
+    const totalItems = (order.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+    const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
+    const paidStr = (order.paidAmount || 0).toFixed(2).replace('.', ',');
+    const remainingStr = (order.remainingAmount !== undefined ? order.remainingAmount : Math.max(0, (order.total || 0) - (order.paidAmount || 0))).toFixed(2).replace('.', ',');
+    const itemsList = (order.items || []).map((i) => `• ${i.quantity}x ${i.product?.name || 'Produto'} (${i.product?.dosage || ''}) - R$ ${((i.product?.price || 0) * (i.quantity || 1)).toFixed(2).replace('.', ',')}`).join('\n');
+
+    return `📦 *RELATÓRIO DO PEDIDO - ${brand}*
+----------------------------------------
+*Pedido:* ${order.orderNumber}
+*Data:* ${new Date(order.createdAt).toLocaleDateString('pt-BR')} às ${new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+*Status:* ${order.status}
+${order.trackingCode ? `*Rastreio:* ${order.trackingCode}\n` : ''}
+👤 *DADOS DO CLIENTE:*
+• *Nome:* ${customerName}
+• *Telefone:* ${order.customer?.phone || '-'}
+• *Email:* ${order.customer?.email || '-'}
+• *Endereço:* ${order.address?.street || ''}, ${order.address?.number || ''} ${order.address?.complement || ''} - ${order.address?.neighborhood || ''}, ${order.address?.city || ''}/${order.address?.state || ''} - CEP: ${order.address?.zipCode || '-'}
+
+💊 *ITENS DO PEDIDO (${totalItems} frascos):*
+${itemsList}
+
+💰 *FINANCEIRO:*
+• *Subtotal:* R$ ${(order.subtotal || 0).toFixed(2).replace('.', ',')}
+• *Frete:* R$ ${(order.shipping || 0).toFixed(2).replace('.', ',')}
+• *Desconto:* R$ ${(order.discount || 0).toFixed(2).replace('.', ',')}
+• *TOTAL:* *R$ ${totalStr}*
+• *Valor Pago:* R$ ${paidStr}
+${(order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)) ? `• *SALDO RESTANTE:* *R$ ${remainingStr}*\n` : ''}• *Forma de Pagamento:* ${order.paymentMethod || 'A Combinar'}
+
+${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
+*${brand}*`;
+  };
+
+  const handleCopyOrderSummary = async () => {
+    if (!summaryOrder) return;
+    const text = generateOrderSummaryText(summaryOrder);
+    try {
+      await navigator.clipboard.writeText(text);
+      setSummaryCopied(true);
+      showToast('📋 Resumo do pedido copiado!');
+      setTimeout(() => setSummaryCopied(false), 2500);
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao copiar resumo.');
+    }
+  };
+
+  const handleSendOrderWhatsApp = () => {
+    if (!summaryOrder) return;
+    const rawPhone = summaryWhatsAppPhone || summaryOrder.customer?.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      showToast('⚠️ Informe um número de WhatsApp válido.');
+      return;
+    }
+    const phoneWithDDI = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const text = generateOrderSummaryText(summaryOrder);
+    const url = `https://wa.me/${phoneWithDDI}?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+    showToast(`🚀 Relatório enviado no WhatsApp!`);
+  };
+
+  // Delete modal handlers
+  const handleOpenDeleteModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setOrderToDelete(order);
+    setDeletePassword('');
+    setDeleteError(null);
+  };
+
+  const handleConfirmDelete = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!orderToDelete) return;
+    if (deletePassword.trim() !== '8817') {
+      setDeleteError('Senha incorreta! Digite 8817 para autorizar a exclusão.');
+      return;
+    }
+    try {
+      setIsDeleting(true);
+      await deleteOrder(orderToDelete.id);
+      if (selectedOrder && selectedOrder.id === orderToDelete.id) {
+        setSelectedOrder(null);
+      }
+      showToast(`🗑️ Pedido ${orderToDelete.orderNumber} excluído com sucesso!`);
+      setOrderToDelete(null);
+    } catch (err) {
+      console.error(err);
+      setDeleteError('Erro ao excluir pedido.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const handleExportOrdersExcel = () => {
     try {
@@ -771,171 +1298,6 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     });
   };
 
-  const handleOpenClearModal = (order: Order, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setClearingOrder(order);
-    setClearStatus('Pago');
-    setClearPaidAmount(order.paidAmount !== undefined ? order.paidAmount : (order.total || 0));
-    setClearNotes(order.notes || 'Comprovante conferido e validado via WhatsApp.');
-    setOperatorName(currentUser?.name || 'Administrador');
-  };
-
-  const handleConfirmClear = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!clearingOrder) return;
-
-    const parsedPaid = clearPaidAmount !== '' && !isNaN(Number(clearPaidAmount))
-      ? Math.max(0, Number(clearPaidAmount))
-      : (clearStatus === 'Pago' || clearStatus === 'Entregue' ? clearingOrder.total : clearingOrder.paidAmount);
-    
-    const parsedRemaining = parsedPaid !== undefined
-      ? Math.max(0, Number(((clearingOrder.total || 0) - parsedPaid).toFixed(2)))
-      : clearingOrder.remainingAmount;
-
-    clearOrderManually(clearingOrder.id, clearStatus, operatorName, clearNotes, parsedPaid, parsedRemaining);
-
-    if (selectedOrder && selectedOrder.id === clearingOrder.id) {
-      setSelectedOrder({
-        ...selectedOrder,
-        status: clearStatus,
-        paidAmount: parsedPaid,
-        remainingAmount: parsedRemaining,
-        clearedManuallyAt: new Date().toLocaleString('pt-BR'),
-        clearedBy: operatorName,
-        notes: clearNotes,
-      });
-    }
-
-    setClearingOrder(null);
-  };
-
-  // WhatsApp Order Summary Generation & Dispatch
-  const generateOrderSummaryText = (order: Order): string => {
-    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
-    const dateFormatted = new Date(order.createdAt).toLocaleDateString('pt-BR');
-    const timeFormatted = new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    
-    const isPickupAddr = !order.address?.street || order.address?.street.toLowerCase().includes('balcão') || order.address?.street.toLowerCase().includes('retirada');
-    const deliveryType = isPickupAddr ? 'Retirada no Balcão' : 'Envio / Entrega';
-
-    const itemsText = (order.items || [])
-      .map((it, idx) => {
-        const itemTotal = ((it.product?.price || 0) * (it.quantity || 1)).toFixed(2).replace('.', ',');
-        return `${idx + 1}. *${it.quantity}x* ${it.product?.name || 'Produto'} ${it.product?.dosage || ''} - R$ ${itemTotal}`;
-      })
-      .join('\n');
-
-    const subtotalFormatted = (order.subtotal ?? order.total ?? 0).toFixed(2).replace('.', ',');
-    const shippingFormatted = (order.shipping || 0).toFixed(2).replace('.', ',');
-    const discountFormatted = (order.discount || 0) > 0 ? `\n• *Desconto:* -R$ ${(order.discount || 0).toFixed(2).replace('.', ',')}` : '';
-    const totalFormatted = (order.total || 0).toFixed(2).replace('.', ',');
-
-    const paidInfo = order.paidAmount !== undefined
-      ? `\n• *Valor Pago:* R$ ${Number(order.paidAmount).toFixed(2).replace('.', ',')}`
-      : (order.status === 'Pago' || order.status === 'Entregue' ? `\n• *Valor Pago:* R$ ${totalFormatted}` : '');
-
-    const remainingInfo = order.remainingAmount !== undefined && order.remainingAmount > 0
-      ? `\n• *SALDO PENDENTE:* R$ ${Number(order.remainingAmount).toFixed(2).replace('.', ',')}`
-      : (order.status === 'Pago Parcial' && order.paidAmount !== undefined ? `\n• *SALDO PENDENTE:* R$ ${Math.max(0, (order.total || 0) - (order.paidAmount || 0)).toFixed(2).replace('.', ',')}` : '');
-
-    return `*RESUMO DO PEDIDO - ${brand}*
-📋 *Pedido:* ${order.orderNumber}
-📅 *Data:* ${dateFormatted} às ${timeFormatted}
-🏷️ *Status:* ${order.status}
-
-👤 *DADOS DO CLIENTE:*
-• *Nome:* ${order.customer?.name || 'Cliente'}
-• *WhatsApp:* ${order.customer?.phone || '-'}${order.customer?.email ? `\n• *E-mail:* ${order.customer.email}` : ''}${order.customer?.cpf ? `\n• *CPF:* ${order.customer.cpf}` : ''}
-
-📦 *ENTREGA & ENDEREÇO:*
-• *Modalidade:* ${deliveryType}
-• *Endereço:* ${order.address?.street || 'Balcão'}, ${order.address?.number || 'S/N'}${order.address?.complement ? ` (${order.address.complement})` : ''} - ${order.address?.neighborhood || ''}, ${order.address?.city || ''}/${order.address?.state || ''}
-• *CEP:* ${order.address?.zipCode || '-'}${order.trackingCode ? `\n• *Código de Rastreio:* ${order.trackingCode}` : ''}
-
-🛒 *ITENS DO PEDIDO:*
-${itemsText || 'Nenhum item discriminado'}
-
-💰 *VALORES & PAGAMENTO:*
-• *Subtotal:* R$ ${subtotalFormatted}
-• *Frete:* R$ ${shippingFormatted}${discountFormatted}
-• *VALOR TOTAL:* R$ ${totalFormatted}
-• *Forma de Pagamento:* ${order.paymentMethod || 'A Combinar'}${paidInfo}${remainingInfo}${order.notes ? `\n\n📝 *Observações:* ${order.notes}` : ''}
--------------------------------------------
-_Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
-  };
-
-  const handleOpenOrderSummaryModal = (order: Order, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setSummaryOrder(order);
-    setSummaryWhatsAppPhone(order.customer?.phone || '');
-    setSummaryCopied(false);
-  };
-
-  const handleSendOrderWhatsApp = () => {
-    if (!summaryOrder) return;
-    const cleanPhone = (summaryWhatsAppPhone || summaryOrder.customer?.phone || '').replace(/\D/g, '');
-    if (!cleanPhone) {
-      alert('Por favor, informe um número de WhatsApp válido.');
-      return;
-    }
-    const finalPhone = cleanPhone.length <= 11 ? `55${cleanPhone}` : cleanPhone;
-    const summaryText = generateOrderSummaryText(summaryOrder);
-    const waUrl = `https://wa.me/${finalPhone}?text=${encodeURIComponent(summaryText)}`;
-    window.open(waUrl, '_blank');
-  };
-
-  const handleCopyOrderSummary = () => {
-    if (!summaryOrder) return;
-    const summaryText = generateOrderSummaryText(summaryOrder);
-    navigator.clipboard.writeText(summaryText);
-    setSummaryCopied(true);
-    setTimeout(() => setSummaryCopied(false), 2500);
-  };
-
-  const handleOpenDeleteModal = (order: Order, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setOrderToDelete(order);
-    setDeletePassword('');
-    setDeleteError(null);
-  };
-
-  const handleConfirmDelete = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!orderToDelete) return;
-
-    if (deletePassword.trim() !== '8817') {
-      setDeleteError('Senha incorreta! Digite a senha 8817 para autorizar a exclusão.');
-      return;
-    }
-
-    try {
-      setIsDeleting(true);
-      const targetId = orderToDelete.id;
-      await deleteOrder(targetId);
-
-      if (selectedOrder && selectedOrder.id === targetId) {
-        setSelectedOrder(null);
-      }
-      setOrderToDelete(null);
-      setDeletePassword('');
-      setDeleteError(null);
-    } catch (err) {
-      console.error('Error executing delete order:', err);
-      setDeleteError('Ocorreu um erro ao excluir o pedido. Tente novamente.');
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const getCustomerWhatsappUrl = (order: Order) => {
-    const cleanPhone = (order.customer?.phone || '').replace(/\D/g, '');
-    const customerName = order.customer?.name || 'Cliente';
-    const msg = `Olá ${customerName}, aqui é da equipe ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}. Estamos em contato a respeito do seu pedido ${order.orderNumber}!`;
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
-  };
-
-  const pendingCount = orders.filter((o) => o.status === 'Pendente' || !o.clearedManuallyAt).length;
-
   return (
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full overflow-hidden">
       
@@ -950,7 +1312,7 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
               Pedidos & Baixas Manuais
             </h2>
             <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-              Conferência rápida de pagamentos, baixa no estoque e rastreio
+              Conferência de pagamentos, cobrança de saldos parciais e vencimentos
             </p>
           </div>
         </div>
@@ -976,8 +1338,23 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
             }`}
           >
             <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
-            <span>Aguardando Baixa: <strong>{pendingCount}</strong></span>
+            <span>Aguardando Baixa: <strong>{waitingClearanceCount}</strong></span>
           </button>
+
+          {overduePartialOrders.length > 0 && (
+            <button
+              onClick={() => setStatusFilter('Cobrança / Vencidos')}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px] ${
+                statusFilter === 'Cobrança / Vencidos'
+                  ? 'bg-red-500 text-white border-red-400 shadow-md shadow-red-500/30'
+                  : 'bg-red-500/15 border-red-500/30 text-red-300 hover:bg-red-500/25 animate-pulse'
+              }`}
+              title="Filtrar pagamentos parciais vencidos ou que vencem hoje"
+            >
+              <BellRing className="w-3.5 h-3.5 text-red-400 shrink-0" />
+              <span>Cobrança Vencida: <strong>{overduePartialOrders.length}</strong></span>
+            </button>
+          )}
 
           {isMasterAdmin && (
             <button
@@ -1011,6 +1388,106 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
           </button>
         </div>
       </div>
+
+      {/* Painel de Alerta & Cobrança de Pagamentos Parciais (Vencimentos & Cobrança WhatsApp) */}
+      {partialOrders.length > 0 && (
+        <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-orange-950/40 border border-orange-500/30 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-orange-500/20 text-orange-400 rounded-xl border border-orange-500/30 shrink-0">
+                <BellRing className="w-5 h-5 text-orange-400 animate-bounce" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
+                  <span>Alerta de Pagamentos Parciais & Cobrança</span>
+                  {overduePartialOrders.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-[10px] font-bold animate-pulse">
+                      {overduePartialOrders.length} Vencido(s)
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Gerencie vencimentos de saldos pendentes e dispare mensagens de cobrança direta no WhatsApp.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setStatusFilter('Pago Parcial')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                  statusFilter === 'Pago Parcial'
+                    ? 'bg-orange-500 text-slate-950 font-extrabold shadow-md'
+                    : 'bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300'
+                }`}
+              >
+                <DollarSign className="w-3.5 h-3.5" />
+                <span>Ver Todos Parciais ({partialOrders.length})</span>
+              </button>
+
+              {overduePartialOrders.length > 0 && (
+                <button
+                  onClick={() => setStatusFilter('Cobrança / Vencidos')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === 'Cobrança / Vencidos'
+                      ? 'bg-red-500 text-white font-extrabold shadow-md'
+                      : 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300'
+                  }`}
+                >
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>Filtrar Vencidos ({overduePartialOrders.length})</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Metrics Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+            <div className="bg-slate-950/80 p-3 rounded-xl border border-red-500/30">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">VENCIDOS EM ATRASO</span>
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+              </div>
+              <p className="text-base sm:text-lg font-extrabold text-white mt-1 font-tech">
+                {overduePartialOrders.length} {overduePartialOrders.length === 1 ? 'pedido' : 'pedidos'}
+              </p>
+              <p className="text-[10px] text-red-300/80 mt-0.5 font-mono">
+                Necessita cobrança urgente
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 p-3 rounded-xl border border-amber-500/30">
+              <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">VENCE HOJE</span>
+              <p className="text-base sm:text-lg font-extrabold text-white mt-1 font-tech">
+                {todayPartialOrders.length} {todayPartialOrders.length === 1 ? 'pedido' : 'pedidos'}
+              </p>
+              <p className="text-[10px] text-amber-300/80 mt-0.5 font-mono">
+                Lembrete de quitação
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 p-3 rounded-xl border border-blue-500/30">
+              <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider block">A VENCER (EM DIA)</span>
+              <p className="text-base sm:text-lg font-extrabold text-white mt-1 font-tech">
+                {upcomingPartialOrders.length} {upcomingPartialOrders.length === 1 ? 'pedido' : 'pedidos'}
+              </p>
+              <p className="text-[10px] text-blue-300/80 mt-0.5 font-mono">
+                Dentro do prazo estipulado
+              </p>
+            </div>
+
+            <div className="bg-slate-950/80 p-3 rounded-xl border border-emerald-500/30">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">SALDO TOTAL A RECEBER</span>
+              <p className="text-base sm:text-lg font-extrabold text-emerald-400 mt-1 font-mono">
+                R$ {totalRemainingDebt.toFixed(2).replace('.', ',')}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Soma de todos os saldos devedores
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search and Horizontal Filter Pills (Mobile & Desktop Optimized) */}
       <div className="space-y-2.5 bg-slate-900/70 border border-slate-800 p-3 sm:p-4 rounded-2xl">
@@ -1098,7 +1575,7 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
           </div>
         )}
 
-        {/* Scrollable Pills for Mobile */}
+        {/* Scrollable Pills for Mobile & Desktop */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
           <button
             onClick={() => setStatusFilter('Todos')}
@@ -1110,6 +1587,7 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
           >
             Todos ({orders.length})
           </button>
+
           <button
             onClick={() => setStatusFilter('Aguardando Baixa')}
             className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
@@ -1118,26 +1596,67 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                 : 'bg-slate-950 text-amber-400/90 border-amber-500/30 hover:bg-amber-500/10'
             }`}
           >
-            <Clock className="w-3 h-3" />
-            <span>Aguardando Baixa ({pendingCount})</span>
+            <Clock className="w-3 h-3 text-amber-400" />
+            <span>Aguardando Baixa ({waitingClearanceCount})</span>
           </button>
-          {statuses.map((st) => {
-            const count = orders.filter((o) => o.status === st).length;
-            return (
-              <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1 ${
-                  statusFilter === st
-                    ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
-                    : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                }`}
-              >
-                <span>{st}</span>
-                <span className="text-[10px] opacity-75">({count})</span>
-              </button>
-            );
-          })}
+
+          <button
+            onClick={() => setStatusFilter('Pendente')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
+              statusFilter === 'Pendente' || statusFilter === 'Pendentes'
+                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md font-extrabold'
+                : 'bg-slate-950 text-amber-300 border-amber-500/20 hover:bg-amber-500/10'
+            }`}
+          >
+            <Clock className="w-3 h-3" />
+            <span>Pendentes ({pendingOnlyCount})</span>
+          </button>
+
+          <button
+            onClick={() => setStatusFilter('Pago Parcial')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
+              statusFilter === 'Pago Parcial'
+                ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-md font-extrabold'
+                : 'bg-slate-950 text-orange-400 border-orange-500/30 hover:bg-orange-500/10'
+            }`}
+          >
+            <DollarSign className="w-3 h-3 text-orange-400" />
+            <span>Pago Parcial ({partialCount})</span>
+          </button>
+
+          {(overduePartialOrders.length > 0 || todayPartialOrders.length > 0) && (
+            <button
+              onClick={() => setStatusFilter('Cobrança / Vencidos')}
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
+                statusFilter === 'Cobrança / Vencidos'
+                  ? 'bg-red-500 text-white border-red-400 shadow-md font-extrabold'
+                  : 'bg-slate-950 text-red-400 border-red-500/40 hover:bg-red-500/10 animate-pulse'
+              }`}
+            >
+              <BellRing className="w-3 h-3 text-red-400" />
+              <span>Cobrança / Vencidos ({overduePartialOrders.length + todayPartialOrders.length})</span>
+            </button>
+          )}
+
+          {statuses
+            .filter((st) => st !== 'Pendente' && st !== 'Pago Parcial')
+            .map((st) => {
+              const count = orders.filter((o) => o.status === st).length;
+              return (
+                <button
+                  key={st}
+                  onClick={() => setStatusFilter(st)}
+                  className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1 ${
+                    statusFilter === st
+                      ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
+                      : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <span>{st}</span>
+                  <span className="text-[10px] opacity-75">({count})</span>
+                </button>
+              );
+            })}
         </div>
       </div>
 
@@ -1219,6 +1738,39 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   </div>
                 </div>
 
+                {/* Partial Payment Financial Breakdown & Due Date Banner */}
+                {(order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0)) && (
+                  <div className="p-2.5 bg-orange-950/30 border border-orange-500/30 rounded-xl space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between font-mono text-[11px]">
+                      <span className="text-slate-400">Já Pago: <strong className="text-emerald-400">R$ {(order.paidAmount || 0).toFixed(2).replace('.', ',')}</strong></span>
+                      <span className="text-slate-400">Saldo Devedor: <strong className="text-amber-400 font-extrabold">R$ {(order.remainingAmount !== undefined ? order.remainingAmount : Math.max(0, (order.total || 0) - (order.paidAmount || 0))).toFixed(2).replace('.', ',')}</strong></span>
+                    </div>
+                    {/* Due date indicator */}
+                    <div className="flex items-center justify-between pt-1 border-t border-orange-500/20 text-[11px]">
+                      {(() => {
+                        const dueInfo = getDueDateInfo(order);
+                        return (
+                          <div className="flex items-center gap-1.5">
+                            <CalendarClock className={`w-3.5 h-3.5 ${dueInfo.badgeColor.includes('red') ? 'text-red-400' : dueInfo.badgeColor.includes('amber') ? 'text-amber-400' : 'text-cyan-400'}`} />
+                            <span className="text-slate-300">Vencimento:</span>
+                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] border ${dueInfo.badgeColor}`}>
+                              {dueInfo.text}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenChargeModal(order, e)}
+                        className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-[10px] rounded-lg shadow flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <BellRing className="w-3 h-3" />
+                        <span>Cobrar</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Baixa audit notice if already cleared */}
                 {order.clearedManuallyAt ? (
                   <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 px-2.5 py-1.5 rounded-xl">
@@ -1233,18 +1785,30 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                 )}
 
                 {/* Mobile Action Buttons */}
-                <div className="grid grid-cols-5 gap-1.5 pt-1">
+                <div className="grid grid-cols-6 gap-1 pt-1">
                   <button
                     onClick={(e) => handleOpenClearModal(order, e)}
-                    className="px-1.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[38px]"
+                    className="px-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[38px]"
                     title="Dar baixa no pedido"
                   >
                     <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                     <span className="truncate">Baixa</span>
                   </button>
                   <button
+                    onClick={(e) => handleOpenChargeModal(order, e)}
+                    className={`px-1 py-2 rounded-xl font-bold flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[38px] ${
+                      order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
+                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
+                        : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30'
+                    }`}
+                    title="Cobrança e alerta WhatsApp"
+                  >
+                    <BellRing className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Cobrar</span>
+                  </button>
+                  <button
                     onClick={() => handleOpenDetail(order)}
-                    className="px-1.5 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[38px] cursor-pointer"
+                    className="px-1 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[38px] cursor-pointer"
                     title="Ver detalhes"
                   >
                     <Eye className="w-3.5 h-3.5 shrink-0" />
@@ -1252,7 +1816,7 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   </button>
                   <button
                     onClick={(e) => handleOpenEditModal(order, e)}
-                    className="px-1.5 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/30 cursor-pointer min-h-[38px]"
+                    className="px-1 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/30 cursor-pointer min-h-[38px]"
                     title="Editar informações do pedido"
                   >
                     <Edit3 className="w-3.5 h-3.5 shrink-0" />
@@ -1260,7 +1824,7 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   </button>
                   <button
                     onClick={(e) => handleOpenOrderSummaryModal(order, e)}
-                    className="px-1.5 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-teal-500/30 cursor-pointer min-h-[38px]"
+                    className="px-1 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-teal-500/30 cursor-pointer min-h-[38px]"
                     title="Enviar resumo do pedido para o WhatsApp"
                   >
                     <Share2 className="w-3.5 h-3.5 shrink-0" />
@@ -1268,7 +1832,7 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   </button>
                   <button
                     onClick={(e) => handleOpenDeleteModal(order, e)}
-                    className="px-1.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[38px]"
+                    className="px-1 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[38px]"
                     title="Excluir pedido"
                   >
                     <Trash2 className="w-3.5 h-3.5 shrink-0" />
@@ -1364,9 +1928,21 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                         </span>
                       </td>
 
-                      {/* Total Amount */}
-                      <td className="py-3 px-4 font-extrabold text-white text-sm whitespace-nowrap">
-                        R$ {(order.total || 0).toFixed(2).replace('.', ',')}
+                      {/* Total Amount & Partial breakdown */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className="font-extrabold text-white text-sm block">
+                          R$ {(order.total || 0).toFixed(2).replace('.', ',')}
+                        </span>
+                        {(order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0)) && (
+                          <div className="text-[10px] space-y-0.5 mt-0.5 font-mono">
+                            <span className="text-emerald-400 font-semibold block">
+                              Pago: R$ {(order.paidAmount || 0).toFixed(2).replace('.', ',')}
+                            </span>
+                            <span className="text-amber-400 font-extrabold block">
+                              Resta: R$ {(order.remainingAmount !== undefined ? order.remainingAmount : Math.max(0, (order.total || 0) - (order.paidAmount || 0))).toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Payment Method */}
@@ -1385,12 +1961,30 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                         </span>
                       </td>
 
-                      {/* Status & Baixa indicator */}
+                      {/* Status & Baixa & Due Date indicator */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <div className="space-y-0.5">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${badge.bg}`}>
-                            {badge.text}
-                          </span>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border ${badge.bg}`}>
+                              {badge.text}
+                            </span>
+                          </div>
+
+                          {/* Due Date Badge for Partial / Debt */}
+                          {(order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || order.dueDate) && (
+                            <div>
+                              {(() => {
+                                const dueInfo = getDueDateInfo(order);
+                                return (
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] border ${dueInfo.badgeColor}`}>
+                                    <CalendarClock className="w-3 h-3 shrink-0" />
+                                    <span>{dueInfo.text}</span>
+                                  </span>
+                                );
+                              })()}
+                            </div>
+                          )}
+
                           {order.clearedManuallyAt ? (
                             <span className="block text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                               <CheckCircle className="w-3 h-3 shrink-0" />
@@ -1414,6 +2008,18 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                           >
                             <CheckCircle className="w-3.5 h-3.5 shrink-0" />
                             <span>Baixa</span>
+                          </button>
+                          <button
+                            onClick={(e) => handleOpenChargeModal(order, e)}
+                            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px] ${
+                              order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
+                                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold shadow-amber-500/20'
+                                : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30'
+                            }`}
+                            title="Alerta de Cobrança WhatsApp & Vencimento"
+                          >
+                            <BellRing className="w-3.5 h-3.5 shrink-0" />
+                            <span>Cobrar</span>
                           </button>
                           <button
                             onClick={() => handleOpenDetail(order)}
@@ -1620,6 +2226,75 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   );
                 })()}
               </div>
+
+              {/* Vencimento do saldo restante para Baixa Parcial */}
+              {(clearStatus === 'Pago Parcial' || (clearPaidAmount !== '' && Number(clearPaidAmount) < (clearingOrder.total || 0))) && (
+                <div className="p-3 bg-slate-950/90 rounded-xl sm:rounded-2xl border border-amber-500/30 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-amber-300 font-bold text-xs flex items-center gap-1.5">
+                      <CalendarClock className="w-4 h-4 text-amber-400" />
+                      <span>Data de Vencimento do Saldo Restante (Cobrança)</span>
+                    </label>
+                    <span className="text-[10px] text-slate-400">Ativa alerta no sistema</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                    <div className="sm:col-span-6">
+                      <input
+                        type="date"
+                        value={clearDueDate}
+                        onChange={(e) => setClearDueDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-500 min-h-[38px]"
+                      />
+                    </div>
+                    <div className="sm:col-span-6 flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 3);
+                          setClearDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        +3 dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 7);
+                          setClearDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        +7 dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 15);
+                          setClearDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        +15 dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 30);
+                          setClearDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                      >
+                        +30 dias
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Status Selection Cards */}
               <div className="space-y-2">
@@ -3449,6 +4124,86 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   })()}
                 </div>
 
+                {/* Vencimento do Saldo Pendente (Alerta & Cobrança) */}
+                <div className="p-3.5 bg-slate-900/90 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-slate-200 font-bold text-xs flex items-center gap-1.5">
+                      <CalendarClock className="w-4 h-4 text-cyan-400" />
+                      <span>Data de Vencimento do Saldo (Sistema de Alerta & Cobrança)</span>
+                    </label>
+                    {editDueDate && (
+                      <span className="text-[11px] text-cyan-400 font-mono font-bold">
+                        Vencimento: {new Date(editDueDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                    <div className="sm:col-span-6">
+                      <input
+                        type="date"
+                        value={editDueDate}
+                        onChange={(e) => setEditDueDate(e.target.value)}
+                        className="w-full px-3 py-2 bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl text-white text-xs font-mono min-h-[40px]"
+                      />
+                    </div>
+                    <div className="sm:col-span-6 flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 3);
+                          setEditDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        +3 dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 7);
+                          setEditDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        +7 dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 15);
+                          setEditDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        +15 dias
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const d = new Date();
+                          d.setDate(d.getDate() + 30);
+                          setEditDueDate(d.toISOString().split('T')[0]);
+                        }}
+                        className="px-2 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                      >
+                        +30 dias
+                      </button>
+                      {editDueDate && (
+                        <button
+                          type="button"
+                          onClick={() => setEditDueDate('')}
+                          className="px-2 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-[11px] font-bold rounded-lg cursor-pointer transition-colors"
+                        >
+                          Limpar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
                   <div>
                     <label className="block text-slate-400 font-medium mb-1">Operador / Atendente Responsável</label>
@@ -3638,6 +4393,337 @@ _Peptide Imports Farma - Pureza e Procedência HPLC 99.5%_`;
                   <Send className="w-4 h-4" />
                   <span>Enviar no WhatsApp</span>
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Alerta de Vencimento & Cobrança WhatsApp (Pago Parcial / Pendente) */}
+      {chargeOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl max-h-[94vh] overflow-y-auto">
+            <button
+              onClick={() => setChargeOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4 pr-10">
+              <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-xl sm:rounded-2xl border border-amber-500/30 shrink-0">
+                <BellRing className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] sm:text-xs text-amber-400 font-bold uppercase tracking-wider block">
+                    Alerta & Cobrança de Pagamento Parcial
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-950 border border-slate-700 text-cyan-300 font-mono text-[10px] font-bold">
+                    {chargeOrder.orderNumber}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-xl font-extrabold text-white">
+                  Cobrar {chargeOrder.customer?.name || 'Cliente'}
+                </h3>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* Financial Snapshot */}
+              {(() => {
+                const total = chargeOrder.total || 0;
+                const paid = chargeOrder.paidAmount !== undefined ? chargeOrder.paidAmount : (chargeOrder.status === 'Pago' ? total : 0);
+                const remaining = chargeOrder.remainingAmount !== undefined ? chargeOrder.remainingAmount : Math.max(0, total - paid);
+                const dueInfo = getDueDateInfo(chargeOrder);
+
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 p-3.5 bg-slate-950 rounded-xl sm:rounded-2xl border border-slate-800">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Total Pedido</span>
+                      <p className="font-extrabold text-white text-sm sm:text-base font-mono">
+                        R$ {total.toFixed(2).replace('.', ',')}
+                      </p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Valor Já Pago</span>
+                      <p className="font-extrabold text-emerald-400 text-sm sm:text-base font-mono">
+                        R$ {paid.toFixed(2).replace('.', ',')}
+                      </p>
+                    </div>
+                    <div className="space-y-0.5 col-span-2 sm:col-span-1 bg-amber-950/30 p-2 rounded-xl border border-amber-500/30">
+                      <span className="text-[10px] text-amber-300 uppercase font-bold">Saldo a Pagar</span>
+                      <p className="font-extrabold text-amber-400 text-base sm:text-lg font-mono">
+                        R$ {remaining.toFixed(2).replace('.', ',')}
+                      </p>
+                    </div>
+                    <div className="space-y-0.5 col-span-2 sm:col-span-1">
+                      <span className="text-[10px] text-slate-500 uppercase font-semibold">Vencimento Atual</span>
+                      <div className="pt-0.5">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] border ${dueInfo.badgeColor}`}>
+                          <CalendarClock className="w-3 h-3 shrink-0" />
+                          <span>{dueInfo.text}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Due Date Management Section (Set / Extend Due Date) */}
+              <div className="p-3.5 bg-slate-950 rounded-xl sm:rounded-2xl border border-cyan-500/20 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-cyan-300 font-bold text-xs flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-cyan-400" />
+                    <span>Sistema de Vencimento do Saldo Pendente:</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">
+                    Define quando o sistema alertará sobre o atraso
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                  <div className="sm:col-span-5">
+                    <input
+                      type="date"
+                      value={chargeDueDate}
+                      onChange={(e) => {
+                        setChargeDueDate(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-500 font-mono min-h-[38px]"
+                    />
+                  </div>
+                  <div className="sm:col-span-4 flex items-center gap-1 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 3);
+                        setChargeDueDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      +3d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 7);
+                        setChargeDueDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      +7d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 15);
+                        setChargeDueDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      +15d
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date();
+                        d.setDate(d.getDate() + 30);
+                        setChargeDueDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[10px] font-bold cursor-pointer transition-colors"
+                    >
+                      +30d
+                    </button>
+                  </div>
+                  <div className="sm:col-span-3 flex justify-end">
+                    <button
+                      type="button"
+                      disabled={isSavingDueDate}
+                      onClick={handleSaveChargeDueDate}
+                      className="w-full px-3 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1 shadow-sm"
+                    >
+                      {isSavingDueDate ? <span>Salvando...</span> : <span>Salvar Data</span>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* WhatsApp Destination & PIX Key Configuration */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+                  <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>WhatsApp do Cliente:</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={chargeWhatsAppPhone}
+                    onChange={(e) => setChargeWhatsAppPhone(e.target.value)}
+                    placeholder="Ex: (11) 99999-9999"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-500 font-mono min-h-[38px]"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+                  <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Chave PIX da Empresa para Recebimento:</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={chargePixKey}
+                    onChange={(e) => setChargePixKey(e.target.value)}
+                    placeholder="Ex: CNPJ, celular, email ou aleatória"
+                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-cyan-500 font-mono min-h-[38px]"
+                  />
+                </div>
+              </div>
+
+              {/* Template Selector */}
+              <div className="space-y-1.5">
+                <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Escolha o Modelo de Mensagem de Cobrança:</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setChargeTemplate('friendly')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-center ${
+                      chargeTemplate === 'friendly'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                    }`}
+                  >
+                    🤝 Lembrete Amigável
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChargeTemplate('due_today')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-center ${
+                      chargeTemplate === 'due_today'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                    }`}
+                  >
+                    ⏰ Vencendo Hoje
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChargeTemplate('overdue')}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-center ${
+                      chargeTemplate === 'overdue'
+                        ? 'bg-red-500/20 text-red-300 border-red-500/50 shadow'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                    }`}
+                  >
+                    ⚠️ Cobrança Vencida
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChargeTemplate('custom');
+                      if (!chargeCustomText) {
+                        setChargeCustomText(generateDebtCollectionText(chargeOrder, 'friendly', chargeDueDate, chargePixKey));
+                      }
+                    }}
+                    className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer border text-center ${
+                      chargeTemplate === 'custom'
+                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/50 shadow'
+                        : 'bg-slate-950 text-slate-400 hover:text-white border-slate-800'
+                    }`}
+                  >
+                    ✏️ Personalizado
+                  </button>
+                </div>
+              </div>
+
+              {/* Message Preview & Edit */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Texto que será enviado no WhatsApp:</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleCopyChargeMessage}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {chargeCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar Mensagem</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {chargeTemplate === 'custom' ? (
+                  <textarea
+                    rows={6}
+                    value={chargeCustomText}
+                    onChange={(e) => setChargeCustomText(e.target.value)}
+                    className="w-full p-3 bg-slate-950 border border-cyan-500/40 rounded-xl text-white font-mono text-xs focus:outline-none focus:border-cyan-400 resize-none leading-relaxed"
+                  />
+                ) : (
+                  <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-mono text-[11px] leading-relaxed max-h-56 overflow-y-auto whitespace-pre-wrap select-all selection:bg-cyan-500 selection:text-slate-950">
+                    {generateDebtCollectionText(chargeOrder, chargeTemplate, chargeDueDate, chargePixKey)}
+                  </div>
+                )}
+              </div>
+
+              {/* Past Reminder Audit */}
+              {chargeOrder.lastReminderSentAt && (
+                <div className="p-2.5 bg-slate-950/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+                  <span>Última cobrança enviada em: <strong>{new Date(chargeOrder.lastReminderSentAt).toLocaleString('pt-BR')}</strong></span>
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
+                    Total enviados: {chargeOrder.remindersCount || 1}x
+                  </span>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-3 border-t border-slate-800">
+                <div className="w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickSettleOrder(chargeOrder)}
+                    className="w-full sm:w-auto px-3.5 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500 text-emerald-300 hover:text-slate-950 border border-emerald-500/30 transition-all cursor-pointer text-xs font-bold flex items-center justify-center gap-1.5 min-h-[42px]"
+                    title="Cliente já pagou? Quitar 100% e marcar como Pago"
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Quitar Saldo (Baixa 100%)</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setChargeOrder(null)}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSendWhatsAppCollection}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[42px]"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Enviar Cobrança no WhatsApp</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>

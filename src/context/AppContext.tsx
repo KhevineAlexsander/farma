@@ -120,12 +120,15 @@ interface AppContextType {
     discount?: number;
     paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
     status?: OrderStatus;
+    paidAmount?: number;
+    remainingAmount?: number;
+    dueDate?: string;
     notes?: string;
     clearedBy?: string;
   }) => Promise<Order>;
   updateOrder: (orderId: string, updatedData: Partial<Order>) => Promise<boolean>;
   updateOrderStatus: (orderId: string, status: OrderStatus, trackingCode?: string) => void;
-  clearOrderManually: (orderId: string, status: OrderStatus, clearedBy: string, notes?: string, paidAmount?: number, remainingAmount?: number) => void;
+  clearOrderManually: (orderId: string, status: OrderStatus, clearedBy: string, notes?: string, paidAmount?: number, remainingAmount?: number, dueDate?: string) => void;
   deleteOrder: (orderId: string) => Promise<boolean>;
   clearAllOrders: () => Promise<void>;
   clearAllFinances: () => Promise<void>;
@@ -2199,6 +2202,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     discount?: number;
     paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
     status?: OrderStatus;
+    paidAmount?: number;
+    remainingAmount?: number;
+    dueDate?: string;
     notes?: string;
     clearedBy?: string;
   }): Promise<Order> => {
@@ -2212,6 +2218,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const currentStatus: OrderStatus = orderData.status || 'Pago';
     const isPaid = currentStatus === 'Pago' || currentStatus === 'Entregue' || currentStatus === 'Em Separação' || currentStatus === 'Enviado';
     const operator = orderData.clearedBy || currentUser?.name || 'Administrador Master';
+
+    const parsedPaid = orderData.paidAmount !== undefined 
+      ? Number(orderData.paidAmount) 
+      : (isPaid ? total : 0);
+    const parsedRemaining = orderData.remainingAmount !== undefined 
+      ? Number(orderData.remainingAmount) 
+      : Math.max(0, Number((total - parsedPaid).toFixed(2)));
 
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
@@ -2237,11 +2250,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       shipping,
       discount,
       total,
+      paidAmount: parsedPaid,
+      remainingAmount: parsedRemaining,
+      dueDate: orderData.dueDate || undefined,
       status: currentStatus,
       paymentMethod: orderData.paymentMethod,
       notes: orderData.notes || 'Pedido manual registrado via painel ERP.',
-      clearedManuallyAt: isPaid ? new Date().toLocaleString('pt-BR') : undefined,
-      clearedBy: isPaid ? operator : undefined,
+      clearedManuallyAt: (isPaid || currentStatus === 'Pago Parcial') ? new Date().toLocaleString('pt-BR') : undefined,
+      clearedBy: (isPaid || currentStatus === 'Pago Parcial') ? operator : undefined,
     };
 
     // Update orders in state and localStorage
@@ -2492,7 +2508,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clearedBy: string,
     notes?: string,
     paidAmount?: number,
-    remainingAmount?: number
+    remainingAmount?: number,
+    dueDate?: string
   ) => {
     const timestamp = new Date().toLocaleString('pt-BR');
     const isoTimestamp = new Date().toISOString();
@@ -2510,6 +2527,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             status,
             paidAmount: finalPaid,
             remainingAmount: finalRemaining,
+            dueDate: dueDate !== undefined ? dueDate : order.dueDate,
             clearedManuallyAt: timestamp,
             clearedBy: operator,
             notes: noteText,
@@ -2538,6 +2556,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       if (targetOrder?.paidAmount !== undefined) updateData.paid_amount = targetOrder.paidAmount;
       if (targetOrder?.remainingAmount !== undefined) updateData.remaining_amount = targetOrder.remainingAmount;
+      if (targetOrder?.dueDate !== undefined) updateData.due_date = targetOrder.dueDate;
 
       supabase.from('orders').update(updateData).eq('id', orderId).then((res) => {
         if (res.error) console.log('Supabase clear order info:', res.error.message);
@@ -2551,6 +2570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           status,
           paidAmount: targetOrder?.paidAmount,
           remainingAmount: targetOrder?.remainingAmount,
+          dueDate: targetOrder?.dueDate,
           clearedManuallyAt: timestamp,
           clearedBy: operator,
           notes: noteText,

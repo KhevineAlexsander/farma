@@ -259,8 +259,12 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
           <div className="mt-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 text-left space-y-3">
             <div className="flex justify-between items-center text-sm border-b border-slate-200 pb-2">
               <span className="text-slate-500">Status atual no painel:</span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
-                {completedOrder.status} (Aguardando Baixa Manual)
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                ['Pago', 'Em Separação', 'Enviado', 'Entregue'].includes(completedOrder.status)
+                  ? 'bg-emerald-100 text-emerald-800'
+                  : 'bg-amber-100 text-amber-800'
+              }`}>
+                {completedOrder.status} {['Pago', 'Em Separação', 'Enviado', 'Entregue'].includes(completedOrder.status) ? '(Pagamento Confirmado)' : '(Aguardando Baixa Manual)'}
               </span>
             </div>
             <div className="flex justify-between items-center text-sm">

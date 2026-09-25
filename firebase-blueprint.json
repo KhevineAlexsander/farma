@@ -35,7 +35,12 @@
       "properties": {
         "orderNumber": { "type": "string" },
         "total": { "type": "number" },
-        "status": { "type": "string" }
+        "status": { "type": "string" },
+        "paidAmount": { "type": "number" },
+        "remainingAmount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "lastReminderSentAt": { "type": "string" },
+        "remindersCount": { "type": "number" }
       },
       "required": ["orderNumber", "total", "status"]
     },

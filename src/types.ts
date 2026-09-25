@@ -36,7 +36,7 @@ export interface Address {
   zipCode: string;
 }
 
-export type OrderStatus = 'Pendente' | 'Pago' | 'Pago Parcial' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
+export type OrderStatus = 'Pendente' | 'Aguardando Baixa' | 'Pago' | 'Pago Parcial' | 'Em Separação' | 'Enviado' | 'Entregue' | 'Cancelado';
 
 export interface Order {
   id: string;
@@ -56,12 +56,16 @@ export interface Order {
   total: number;
   paidAmount?: number; // Valor pago (entrada ou baixa parcial)
   remainingAmount?: number; // Saldo devedor pendente
+  dueDate?: string; // Data de vencimento do saldo devedor / pagamento parcial (AAAA-MM-DD ou ISO)
+  lastReminderSentAt?: string; // Data e hora da última cobrança/lembrete enviado via WhatsApp
+  remindersCount?: number; // Contador de cobranças enviadas
   status: OrderStatus;
   paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
   trackingCode?: string;
   clearedManuallyAt?: string;
   clearedBy?: string;
   notes?: string;
+  updatedAt?: string;
 }
 
 export interface FinancialTransaction {
