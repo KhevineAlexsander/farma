@@ -643,6 +643,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
             localStorage.setItem('peptide_orders', JSON.stringify(merged));
 
+            // Sync missing orders to Firestore so they are permanently in the cloud
+            INITIAL_ORDERS.forEach(async (initOrd) => {
+              if (!list.some((lo) => lo.id === initOrd.id || lo.orderNumber === initOrd.orderNumber)) {
+                try {
+                  await setDoc(doc(db, 'orders', initOrd.id), cleanUndefinedForFirestore(initOrd), { merge: true });
+                } catch {}
+              }
+            });
+
             // If Supabase is active, ensure any missing orders from Firestore are synced into Supabase
             const supabaseClient = getSupabaseClient();
             if (supabaseClient && isSupabaseConfigured() && merged.length > 0) {
@@ -686,30 +695,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.role]);
 
-  // --- Orders State (Real Data connected to Firestore, starting from zero) ---
+  // --- Orders State (Preserving all real orders and ensuring #PI-7464 is always active) ---
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('peptide_orders');
+    let baseList: Order[] = [];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          return parsed.map((o) => {
-            const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
-            if (isPaid && !o.clearedManuallyAt) {
-              return {
-                ...o,
-                clearedManuallyAt: new Date(o.createdAt || Date.now()).toLocaleString('pt-BR'),
-                clearedBy: o.clearedBy || 'Administrador',
-              };
-            }
-            return o;
-          });
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          baseList = parsed;
         }
       } catch {
-        return [];
+        baseList = [];
       }
     }
-    return [];
+
+    const orderMap = new Map<string, Order>();
+    // Guarantee base templates including #PI-7464, #PI-7463, #PI-7462 are seeded
+    INITIAL_ORDERS.forEach((o) => {
+      const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+      if (k) orderMap.set(k, o);
+    });
+    // Overlay local storage orders
+    baseList.forEach((o) => {
+      const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+      if (k) {
+        const existing = orderMap.get(k);
+        orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
+      }
+    });
+
+    const merged = Array.from(orderMap.values());
+    merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    return merged.map((o) => {
+      const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+      if (isPaid && !o.clearedManuallyAt) {
+        return {
+          ...o,
+          clearedManuallyAt: new Date(o.createdAt || Date.now()).toLocaleString('pt-BR'),
+          clearedBy: o.clearedBy || 'Administrador Master',
+        };
+      }
+      return o;
+    });
   });
 
   useEffect(() => {

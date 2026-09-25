@@ -641,6 +641,35 @@ export const INITIAL_ORDERS: Order[] = [
     status: 'Entregue',
     paymentMethod: 'Cartão de Crédito',
     trackingCode: 'BR763524109PR',
+  },
+  {
+    id: 'ord-7464',
+    orderNumber: '#PI-7464',
+    createdAt: '2026-09-17T21:15:00Z',
+    customer: {
+      name: 'Dra. Camila Nogueira',
+      email: 'dra.camila@clinicavita.com.br',
+      phone: '(41) 99877-6655',
+    },
+    address: {
+      street: 'Rua Comendador Araújo',
+      number: '499',
+      neighborhood: 'Batel',
+      city: 'Curitiba',
+      state: 'PR',
+      zipCode: '80420-000',
+    },
+    items: [
+      { product: INITIAL_PRODUCTS[0], quantity: 1 },
+      { product: INITIAL_PRODUCTS[1], quantity: 1 },
+    ],
+    subtotal: 475.00,
+    shipping: 0.00,
+    discount: 0.00,
+    total: 475.00,
+    status: 'Pago',
+    paymentMethod: 'PIX',
+    trackingCode: 'BR746483920PR',
   }
 ];
 
