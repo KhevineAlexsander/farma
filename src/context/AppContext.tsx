@@ -393,14 +393,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const mapped = ordData.map(mapDBToOrder);
             setOrders((prev) => {
               const orderMap = new Map<string, Order>();
-              // 1. Keep all current orders (e.g. from Firestore or localStorage)
+              // 1. Keep all current orders (keyed strictly by unique ID)
               prev.forEach((o) => {
-                const k = o.id || o.orderNumber;
+                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
                 if (k) orderMap.set(k, o);
               });
-              // 2. Merge with Supabase orders using smart helper
+              // 2. Merge with Supabase orders without deduplicating separate records
               mapped.forEach((o) => {
-                const k = o.id || o.orderNumber;
+                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
                 if (k) {
                   const existing = orderMap.get(k);
                   orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
@@ -470,11 +470,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setOrders((prev) => {
                 const orderMap = new Map<string, Order>();
                 prev.forEach((o) => {
-                  const k = o.id || o.orderNumber;
+                  const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
                   if (k) orderMap.set(k, o);
                 });
                 mapped.forEach((o) => {
-                  const k = o.id || o.orderNumber;
+                  const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
                   if (k) {
                     const existing = orderMap.get(k);
                     orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
@@ -629,11 +629,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setOrders((prev) => {
             const orderMap = new Map<string, Order>();
             prev.forEach((o) => {
-              const k = o.id || o.orderNumber;
+              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
               if (k) orderMap.set(k, o);
             });
             list.forEach((o) => {
-              const k = o.id || o.orderNumber;
+              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
               if (k) {
                 const existing = orderMap.get(k);
                 orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
@@ -1582,13 +1582,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const orderMap = new Map<string, Order>();
       let fetchedProducts: Product[] = [];
 
-      // 1. Fetch from Firestore (Source of Truth with all 53 real orders)
+      // 1. Fetch from Firestore
       try {
         const snap = await getDocs(collection(db, 'orders'));
         if (!snap.empty) {
           snap.forEach((d) => {
             const o = { ...(d.data() as Order), id: d.id };
-            const k = o.id || o.orderNumber;
+            const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
             if (k) orderMap.set(k, o);
           });
         }
@@ -1607,10 +1607,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!ordErr && ordData) {
             const mapped = ordData.map(mapDBToOrder);
             mapped.forEach((o) => {
-              const k = o.id || o.orderNumber;
+              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
               if (k) {
                 const existing = orderMap.get(k);
-                orderMap.set(k, { ...existing, ...o });
+                orderMap.set(k, existing ? { ...existing, ...o } : o);
               }
             });
           }
