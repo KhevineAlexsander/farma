@@ -72,12 +72,16 @@ export function isBlacklistedOrder(o: { id?: string; orderNumber?: string }): bo
   const id = o.id || '';
   const num = (o.orderNumber || '').toUpperCase().trim();
   return (
+    id === 'ord-1001' ||
+    id === 'ord-1002' ||
     id === 'ord-1003' ||
     id === 'ord-1004' ||
-    num === '#PI-9838' ||
-    num === 'PI-9838' ||
-    num === '#PI-9830' ||
-    num === 'PI-9830'
+    id === 'ord-7464' ||
+    num.includes('7464') ||
+    num.includes('9842') ||
+    num.includes('9841') ||
+    num.includes('9838') ||
+    num.includes('9830')
   );
 }
 
@@ -85,12 +89,20 @@ export function isBlacklistedTx(t: { id?: string; orderId?: string; description?
   if (!t) return false;
   const id = t.id || '';
   const orderId = t.orderId || '';
-  const desc = t.description || '';
+  const desc = (t.description || '').toUpperCase();
   return (
+    id === 'tx-1' ||
+    id === 'tx-2' ||
     id === 'tx-4' ||
     id === 'tx-6' ||
+    orderId === 'ord-1001' ||
+    orderId === 'ord-1002' ||
     orderId === 'ord-1003' ||
     orderId === 'ord-1004' ||
+    orderId === 'ord-7464' ||
+    desc.includes('7464') ||
+    desc.includes('9842') ||
+    desc.includes('9841') ||
     desc.includes('9838') ||
     desc.includes('9830')
   );
