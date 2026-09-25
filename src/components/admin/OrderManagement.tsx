@@ -898,7 +898,9 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
   }, [partialOrders]);
 
   const waitingClearanceCount = useMemo(() => {
-    return orders.filter((o) => !o.clearedManuallyAt && o.status !== 'Cancelado').length;
+    return orders.filter(
+      (o) => !o.clearedManuallyAt && o.status !== 'Cancelado' && o.status !== 'Pago' && o.status !== 'Entregue' && o.status !== 'Enviado'
+    ).length;
   }, [orders]);
 
   const pendingOnlyCount = useMemo(() => {
@@ -909,7 +911,7 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
     return orders.filter((order) => {
       let matchesStatus = true;
       if (statusFilter === 'Aguardando Baixa') {
-        matchesStatus = !order.clearedManuallyAt && order.status !== 'Cancelado';
+        matchesStatus = !order.clearedManuallyAt && order.status !== 'Cancelado' && order.status !== 'Pago' && order.status !== 'Entregue' && order.status !== 'Enviado';
       } else if (statusFilter === 'Pendente' || statusFilter === 'Pendentes') {
         matchesStatus = order.status === 'Pendente';
       } else if (statusFilter === 'Pago Parcial') {
@@ -1775,7 +1777,21 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 {order.clearedManuallyAt ? (
                   <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 px-2.5 py-1.5 rounded-xl">
                     <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Baixa por <strong>{order.clearedBy}</strong> ({order.clearedManuallyAt})</span>
+                    <span className="truncate">Baixa por <strong>{order.clearedBy || 'Atendente'}</strong> ({order.clearedManuallyAt})</span>
+                  </div>
+                ) : order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado' || order.status === 'Em Separação' ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-950/20 border border-emerald-500/20 px-2.5 py-1.5 rounded-xl">
+                    <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>Pagamento Confirmado (Quitado)</span>
+                  </div>
+                ) : order.status === 'Pago Parcial' ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-orange-400 bg-orange-950/20 border border-orange-500/20 px-2.5 py-1.5 rounded-xl">
+                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                    <span>Pagamento Parcial — Aguardando quitação</span>
+                  </div>
+                ) : order.status === 'Cancelado' ? (
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400 bg-slate-950/40 border border-slate-800 px-2.5 py-1.5 rounded-xl">
+                    <span>Pedido Cancelado</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-1.5 text-[11px] text-amber-400/90 bg-amber-950/20 border border-amber-500/20 px-2.5 py-1.5 rounded-xl">
@@ -1988,7 +2004,20 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                           {order.clearedManuallyAt ? (
                             <span className="block text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
                               <CheckCircle className="w-3 h-3 shrink-0" />
-                              Baixa por {order.clearedBy}
+                              Baixa por {order.clearedBy || 'Atendente'}
+                            </span>
+                          ) : order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado' || order.status === 'Em Separação' ? (
+                            <span className="block text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                              <CheckCircle className="w-3 h-3 shrink-0" />
+                              Quitado
+                            </span>
+                          ) : order.status === 'Pago Parcial' ? (
+                            <span className="block text-[10px] text-orange-400 font-medium">
+                              Parcial
+                            </span>
+                          ) : order.status === 'Cancelado' ? (
+                            <span className="block text-[10px] text-slate-500 font-medium">
+                              Cancelado
                             </span>
                           ) : (
                             <span className="block text-[10px] text-amber-400 font-medium">

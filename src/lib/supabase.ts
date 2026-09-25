@@ -136,18 +136,6 @@ export const mapDBToProduct = (d: any): Product => ({
 });
 
 export const mapOrderToDB = (o: Order) => {
-  let clearedAtISO: string | null = null;
-  if (o.clearedManuallyAt) {
-    const parsed = Date.parse(o.clearedManuallyAt);
-    clearedAtISO = !isNaN(parsed) ? new Date(parsed).toISOString() : new Date().toISOString();
-  }
-
-  let createdAtISO = new Date().toISOString();
-  if (o.createdAt) {
-    const parsed = Date.parse(o.createdAt);
-    if (!isNaN(parsed)) createdAtISO = new Date(parsed).toISOString();
-  }
-
   return {
     id: o.id,
     order_number: o.orderNumber,
@@ -166,41 +154,60 @@ export const mapOrderToDB = (o: Order) => {
     status: o.status,
     payment_method: o.paymentMethod,
     tracking_code: o.trackingCode || null,
-    cleared_manually_at: clearedAtISO,
+    cleared_manually_at: o.clearedManuallyAt || null,
     cleared_by: o.clearedBy || null,
     notes: o.notes || null,
-    created_at: createdAtISO,
+    created_at: o.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 };
 
-export const mapDBToOrder = (d: any): Order => ({
-  id: d.id,
-  orderNumber: d.order_number,
-  customer: d.customer,
-  address: d.address,
-  items: d.items || [],
-  subtotal: Number(d.subtotal),
-  shipping: Number(d.shipping ?? 0),
-  discount: Number(d.discount ?? 0),
-  total: Number(d.total),
-  paidAmount: d.paid_amount != null ? Number(d.paid_amount) : undefined,
-  remainingAmount: d.remaining_amount != null ? Number(d.remaining_amount) : undefined,
-  dueDate: d.due_date || undefined,
-  lastReminderSentAt: d.last_reminder_sent_at || undefined,
-  remindersCount: d.reminders_count != null ? Number(d.reminders_count) : undefined,
-  status: d.status,
-  paymentMethod: d.payment_method,
-  trackingCode: d.tracking_code || undefined,
-  clearedManuallyAt: d.cleared_manually_at
-    ? (!isNaN(Date.parse(d.cleared_manually_at))
-        ? new Date(d.cleared_manually_at).toLocaleString('pt-BR')
-        : d.cleared_manually_at)
-    : undefined,
-  clearedBy: d.cleared_by || undefined,
-  notes: d.notes || undefined,
-  createdAt: d.created_at,
-});
+export const mapDBToOrder = (d: any): Order => {
+  const o: Order = {
+    id: d.id,
+    orderNumber: d.order_number || d.orderNumber,
+    customer: d.customer,
+    address: d.address,
+    items: d.items || [],
+    subtotal: Number(d.subtotal || 0),
+    shipping: Number(d.shipping ?? 0),
+    discount: Number(d.discount ?? 0),
+    total: Number(d.total || 0),
+    status: d.status || 'Pendente',
+    paymentMethod: d.payment_method || d.paymentMethod || 'A Combinar',
+    createdAt: d.created_at || d.createdAt || new Date().toISOString(),
+  };
+
+  if (d.paid_amount != null || d.paidAmount != null) {
+    o.paidAmount = Number(d.paid_amount != null ? d.paid_amount : d.paidAmount);
+  }
+  if (d.remaining_amount != null || d.remainingAmount != null) {
+    o.remainingAmount = Number(d.remaining_amount != null ? d.remaining_amount : d.remainingAmount);
+  }
+  if (d.due_date || d.dueDate) {
+    o.dueDate = d.due_date || d.dueDate;
+  }
+  if (d.last_reminder_sent_at || d.lastReminderSentAt) {
+    o.lastReminderSentAt = d.last_reminder_sent_at || d.lastReminderSentAt;
+  }
+  if (d.reminders_count != null || d.remindersCount != null) {
+    o.remindersCount = Number(d.reminders_count != null ? d.reminders_count : d.remindersCount);
+  }
+  if (d.tracking_code || d.trackingCode) {
+    o.trackingCode = d.tracking_code || d.trackingCode;
+  }
+  if (d.cleared_manually_at || d.clearedManuallyAt) {
+    o.clearedManuallyAt = d.cleared_manually_at || d.clearedManuallyAt;
+  }
+  if (d.cleared_by || d.clearedBy) {
+    o.clearedBy = d.cleared_by || d.clearedBy;
+  }
+  if (d.notes) {
+    o.notes = d.notes;
+  }
+
+  return o;
+};
 
 export const mapCouponToDB = (c: Coupon) => ({
   id: c.id,

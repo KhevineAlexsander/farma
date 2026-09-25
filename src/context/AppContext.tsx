@@ -67,6 +67,52 @@ function cleanUndefinedForFirestore<T>(data: T): T {
   return data;
 }
 
+/**
+ * Robust order merging helper that prevents remote null/undefined values
+ * from erasing local manual clearance or updated status fields.
+ */
+function mergeOrderHelper(existing: Order, incoming: Order): Order {
+  const hasExistingClearance = Boolean(existing.clearedManuallyAt || existing.clearedBy);
+  const hasIncomingClearance = Boolean(incoming.clearedManuallyAt || incoming.clearedBy);
+
+  const clearedManuallyAt = incoming.clearedManuallyAt || existing.clearedManuallyAt;
+  const clearedBy = incoming.clearedBy || existing.clearedBy;
+  const dueDate = incoming.dueDate || existing.dueDate;
+  
+  const paidAmount = incoming.paidAmount !== undefined 
+    ? incoming.paidAmount 
+    : existing.paidAmount;
+    
+  const remainingAmount = incoming.remainingAmount !== undefined 
+    ? incoming.remainingAmount 
+    : existing.remainingAmount;
+
+  let status = incoming.status;
+  if (hasExistingClearance && !hasIncomingClearance && incoming.status === 'Pendente') {
+    status = existing.status;
+  }
+
+  const isPaid = status === 'Pago' || status === 'Entregue' || status === 'Enviado';
+  const resolvedClearedManuallyAt = clearedManuallyAt || (isPaid ? existing.clearedManuallyAt || new Date().toLocaleString('pt-BR') : undefined);
+  const resolvedClearedBy = clearedBy || (isPaid ? existing.clearedBy || 'Administrador' : undefined);
+
+  return {
+    ...existing,
+    ...incoming,
+    status,
+    customer: { ...existing.customer, ...(incoming.customer || {}) },
+    address: { ...existing.address, ...(incoming.address || {}) },
+    items: incoming.items && incoming.items.length > 0 ? incoming.items : existing.items,
+    clearedManuallyAt: resolvedClearedManuallyAt,
+    clearedBy: resolvedClearedBy,
+    dueDate,
+    paidAmount: paidAmount !== undefined ? paidAmount : (isPaid ? (incoming.total || existing.total) : undefined),
+    remainingAmount: remainingAmount !== undefined ? remainingAmount : (isPaid ? 0 : undefined),
+    trackingCode: incoming.trackingCode || existing.trackingCode,
+    notes: incoming.notes || existing.notes,
+  };
+}
+
 interface AppContextType {
   products: Product[];
   addProduct: (product: Omit<Product, 'id'>) => void;
@@ -347,17 +393,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const mapped = ordData.map(mapDBToOrder);
             setOrders((prev) => {
               const orderMap = new Map<string, Order>();
-              // 1. Keep all current orders (e.g. 53 from Firestore or localStorage)
+              // 1. Keep all current orders (e.g. from Firestore or localStorage)
               prev.forEach((o) => {
                 const k = o.id || o.orderNumber;
                 if (k) orderMap.set(k, o);
               });
-              // 2. Merge with Supabase orders
+              // 2. Merge with Supabase orders using smart helper
               mapped.forEach((o) => {
                 const k = o.id || o.orderNumber;
                 if (k) {
                   const existing = orderMap.get(k);
-                  orderMap.set(k, { ...existing, ...o });
+                  orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
                 }
               });
               const merged = Array.from(orderMap.values());
@@ -431,7 +477,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   const k = o.id || o.orderNumber;
                   if (k) {
                     const existing = orderMap.get(k);
-                    orderMap.set(k, { ...existing, ...o });
+                    orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
                   }
                 });
                 const merged = Array.from(orderMap.values());
@@ -582,17 +628,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           
           setOrders((prev) => {
             const orderMap = new Map<string, Order>();
-            // Keep all current orders
             prev.forEach((o) => {
               const k = o.id || o.orderNumber;
               if (k) orderMap.set(k, o);
             });
-            // Merge with Firestore orders
             list.forEach((o) => {
               const k = o.id || o.orderNumber;
               if (k) {
                 const existing = orderMap.get(k);
-                orderMap.set(k, { ...existing, ...o });
+                orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
               }
             });
             const merged = Array.from(orderMap.values());
@@ -649,7 +693,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return parsed.map((o) => {
+            const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+            if (isPaid && !o.clearedManuallyAt) {
+              return {
+                ...o,
+                clearedManuallyAt: new Date(o.createdAt || Date.now()).toLocaleString('pt-BR'),
+                clearedBy: o.clearedBy || 'Administrador',
+              };
+            }
+            return o;
+          });
         }
       } catch {
         return [];
@@ -2361,9 +2415,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? Number(updatedData.total)
               : Number(Math.max(0, computedSubtotal + shipping - discount).toFixed(2));
 
+          const effectiveStatus = updatedData.status || order.status;
+          const isPaidStatus = effectiveStatus === 'Pago' || effectiveStatus === 'Entregue' || effectiveStatus === 'Enviado';
+          const resolvedClearedAt = updatedData.clearedManuallyAt !== undefined
+            ? updatedData.clearedManuallyAt
+            : (isPaidStatus ? (order.clearedManuallyAt || new Date().toLocaleString('pt-BR')) : order.clearedManuallyAt);
+          const resolvedClearedBy = updatedData.clearedBy !== undefined
+            ? updatedData.clearedBy
+            : (isPaidStatus ? (order.clearedBy || currentUser?.name || 'Administrador') : order.clearedBy);
+
           updatedOrderObj = {
             ...order,
             ...updatedData,
+            status: effectiveStatus,
+            clearedManuallyAt: resolvedClearedAt,
+            clearedBy: resolvedClearedBy,
             customer: {
               ...order.customer,
               ...(updatedData.customer || {}),
@@ -2462,15 +2528,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus, trackingCode?: string) => {
+    const timestamp = new Date().toLocaleString('pt-BR');
     const isoTimestamp = new Date().toISOString();
+    const isPaid = status === 'Pago' || status === 'Entregue' || status === 'Enviado' || status === 'Em Separação';
+    const operator = currentUser?.name || 'Administrador';
+
     let updatedList: Order[] = [];
     setOrders((prev) => {
       updatedList = prev.map((order) => {
         if (order.id === orderId) {
+          const finalPaid = isPaid ? (order.paidAmount !== undefined && order.paidAmount > 0 ? order.paidAmount : order.total) : order.paidAmount;
+          const finalRemaining = isPaid ? Math.max(0, order.total - (finalPaid || order.total)) : order.remainingAmount;
           return {
             ...order,
             status,
+            paidAmount: finalPaid,
+            remainingAmount: finalRemaining,
+            clearedManuallyAt: isPaid ? (order.clearedManuallyAt || timestamp) : order.clearedManuallyAt,
+            clearedBy: isPaid ? (order.clearedBy || operator) : order.clearedBy,
             trackingCode: trackingCode !== undefined ? trackingCode : order.trackingCode,
+            updatedAt: isoTimestamp,
           };
         }
         return order;
@@ -2483,19 +2560,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updatedList;
     });
 
+    const targetOrder = updatedList.find((o) => o.id === orderId);
+
     const supabase = getSupabaseClient();
-    if (supabase) {
-      const dbUpdate: Record<string, any> = { status, updated_at: isoTimestamp };
-      if (trackingCode !== undefined) dbUpdate.tracking_code = trackingCode;
-      supabase.from('orders').update(dbUpdate).eq('id', orderId).then((res) => {
+    if (supabase && targetOrder) {
+      supabase.from('orders').upsert(mapOrderToDB(targetOrder)).then((res) => {
         if (res.error) console.log('Supabase status update info:', res.error.message);
       });
     }
 
     try {
-      const updateData: Record<string, any> = { status, updatedAt: isoTimestamp };
-      if (trackingCode !== undefined) updateData.trackingCode = trackingCode;
-      await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(updateData), { merge: true });
+      if (targetOrder) {
+        await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(targetOrder), { merge: true });
+      }
     } catch (e) {
       console.log('Error updating order status in Firestore:', e);
     }
@@ -2520,7 +2597,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setOrders((prev) => {
       updatedList = prev.map((order) => {
         if (order.id === orderId) {
-          const finalPaid = paidAmount !== undefined ? paidAmount : (status === 'Pago' || status === 'Entregue' ? order.total : order.paidAmount);
+          const finalPaid = paidAmount !== undefined ? paidAmount : (status === 'Pago' || status === 'Entregue' || status === 'Enviado' ? order.total : order.paidAmount);
           const finalRemaining = remainingAmount !== undefined ? remainingAmount : (finalPaid !== undefined ? Math.max(0, order.total - finalPaid) : order.remainingAmount);
           return {
             ...order,
@@ -2531,6 +2608,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             clearedManuallyAt: timestamp,
             clearedBy: operator,
             notes: noteText,
+            updatedAt: isoTimestamp,
           };
         }
         return order;
@@ -2544,40 +2622,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     const targetOrder = updatedList.find((o) => o.id === orderId);
+    if (!targetOrder) return;
 
     const supabase = getSupabaseClient();
     if (supabase) {
-      const updateData: Record<string, any> = {
-        status,
-        cleared_manually_at: isoTimestamp,
-        cleared_by: operator,
-        notes: noteText,
-        updated_at: isoTimestamp,
-      };
-      if (targetOrder?.paidAmount !== undefined) updateData.paid_amount = targetOrder.paidAmount;
-      if (targetOrder?.remainingAmount !== undefined) updateData.remaining_amount = targetOrder.remainingAmount;
-      if (targetOrder?.dueDate !== undefined) updateData.due_date = targetOrder.dueDate;
-
-      supabase.from('orders').update(updateData).eq('id', orderId).then((res) => {
+      supabase.from('orders').upsert(mapOrderToDB(targetOrder)).then((res) => {
         if (res.error) console.log('Supabase clear order info:', res.error.message);
       });
     }
 
     try {
-      await setDoc(
-        doc(db, 'orders', orderId),
-        cleanUndefinedForFirestore({
-          status,
-          paidAmount: targetOrder?.paidAmount,
-          remainingAmount: targetOrder?.remainingAmount,
-          dueDate: targetOrder?.dueDate,
-          clearedManuallyAt: timestamp,
-          clearedBy: operator,
-          notes: noteText,
-          updatedAt: isoTimestamp,
-        }),
-        { merge: true }
-      );
+      await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(targetOrder), { merge: true });
     } catch (e) {
       console.log('Error saving manual clearance in Firestore:', e);
     }
