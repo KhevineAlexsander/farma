@@ -67,6 +67,35 @@ function cleanUndefinedForFirestore<T>(data: T): T {
   return data;
 }
 
+export function isBlacklistedOrder(o: { id?: string; orderNumber?: string }): boolean {
+  if (!o) return false;
+  const id = o.id || '';
+  const num = (o.orderNumber || '').toUpperCase().trim();
+  return (
+    id === 'ord-1003' ||
+    id === 'ord-1004' ||
+    num === '#PI-9838' ||
+    num === 'PI-9838' ||
+    num === '#PI-9830' ||
+    num === 'PI-9830'
+  );
+}
+
+export function isBlacklistedTx(t: { id?: string; orderId?: string; description?: string }): boolean {
+  if (!t) return false;
+  const id = t.id || '';
+  const orderId = t.orderId || '';
+  const desc = t.description || '';
+  return (
+    id === 'tx-4' ||
+    id === 'tx-6' ||
+    orderId === 'ord-1003' ||
+    orderId === 'ord-1004' ||
+    desc.includes('9838') ||
+    desc.includes('9830')
+  );
+}
+
 /**
  * Robust order merging helper that prevents remote null/undefined values
  * from erasing local manual clearance or updated status fields.
@@ -390,23 +419,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Fetch Orders (Always merge with Firestore/Local to prevent losing orders)
           const { data: ordData, error: ordErr } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
           if (!ordErr && ordData) {
-            const mapped = ordData.map(mapDBToOrder);
+            const mapped = ordData.map(mapDBToOrder).filter((o) => !isBlacklistedOrder(o));
             setOrders((prev) => {
               const orderMap = new Map<string, Order>();
               // 1. Keep all current orders (keyed strictly by unique ID)
               prev.forEach((o) => {
-                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-                if (k) orderMap.set(k, o);
+                if (!isBlacklistedOrder(o)) {
+                  const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                  if (k) orderMap.set(k, o);
+                }
               });
               // 2. Merge with Supabase orders without deduplicating separate records
               mapped.forEach((o) => {
-                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-                if (k) {
-                  const existing = orderMap.get(k);
-                  orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
+                if (!isBlacklistedOrder(o)) {
+                  const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                  if (k) {
+                    const existing = orderMap.get(k);
+                    orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
+                  }
                 }
               });
-              const merged = Array.from(orderMap.values());
+              const merged = Array.from(orderMap.values()).filter((o) => !isBlacklistedOrder(o));
               merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
               localStorage.setItem('peptide_orders', JSON.stringify(merged));
 
@@ -466,21 +499,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
             const { data } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
             if (data) {
-              const mapped = data.map(mapDBToOrder);
+              const mapped = data.map(mapDBToOrder).filter((o) => !isBlacklistedOrder(o));
               setOrders((prev) => {
                 const orderMap = new Map<string, Order>();
                 prev.forEach((o) => {
-                  const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-                  if (k) orderMap.set(k, o);
-                });
-                mapped.forEach((o) => {
-                  const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-                  if (k) {
-                    const existing = orderMap.get(k);
-                    orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
+                  if (!isBlacklistedOrder(o)) {
+                    const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                    if (k) orderMap.set(k, o);
                   }
                 });
-                const merged = Array.from(orderMap.values());
+                mapped.forEach((o) => {
+                  if (!isBlacklistedOrder(o)) {
+                    const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                    if (k) {
+                      const existing = orderMap.get(k);
+                      orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
+                    }
+                  }
+                });
+                const merged = Array.from(orderMap.values()).filter((o) => !isBlacklistedOrder(o));
                 merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
                 localStorage.setItem('peptide_orders', JSON.stringify(merged));
                 return merged;
@@ -622,46 +659,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, () => {});
 
       unsubOrders = onSnapshot(collection(db, 'orders'), (snapshot) => {
-        if (!snapshot.empty) {
-          const list: Order[] = [];
-          snapshot.forEach((d) => list.push({ ...(d.data() as Order), id: d.id }));
-          
-          setOrders((prev) => {
-            const orderMap = new Map<string, Order>();
-            prev.forEach((o) => {
-              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-              if (k) orderMap.set(k, o);
-            });
-            list.forEach((o) => {
-              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-              if (k) {
-                const existing = orderMap.get(k);
-                orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
-              }
-            });
-            const merged = Array.from(orderMap.values());
-            merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-            localStorage.setItem('peptide_orders', JSON.stringify(merged));
+        const list: Order[] = [];
+        snapshot.forEach((d) => {
+          const o = { ...(d.data() as Order), id: d.id };
+          if (!isBlacklistedOrder(o)) {
+            list.push(o);
+          }
+        });
+        
+        list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+        setOrders(list);
+        localStorage.setItem('peptide_orders', JSON.stringify(list));
 
-            // Sync missing orders to Firestore so they are permanently in the cloud
-            INITIAL_ORDERS.forEach(async (initOrd) => {
-              if (!list.some((lo) => lo.id === initOrd.id || lo.orderNumber === initOrd.orderNumber)) {
-                try {
-                  await setDoc(doc(db, 'orders', initOrd.id), cleanUndefinedForFirestore(initOrd), { merge: true });
-                } catch {}
-              }
-            });
-
-            // If Supabase is active, ensure any missing orders from Firestore are synced into Supabase
-            const supabaseClient = getSupabaseClient();
-            if (supabaseClient && isSupabaseConfigured() && merged.length > 0) {
-              const dbOrders = merged.map(mapOrderToDB);
-              supabaseClient.from('orders').upsert(dbOrders).then(({ error: upErr }) => {
-                if (upErr) console.warn('Supabase auto-replicate note:', upErr.message);
-              });
-            }
-
-            return merged;
+        // If Supabase is active, ensure sync
+        const supabaseClient = getSupabaseClient();
+        if (supabaseClient && isSupabaseConfigured() && list.length > 0) {
+          const dbOrders = list.map(mapOrderToDB);
+          supabaseClient.from('orders').upsert(dbOrders).then(({ error: upErr }) => {
+            if (upErr) console.warn('Supabase auto-replicate note:', upErr.message);
           });
         }
       }, (error) => {
@@ -669,13 +684,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
       unsubFinances = onSnapshot(collection(db, 'financialTransactions'), (snapshot) => {
-        if (!snapshot.empty) {
-          const list: FinancialTransaction[] = [];
-          snapshot.forEach((d) => list.push({ ...(d.data() as FinancialTransaction), id: d.id }));
-          list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          setFinancialTransactions((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
-          localStorage.setItem('peptide_finances', JSON.stringify(list));
-        }
+        const list: FinancialTransaction[] = [];
+        snapshot.forEach((d) => {
+          const t = { ...(d.data() as FinancialTransaction), id: d.id };
+          if (!isBlacklistedTx(t)) {
+            list.push(t);
+          }
+        });
+        list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setFinancialTransactions((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
+        localStorage.setItem('peptide_finances', JSON.stringify(list));
       }, () => {});
     } catch (err) {
       console.log('Firestore realtime listeners fallback mode:', err);
@@ -695,49 +713,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.role]);
 
-  // --- Orders State (Preserving all real orders and ensuring #PI-7464 is always active) ---
+  // --- Orders State (Real Data connected to Firestore, starting from zero) ---
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('peptide_orders');
-    let baseList: Order[] = [];
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          baseList = parsed;
+        if (Array.isArray(parsed)) {
+          return parsed
+            .filter((o) => !isBlacklistedOrder(o))
+            .map((o) => {
+              const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+              if (isPaid && !o.clearedManuallyAt) {
+                return {
+                  ...o,
+                  clearedManuallyAt: new Date(o.createdAt || Date.now()).toLocaleString('pt-BR'),
+                  clearedBy: o.clearedBy || 'Administrador',
+                };
+              }
+              return o;
+            });
         }
       } catch {
-        baseList = [];
+        return [];
       }
     }
-
-    const orderMap = new Map<string, Order>();
-    // Guarantee base templates including #PI-7464, #PI-7463, #PI-7462 are seeded
-    INITIAL_ORDERS.forEach((o) => {
-      const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-      if (k) orderMap.set(k, o);
-    });
-    // Overlay local storage orders
-    baseList.forEach((o) => {
-      const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-      if (k) {
-        const existing = orderMap.get(k);
-        orderMap.set(k, existing ? mergeOrderHelper(existing, o) : o);
-      }
-    });
-
-    const merged = Array.from(orderMap.values());
-    merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-    return merged.map((o) => {
-      const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
-      if (isPaid && !o.clearedManuallyAt) {
-        return {
-          ...o,
-          clearedManuallyAt: new Date(o.createdAt || Date.now()).toLocaleString('pt-BR'),
-          clearedBy: o.clearedBy || 'Administrador Master',
-        };
-      }
-      return o;
-    });
+    return [];
   });
 
   useEffect(() => {
@@ -751,7 +752,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return parsed.filter((t) => !isBlacklistedTx(t));
         }
       } catch {
         return [];
@@ -1616,8 +1617,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!snap.empty) {
           snap.forEach((d) => {
             const o = { ...(d.data() as Order), id: d.id };
-            const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-            if (k) orderMap.set(k, o);
+            if (!isBlacklistedOrder(o)) {
+              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+              if (k) orderMap.set(k, o);
+            }
           });
         }
       } catch (fireErr) {
@@ -1635,10 +1638,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!ordErr && ordData) {
             const mapped = ordData.map(mapDBToOrder);
             mapped.forEach((o) => {
-              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-              if (k) {
-                const existing = orderMap.get(k);
-                orderMap.set(k, existing ? { ...existing, ...o } : o);
+              if (!isBlacklistedOrder(o)) {
+                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                if (k) {
+                  const existing = orderMap.get(k);
+                  orderMap.set(k, existing ? { ...existing, ...o } : o);
+                }
               }
             });
           }
