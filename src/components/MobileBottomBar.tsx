@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, LayoutGrid, BookOpen, MessageSquare, User, ShieldAlert } from 'lucide-react';
+import { Home, LayoutGrid, BookOpen, MessageSquare, User, ShieldAlert, Syringe } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 
 export const MobileBottomBar: React.FC = () => {
@@ -13,7 +13,7 @@ export const MobileBottomBar: React.FC = () => {
     currentUser,
   } = useApp();
 
-  const handleNav = (target: 'home' | 'products' | 'guide' | 'contact' | 'account' | 'admin') => {
+  const handleNav = (target: 'home' | 'products' | 'doses' | 'guide' | 'account' | 'admin') => {
     if (target === 'home') {
       setCurrentView('store');
       setActiveNav('Início');
@@ -26,12 +26,14 @@ export const MobileBottomBar: React.FC = () => {
       if (catalogEl) {
         catalogEl.scrollIntoView({ behavior: 'smooth' });
       }
+    } else if (target === 'doses') {
+      setCurrentView('dosage-calculator');
+      setActiveNav('Cálculo de Doses');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (target === 'guide') {
       setCurrentView('guide');
       setActiveNav('Guia de Peptídeos');
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } else if (target === 'contact') {
-      setInfoModal('contact');
     } else if (target === 'account') {
       setCurrentView('my-account');
       setActiveNav('Minha Conta');
@@ -67,6 +69,19 @@ export const MobileBottomBar: React.FC = () => {
         >
           <LayoutGrid className="w-5 h-5" />
           <span className="text-[10px] font-bold">Produtos</span>
+        </button>
+
+        {/* Calculadora de Doses */}
+        <button
+          onClick={() => handleNav('doses')}
+          className={`flex flex-col items-center gap-1 transition-colors ${
+            currentView === 'dosage-calculator'
+              ? 'text-cyan-400 font-bold'
+              : 'text-slate-400 hover:text-cyan-400'
+          }`}
+        >
+          <Syringe className="w-5 h-5" />
+          <span className="text-[10px] font-bold">Doses</span>
         </button>
 
         {/* Guia Científico */}

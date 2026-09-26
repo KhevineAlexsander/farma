@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Search, ShoppingBag, User, Menu, X, ShieldAlert, LogOut, Package, LayoutDashboard, ChevronDown, BookOpen, FilePlus2 } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Search, ShoppingBag, User, Menu, X, ShieldAlert, LogOut, Package, LayoutDashboard, ChevronDown, BookOpen, FilePlus2, Sparkles, Syringe, Activity, ChevronRight, SlidersHorizontal, Layers, Check } from 'lucide-react';
 import { DnaLogo } from './DnaLogo';
 import { useApp } from '../context/AppContext';
 
@@ -26,6 +26,32 @@ export const Navbar: React.FC = () => {
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
+  // Expandable Tools state: collapsed by default to save navbar space
+  const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
+  const [isToolsExpanded, setIsToolsExpanded] = useState<boolean>(() => {
+    return localStorage.getItem('navbar_tools_expanded') === 'true';
+  });
+  const toolsDropdownRef = useRef<HTMLDivElement>(null);
+
+  const toggleToolsExpanded = () => {
+    setIsToolsExpanded((prev) => {
+      const next = !prev;
+      localStorage.setItem('navbar_tools_expanded', String(next));
+      return next;
+    });
+    setIsToolsDropdownOpen(false);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (toolsDropdownRef.current && !toolsDropdownRef.current.contains(event.target as Node)) {
+        setIsToolsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
 
   const handleNavClick = (nav: string) => {
@@ -42,6 +68,15 @@ export const Navbar: React.FC = () => {
       if (catalogEl) {
         catalogEl.scrollIntoView({ behavior: 'smooth' });
       }
+    } else if (nav === 'Benefícios') {
+      setCurrentView('benefits');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (nav === 'Cálculo de Doses') {
+      setCurrentView('dosage-calculator');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (nav === 'Controle de Dieta') {
+      setCurrentView('diet-control');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (nav === 'Guia de Peptídeos') {
       setCurrentView('guide');
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -120,42 +155,264 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Desktop Navigation Links */}
-          <nav className="hidden lg:flex items-center space-x-7">
-            {[
-              { id: 'Início', label: 'Início' },
-              { id: 'Produtos', label: 'Produtos' },
-              { id: 'Guia de Peptídeos', label: 'Guia de Peptídeos', highlight: true },
-              { id: 'Sobre nós', label: 'Sobre nós' },
-              { id: 'Segurança', label: 'Segurança' },
-              { id: 'Contato', label: 'Contato' },
-            ].map((link) => {
-              const isActive = (link.id === 'Guia de Peptídeos' && currentView === 'guide') ||
-                               (activeNav === link.id && currentView === 'store');
-              return (
+          <nav className="hidden lg:flex items-center space-x-3 xl:space-x-5">
+            {/* Standard Primary Links */}
+            <button
+              onClick={() => handleNavClick('Início')}
+              className={`relative py-2 text-xs xl:text-sm font-medium transition-colors ${
+                activeNav === 'Início' && currentView === 'store'
+                  ? 'text-cyan-400 font-bold'
+                  : 'text-slate-300 hover:text-cyan-400'
+              }`}
+            >
+              <span>Início</span>
+              {activeNav === 'Início' && currentView === 'store' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full" />
+              )}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('Produtos')}
+              className={`relative py-2 text-xs xl:text-sm font-medium transition-colors ${
+                activeNav === 'Produtos' && currentView === 'store'
+                  ? 'text-cyan-400 font-bold'
+                  : 'text-slate-300 hover:text-cyan-400'
+              }`}
+            >
+              <span>Produtos</span>
+              {activeNav === 'Produtos' && currentView === 'store' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full" />
+              )}
+            </button>
+
+            {/* Smart Expandable Tools Group */}
+            {!isToolsExpanded ? (
+              /* Collapsed State: A single compact dropdown button that expands on click to save maximum navbar space */
+              <div className="relative" ref={toolsDropdownRef}>
+                <div className="flex items-center gap-1 bg-slate-900/90 p-0.5 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setIsToolsDropdownOpen(!isToolsDropdownOpen)}
+                    className={`px-3 py-1.5 rounded-lg text-xs xl:text-sm font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                      currentView === 'benefits' || currentView === 'dosage-calculator' || currentView === 'diet-control'
+                        ? 'bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
+                        : isToolsDropdownOpen
+                        ? 'bg-slate-800 text-white'
+                        : 'text-slate-200 hover:text-white hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 whitespace-nowrap">
+                      {currentView === 'dosage-calculator' ? (
+                        <Syringe className="w-3.5 h-3.5 text-cyan-400" />
+                      ) : currentView === 'diet-control' ? (
+                        <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                      )}
+                      <span>
+                        {currentView === 'benefits'
+                          ? 'Benefícios'
+                          : currentView === 'dosage-calculator'
+                          ? 'Cálculo de Doses'
+                          : currentView === 'diet-control'
+                          ? 'Dieta & Macros'
+                          : 'Ferramentas & Doses'}
+                      </span>
+                    </div>
+
+                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+                      3
+                    </span>
+
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
+                        isToolsDropdownOpen ? 'rotate-180 text-cyan-400' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {/* Inline quick expand toggle */}
+                  <button
+                    type="button"
+                    onClick={toggleToolsExpanded}
+                    className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                    title="Expandir botões diretamente na barra superior"
+                  >
+                    <SlidersHorizontal className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Floating Dropdown Panel */}
+                {isToolsDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-80 bg-[#0B0F17] border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-md">
+                    <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 mb-1 flex items-center justify-between">
+                      <span>Recursos Clínicos & Ferramentas</span>
+                      <span className="text-cyan-400 text-[9px]">3 Ferramentas</span>
+                    </div>
+
+                    {/* 1. Benefícios */}
+                    <button
+                      onClick={() => {
+                        handleNavClick('Benefícios');
+                        setIsToolsDropdownOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        currentView === 'benefits'
+                          ? 'bg-cyan-500/15 border border-cyan-500/30 text-white'
+                          : 'hover:bg-slate-800/80 text-slate-200'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">Página de Benefícios</span>
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300">Novo</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">Mecanismos celulares, HPLC e indicações</p>
+                      </div>
+                    </button>
+
+                    {/* 2. Cálculo de Doses */}
+                    <button
+                      onClick={() => {
+                        handleNavClick('Cálculo de Doses');
+                        setIsToolsDropdownOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        currentView === 'dosage-calculator'
+                          ? 'bg-cyan-500/15 border border-cyan-500/30 text-white'
+                          : 'hover:bg-slate-800/80 text-slate-200'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <Syringe className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">Cálculo de Doses & Seringa</span>
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Calculadora</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">Seringa graduada, diluição e cronograma</p>
+                      </div>
+                    </button>
+
+                    {/* 3. Controle de Dieta */}
+                    <button
+                      onClick={() => {
+                        handleNavClick('Controle de Dieta');
+                        setIsToolsDropdownOpen(false);
+                      }}
+                      className={`w-full p-2.5 rounded-xl text-left flex items-start gap-3 transition-colors cursor-pointer ${
+                        currentView === 'diet-control'
+                          ? 'bg-emerald-500/15 border border-emerald-500/30 text-white'
+                          : 'hover:bg-slate-800/80 text-slate-200'
+                      }`}
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <Activity className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">Controle de Dieta & Macros</span>
+                          <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Nutrição</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">Metas de proteína, hidratação e diário</p>
+                      </div>
+                    </button>
+
+                    {/* Bottom option to pin/expand inline */}
+                    <div className="pt-2 mt-1 border-t border-slate-800/80">
+                      <button
+                        onClick={toggleToolsExpanded}
+                        className="w-full py-1.5 px-3 rounded-lg text-[11px] font-semibold text-slate-400 hover:text-cyan-300 hover:bg-slate-800/50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Fixar botões expandidos na barra</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Expanded State: Renders all 3 buttons inline with no text-wrapping, plus a collapse button */
+              <div className="flex items-center space-x-2 bg-slate-900/60 p-1 rounded-2xl border border-slate-800 animate-in fade-in duration-200">
                 <button
-                  key={link.id}
-                  onClick={() => handleNavClick(link.id)}
-                  className={`relative py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
-                    isActive
-                      ? 'text-cyan-400 font-bold'
-                      : link.highlight
-                      ? 'text-cyan-300 hover:text-white'
-                      : 'text-slate-300 hover:text-cyan-400'
+                  onClick={() => handleNavClick('Benefícios')}
+                  className={`py-1 px-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    currentView === 'benefits'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
                   }`}
                 >
-                  {link.highlight && <BookOpen className="w-3.5 h-3.5 text-cyan-400" />}
-                  <span>{link.label}</span>
-                  {link.highlight && !isActive && (
-                    <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
-                      E-book
-                    </span>
-                  )}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full" />
-                  )}
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span>Benefícios</span>
                 </button>
-              );
-            })}
+
+                <button
+                  onClick={() => handleNavClick('Cálculo de Doses')}
+                  className={`py-1 px-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    currentView === 'dosage-calculator'
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                  }`}
+                >
+                  <Syringe className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <span>Cálculo de Doses</span>
+                </button>
+
+                <button
+                  onClick={() => handleNavClick('Controle de Dieta')}
+                  className={`py-1 px-2.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer ${
+                    currentView === 'diet-control'
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
+                  }`}
+                >
+                  <Activity className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>Dieta & Macros</span>
+                </button>
+
+                {/* Collapse button to hide buttons back into dropdown */}
+                <button
+                  onClick={toggleToolsExpanded}
+                  className="p-1 px-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer border border-slate-700/60"
+                  title="Recolher botões para economizar espaço"
+                >
+                  <X className="w-3 h-3 text-slate-400" />
+                  <span>Ocultar</span>
+                </button>
+              </div>
+            )}
+
+            {/* Guia & Contato */}
+            <button
+              onClick={() => handleNavClick('Guia de Peptídeos')}
+              className={`relative py-2 text-xs xl:text-sm font-medium transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                currentView === 'guide'
+                  ? 'text-cyan-400 font-bold'
+                  : 'text-cyan-300 hover:text-white'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Guia</span>
+              {currentView !== 'guide' && (
+                <span className="px-1.5 py-0.2 text-[9px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
+                  E-book
+                </span>
+              )}
+              {currentView === 'guide' && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-cyan-400 to-blue-500 rounded-full" />
+              )}
+            </button>
+
+            <button
+              onClick={() => handleNavClick('Contato')}
+              className="py-2 text-xs xl:text-sm font-medium text-slate-300 hover:text-cyan-400 transition-colors whitespace-nowrap"
+            >
+              Contato
+            </button>
           </nav>
 
           {/* Right Action Icons: Search, User, Cart */}
@@ -331,13 +588,21 @@ export const Navbar: React.FC = () => {
             {[
               { id: 'Início', label: 'Início' },
               { id: 'Produtos', label: 'Produtos' },
-              { id: 'Guia de Peptídeos', label: 'Guia de Peptídeos (E-Book)', highlight: true },
+              { id: 'Benefícios', label: 'Página de Benefícios', icon: Sparkles, badge: 'Novo' },
+              { id: 'Cálculo de Doses', label: 'Cálculo de Doses & Seringa', icon: Syringe, badge: 'Calculadora' },
+              { id: 'Controle de Dieta', label: 'Controle de Dieta & Macros', icon: Activity },
+              { id: 'Guia de Peptídeos', label: 'Guia de Peptídeos (E-Book)', icon: BookOpen, highlight: true },
               { id: 'Sobre nós', label: 'Sobre nós' },
               { id: 'Segurança', label: 'Segurança' },
               { id: 'Contato', label: 'Contato' },
             ].map((link) => {
-              const isActive = (link.id === 'Guia de Peptídeos' && currentView === 'guide') ||
-                               (activeNav === link.id && currentView === 'store');
+              const isActive =
+                (link.id === 'Benefícios' && currentView === 'benefits') ||
+                (link.id === 'Cálculo de Doses' && currentView === 'dosage-calculator') ||
+                (link.id === 'Controle de Dieta' && currentView === 'diet-control') ||
+                (link.id === 'Guia de Peptídeos' && currentView === 'guide') ||
+                (activeNav === link.id && currentView === 'store');
+              const Icon = link.icon;
               return (
                 <button
                   key={link.id}
@@ -351,12 +616,12 @@ export const Navbar: React.FC = () => {
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    {link.highlight && <BookOpen className="w-4 h-4 text-cyan-400" />}
+                    {Icon && <Icon className="w-4 h-4 text-cyan-400" />}
                     {link.label}
                   </span>
-                  {link.highlight && (
+                  {link.badge && (
                     <span className="px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-full">
-                      Científico
+                      {link.badge}
                     </span>
                   )}
                 </button>

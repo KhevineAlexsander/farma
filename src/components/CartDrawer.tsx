@@ -12,10 +12,14 @@ export const CartDrawer: React.FC = () => {
     removeFromCart,
     updateCartQuantity,
     setCurrentView,
+    currentUser,
+    setIsAuthOpen,
+    showToast,
     storeSettings,
     appliedCoupon,
     couponDiscount,
     deliveryFee,
+    getClientActiveBenefit,
     applyCouponCode,
     removeCoupon,
   } = useApp();
@@ -24,6 +28,11 @@ export const CartDrawer: React.FC = () => {
   const [couponFeedback, setCouponFeedback] = useState<{ success?: string; error?: string }>({});
 
   const isSuspended = Boolean(storeSettings.purchasesSuspended);
+
+  const activeBenefit = getClientActiveBenefit(currentUser);
+  const baseDeliveryFee = typeof deliveryFee === 'number' ? deliveryFee : 30.00;
+  // If active benefit is true, shipping fee is 0!
+  const effectiveShipping = activeBenefit.isActive ? 0 : baseDeliveryFee;
 
   if (!isCartOpen) return null;
 
@@ -45,10 +54,14 @@ export const CartDrawer: React.FC = () => {
   };
 
   const subtotalAfterCoupon = Math.max(0, cartTotal - (storeSettings.couponsEnabled !== false ? couponDiscount : 0));
-  const importTax = cart.length > 0 ? 100.00 : 0;
-  const estimatedTotal = subtotalAfterCoupon + importTax;
+  const estimatedTotal = subtotalAfterCoupon + (cart.length > 0 ? effectiveShipping : 0);
 
   const handleProceedToCheckout = () => {
+    if (!currentUser) {
+      showToast('Por favor, faça login ou cadastre-se para finalizar seu pedido com segurança.');
+      setIsAuthOpen(true);
+      return;
+    }
     setIsCartOpen(false);
     setCurrentView('checkout');
   };
@@ -217,6 +230,37 @@ export const CartDrawer: React.FC = () => {
                 </>
               )}
 
+              {/* 7-Day Automatic Repurchase Benefit Banner */}
+              {activeBenefit.isActive ? (
+                <div className="p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl flex items-start gap-2.5">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500 text-white flex items-center justify-center shrink-0 text-xs font-bold shadow-xs">
+                    🎉
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-emerald-900">
+                      Cupom Automático de Frete Grátis Ativo!
+                    </p>
+                    <p className="text-[11px] text-emerald-700 leading-snug mt-0.5">
+                      Válido por mais <strong>{activeBenefit.daysRemaining} {activeBenefit.daysRemaining === 1 ? 'dia' : 'dias'}</strong> (até {activeBenefit.expiresAtFormatted}). Sua taxa de entrega neste pedido é <strong>ZERO</strong>!
+                    </p>
+                  </div>
+                </div>
+              ) : activeBenefit.isExpired ? (
+                <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl flex items-start gap-2 text-[11px] text-slate-600">
+                  <span className="text-slate-400">⏱️</span>
+                  <p>
+                    Seu cupom de 7 dias expirou em {activeBenefit.expiresAtFormatted}. A taxa de entrega é cobrada normalmente.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-2.5 bg-cyan-50/80 border border-cyan-200/80 rounded-xl flex items-start gap-2 text-[11px] text-cyan-900">
+                  <span className="text-cyan-600 font-bold">✨</span>
+                  <p>
+                    <strong>Bônus de 1ª Compra:</strong> Finalize seu pedido e ganhe <strong>7 dias de Frete Grátis automático</strong> para todas as suas próximas compras!
+                  </p>
+                </div>
+              )}
+
               {/* Subtotal breakdown */}
               <div className="space-y-1.5 text-xs text-slate-600 pt-1">
                 <div className="flex justify-between">
@@ -231,11 +275,18 @@ export const CartDrawer: React.FC = () => {
                     <span>- R$ {(couponDiscount || 0).toFixed(2).replace('.', ',')}</span>
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <span>Taxa de Importação</span>
-                  <span className="font-semibold text-slate-800">
-                    R$ 100,00
-                  </span>
+                <div className="flex justify-between items-center">
+                  <span>Taxa de Importação / Envio</span>
+                  {activeBenefit.isActive ? (
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <span className="text-slate-400 line-through text-[11px]">R$ {baseDeliveryFee.toFixed(2).replace('.', ',')}</span>
+                      <span className="text-emerald-600">ZERO (Cupom 7 Dias)</span>
+                    </div>
+                  ) : (
+                    <span className="font-semibold text-slate-800">
+                      R$ {baseDeliveryFee.toFixed(2).replace('.', ',')}
+                    </span>
+                  )}
                 </div>
                 <div className="flex justify-between text-base font-extrabold text-slate-950 pt-2 border-t border-slate-200">
                   <span>Total estimado</span>

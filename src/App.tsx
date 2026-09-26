@@ -21,6 +21,9 @@ import { MobileBottomBar } from './components/MobileBottomBar';
 import { ScientificGuide } from './components/ScientificGuide';
 import { ProductRequestPage } from './components/ProductRequestPage';
 import { AdminLoadingScreen } from './components/AdminLoadingScreen';
+import { BenefitsPage } from './components/client/BenefitsPage';
+import { DosageCalculatorPage } from './components/client/DosageCalculatorPage';
+import { DietControlPage } from './components/client/DietControlPage';
 
 const MainLayout: React.FC = () => {
   const { currentView, currentUser, isAdminLoading } = useApp();
@@ -85,6 +88,18 @@ const MainLayout: React.FC = () => {
 
         {currentView === 'guide' && (
           <ScientificGuide />
+        )}
+
+        {currentView === 'benefits' && (
+          <BenefitsPage />
+        )}
+
+        {currentView === 'dosage-calculator' && (
+          <DosageCalculatorPage />
+        )}
+
+        {currentView === 'diet-control' && (
+          <DietControlPage />
         )}
 
         {currentView === 'my-account' && (

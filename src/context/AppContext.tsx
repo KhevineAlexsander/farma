@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon, ProductRequest } from '../types';
+import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon, ProductRequest, SavedDoseProtocol, InjectionRecord, RepurchaseBenefit } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_TRANSACTIONS, CURRENT_CLIENT_USER, ADMIN_USER, INITIAL_EMPLOYEES, INITIAL_SETTINGS, INITIAL_COUPONS } from '../data/mockData';
 import {
   getSupabaseClient,
@@ -186,9 +186,16 @@ interface AppContextType {
   loginUser: (email: string, role?: 'CLIENTE' | 'ADMIN') => boolean;
   loginWithGoogle: () => Promise<{ success: boolean; message?: string }>;
   loginStaffOrAdmin: (email: string, password: string) => { success: boolean; message: string; role?: 'ADMIN' | 'CLIENTE'; employee?: Employee };
+  loginClientWithEmail: (email: string, password?: string) => Promise<{ success: boolean; message?: string }>;
+  registerClientAccount: (name: string, email: string, password?: string, phone?: string) => Promise<{ success: boolean; message?: string }>;
   logoutUser: () => void;
   switchUserRole: (role: 'CLIENTE' | 'ADMIN') => void;
-  updateUserProfile: (data: Partial<User>) => void;
+  updateUserProfile: (data: Partial<User>) => Promise<void>;
+  saveDoseProtocol: (protocol: Omit<SavedDoseProtocol, 'id' | 'savedAt'>) => Promise<SavedDoseProtocol | null>;
+  deleteDoseProtocol: (protocolId: string) => Promise<boolean>;
+  saveDietProfile: (profile: User['dietProfile']) => Promise<boolean>;
+  saveInjectionRecord: (record: Omit<InjectionRecord, 'id'>) => Promise<InjectionRecord | null>;
+  deleteInjectionRecord: (recordId: string) => Promise<boolean>;
   isAuthOpen: boolean;
   setIsAuthOpen: (open: boolean) => void;
 
@@ -250,6 +257,15 @@ interface AppContextType {
   updateStoreSettings: (settings: Partial<StoreSettings>) => void;
   toggleStorePurchasesSuspension: (targetSuspended?: boolean, customMessage?: string, customTitle?: string) => Promise<boolean>;
   deliveryFee: number;
+  getClientActiveBenefit: (user?: User | null) => {
+    hasBenefit: boolean;
+    isActive: boolean;
+    isExpired: boolean;
+    daysRemaining: number;
+    hoursRemaining: number;
+    expiresAtFormatted: string;
+    benefit?: RepurchaseBenefit;
+  };
 
   // Supabase & Database State
   isSupabaseActive: boolean;
@@ -294,8 +310,10 @@ interface AppContextType {
   deleteProductRequest: (requestId: string) => Promise<boolean>;
   getProductRequestShareUrl: () => string;
 
-  currentView: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request';
-  setCurrentView: (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request') => void;
+  currentView: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request' | 'benefits' | 'dosage-calculator' | 'diet-control';
+  setCurrentView: (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request' | 'benefits' | 'dosage-calculator' | 'diet-control') => void;
+  selectedCalculatorProduct: Product | null;
+  setSelectedCalculatorProduct: (product: Product | null) => void;
   isAdminLoading: boolean;
   setIsAdminLoading: (loading: boolean) => void;
 
@@ -885,7 +903,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory>('Todos');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedProductDetail, setSelectedProductDetail] = useState<Product | null>(null);
-  const [currentView, setCurrentViewState] = useState<'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request'>(() => {
+  const [selectedCalculatorProduct, setSelectedCalculatorProduct] = useState<Product | null>(null);
+  const [currentView, setCurrentViewState] = useState<'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request' | 'benefits' | 'dosage-calculator' | 'diet-control'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const page = (params.get('page') || params.get('view') || params.get('p') || '').toLowerCase();
@@ -900,6 +919,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ) {
         return 'product-request';
       }
+      if (page === 'beneficios' || page === 'beneficio' || hash.includes('beneficios')) {
+        return 'benefits';
+      }
+      if (page === 'calculo-doses' || page === 'calculadora' || page === 'doses' || hash.includes('calculo-doses') || hash.includes('calculadora')) {
+        return 'dosage-calculator';
+      }
+      if (page === 'controle-dieta' || page === 'dieta' || hash.includes('controle-dieta') || hash.includes('dieta')) {
+        return 'diet-control';
+      }
     }
     return 'store';
   });
@@ -908,7 +936,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const adminLoadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const setCurrentView = useCallback(
-    (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request') => {
+    (view: 'store' | 'admin' | 'my-account' | 'checkout' | 'guide' | 'product-request' | 'benefits' | 'dosage-calculator' | 'diet-control') => {
       if (view === 'admin') {
         setIsAdminLoading(true);
         if (adminLoadingTimerRef.current) {
@@ -940,6 +968,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         hash.includes('cadastro-produto')
       ) {
         setCurrentView('product-request');
+      } else if (page === 'beneficios' || page === 'beneficio' || hash.includes('beneficios')) {
+        setCurrentView('benefits');
+      } else if (page === 'calculo-doses' || page === 'calculadora' || page === 'doses' || hash.includes('calculo-doses') || hash.includes('calculadora')) {
+        setCurrentView('dosage-calculator');
+      } else if (page === 'controle-dieta' || page === 'dieta' || hash.includes('controle-dieta') || hash.includes('dieta')) {
+        setCurrentView('diet-control');
       }
     };
 
@@ -2340,14 +2374,316 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const updateUserProfile = (data: Partial<User>) => {
+  const registerClientAccount = async (
+    name: string,
+    email: string,
+    password?: string,
+    phone?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      const userId = `usr-${Date.now()}`;
+      const newUser: User = {
+        id: userId,
+        name: name.trim() || cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: 'CLIENTE',
+        phone: phone || '(11) 99999-0000',
+        password: password,
+        addresses: [
+          {
+            street: 'Av. Paulista',
+            number: '1000',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'SP',
+            zipCode: '01310-100',
+          },
+        ],
+        savedDoseProtocols: [],
+        injectionLogs: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      setCurrentUser(newUser);
+      localStorage.setItem('peptide_user', JSON.stringify(newUser));
+
+      try {
+        await setDoc(doc(db, 'users', userId), cleanUndefinedForFirestore(newUser));
+      } catch (e) {
+        console.error('Error saving user to Firestore:', e);
+      }
+
+      showToast(`Conta criada com sucesso! Bem-vindo(a), ${newUser.name}!`);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Erro ao criar conta.' };
+    }
+  };
+
+  const loginClientWithEmail = async (
+    email: string,
+    password?: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const userData = snap.docs[0].data() as User;
+          setCurrentUser(userData);
+          localStorage.setItem('peptide_user', JSON.stringify(userData));
+          showToast(`Bem-vindo(a) de volta, ${userData.name}!`);
+          return { success: true };
+        }
+      } catch (e) {
+        console.log('Error querying user in Firestore:', e);
+      }
+
+      const fallbackUser: User = {
+        id: `usr-${Date.now()}`,
+        name: cleanEmail.split('@')[0],
+        email: cleanEmail,
+        role: 'CLIENTE',
+        phone: '(11) 99999-0000',
+        addresses: [
+          {
+            street: 'Av. Paulista',
+            number: '1000',
+            neighborhood: 'Bela Vista',
+            city: 'São Paulo',
+            state: 'SP',
+            zipCode: '01310-100',
+          },
+        ],
+        savedDoseProtocols: [],
+        createdAt: new Date().toISOString(),
+      };
+
+      setCurrentUser(fallbackUser);
+      localStorage.setItem('peptide_user', JSON.stringify(fallbackUser));
+
+      try {
+        await setDoc(doc(db, 'users', fallbackUser.id), cleanUndefinedForFirestore(fallbackUser));
+      } catch (e) {}
+
+      showToast(`Login realizado com sucesso! Bem-vindo(a), ${fallbackUser.name}!`);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Falha no login.' };
+    }
+  };
+
+  const updateUserProfile = async (data: Partial<User>) => {
     if (!currentUser) return;
-    setCurrentUser({
+    const updatedUser: User = {
       ...currentUser,
       ...data,
-    });
-    showToast('Dados cadastrais atualizados!');
+      updatedAt: new Date().toISOString(),
+    };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+
+    try {
+      if (updatedUser.id) {
+        await setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+      }
+    } catch (e) {
+      console.error('Error updating user profile in Firestore:', e);
+    }
+    showToast('Dados cadastrais atualizados com sucesso!');
   };
+
+  const saveDoseProtocol = async (protocol: Omit<SavedDoseProtocol, 'id' | 'savedAt'>): Promise<SavedDoseProtocol | null> => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      showToast('Faça login ou cadastre-se para salvar seus protocolos personalizados.');
+      return null;
+    }
+
+    const newProtocol: SavedDoseProtocol = {
+      ...protocol,
+      id: `proto-${Date.now()}`,
+      savedAt: new Date().toISOString(),
+    };
+
+    const existingProtocols = currentUser.savedDoseProtocols || [];
+    const updatedProtocols = [newProtocol, ...existingProtocols.filter(p => p.productName !== newProtocol.productName || p.dosageLabel !== newProtocol.dosageLabel)];
+
+    const updatedUser: User = {
+      ...currentUser,
+      savedDoseProtocols: updatedProtocols,
+      dosageProfile: {
+        lastSelectedProductId: newProtocol.productId,
+        vialQuantityMg: newProtocol.vialMg,
+        waterVolumeMl: newProtocol.waterMl,
+        targetDoseValue: newProtocol.doseValue,
+        targetDoseUnit: newProtocol.doseUnit,
+        syringeType: newProtocol.syringeType,
+        frequency: newProtocol.frequency,
+        updatedAt: new Date().toISOString(),
+      }
+    };
+
+    setCurrentUser(updatedUser);
+    localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+
+    try {
+      if (updatedUser.id) {
+        await setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+      }
+    } catch (e) {
+      console.error('Error saving dose protocol in Firestore:', e);
+    }
+
+    showToast(`Protocolo de ${newProtocol.productName} salvo no seu perfil!`);
+    return newProtocol;
+  };
+
+  const deleteDoseProtocol = async (protocolId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    const updatedProtocols = (currentUser.savedDoseProtocols || []).filter(p => p.id !== protocolId);
+    const updatedUser: User = {
+      ...currentUser,
+      savedDoseProtocols: updatedProtocols,
+    };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+
+    try {
+      if (updatedUser.id) {
+        await setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+      }
+    } catch (e) {
+      console.error('Error deleting dose protocol from Firestore:', e);
+    }
+    showToast('Protocolo removido do seu perfil.');
+    return true;
+  };
+
+  const saveDietProfile = async (dietProfile: User['dietProfile']): Promise<boolean> => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      showToast('Faça login para salvar seus dados e metas nutricionais no perfil.');
+      return false;
+    }
+
+    const updatedUser: User = {
+      ...currentUser,
+      dietProfile: {
+        ...dietProfile!,
+        updatedAt: new Date().toISOString(),
+      }
+    };
+
+    setCurrentUser(updatedUser);
+    localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+
+    try {
+      if (updatedUser.id) {
+        await setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+      }
+    } catch (e) {
+      console.error('Error saving diet profile in Firestore:', e);
+    }
+
+    showToast('Metas e perfil nutricional salvos na nuvem!');
+    return true;
+  };
+
+  const saveInjectionRecord = async (record: Omit<InjectionRecord, 'id'>): Promise<InjectionRecord | null> => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      showToast('Faça login para registrar suas aplicações no histórico.');
+      return null;
+    }
+
+    const newRecord: InjectionRecord = {
+      ...record,
+      id: `inj-${Date.now()}`,
+    };
+
+    const existingLogs = currentUser.injectionLogs || [];
+    const updatedLogs = [newRecord, ...existingLogs];
+
+    const updatedUser: User = {
+      ...currentUser,
+      injectionLogs: updatedLogs,
+    };
+
+    setCurrentUser(updatedUser);
+    localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+
+    try {
+      if (updatedUser.id) {
+        await setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+      }
+    } catch (e) {
+      console.error('Error saving injection log to Firestore:', e);
+    }
+
+    showToast(`Aplicação de ${record.peptideName} salva no histórico!`);
+    return newRecord;
+  };
+
+  const deleteInjectionRecord = async (recordId: string): Promise<boolean> => {
+    if (!currentUser) return false;
+    const updatedLogs = (currentUser.injectionLogs || []).filter(l => l.id !== recordId);
+    const updatedUser: User = {
+      ...currentUser,
+      injectionLogs: updatedLogs,
+    };
+    setCurrentUser(updatedUser);
+    localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+
+    try {
+      if (updatedUser.id) {
+        await setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+      }
+    } catch (e) {
+      console.error('Error deleting injection log from Firestore:', e);
+    }
+    showToast('Registro de aplicação removido.');
+    return true;
+  };
+
+  const getClientActiveBenefit = useCallback((user: User | null = currentUser) => {
+    if (!user || !user.repurchaseBenefit) {
+      return {
+        hasBenefit: false,
+        isActive: false,
+        isExpired: false,
+        daysRemaining: 0,
+        hoursRemaining: 0,
+        expiresAtFormatted: '',
+        benefit: undefined,
+      };
+    }
+    const expiresAt = new Date(user.repurchaseBenefit.expiresAt);
+    const now = new Date();
+    const diffMs = expiresAt.getTime() - now.getTime();
+    const isActive = diffMs > 0;
+    const daysRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+    const hoursRemaining = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60)));
+
+    return {
+      hasBenefit: true,
+      isActive,
+      isExpired: !isActive,
+      daysRemaining,
+      hoursRemaining,
+      expiresAtFormatted: expiresAt.toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      benefit: user.repurchaseBenefit,
+    };
+  }, [currentUser]);
 
   // --- Orders & Finances ---
   const createOrder = (orderData: {
@@ -2396,6 +2732,61 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setDoc(doc(db, 'orders', newOrder.id), cleanUndefinedForFirestore(newOrder));
     } catch (e) {
       console.log('Error saving order to Firestore:', e);
+    }
+
+    // Automatic 7-day coupon calculation and user profile update:
+    // If client paid shipping fee (shipping > 0), grant / refresh their 7-day automatic free delivery coupon!
+    if (currentUser) {
+      const nowIso = new Date().toISOString();
+      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+      const expiryIso = new Date(Date.now() + sevenDaysMs).toISOString();
+
+      let updatedUser: User = { ...currentUser };
+
+      if (shipping > 0) {
+        // Grant / renew 7-day free shipping benefit starting from this order
+        const newBenefit: RepurchaseBenefit = {
+          couponCode: 'FRETEGRATIS7D',
+          firstOrderId: newOrder.id,
+          firstOrderNumber: newOrder.orderNumber,
+          firstOrderDate: nowIso,
+          expiresAt: expiryIso,
+          discountAmount: shipping,
+          isUsed: false,
+        };
+        updatedUser = {
+          ...updatedUser,
+          repurchaseBenefit: newBenefit,
+          updatedAt: nowIso,
+        };
+        showToast('🎉 Pedido realizado! Você ganhou um Cupom Automático de Frete Grátis válido por 7 dias para suas próximas compras!');
+      } else if (currentUser.repurchaseBenefit) {
+        // Free shipping benefit was enjoyed
+        const activeBenefit = getClientActiveBenefit(currentUser);
+        if (activeBenefit.isActive) {
+          updatedUser = {
+            ...updatedUser,
+            repurchaseBenefit: {
+              ...currentUser.repurchaseBenefit,
+              isUsed: true,
+              usedInOrderId: newOrder.id,
+              usedAt: nowIso,
+            },
+            updatedAt: nowIso,
+          };
+          showToast('🚀 Benefício de Frete Grátis aplicado com sucesso!');
+        }
+      }
+
+      setCurrentUser(updatedUser);
+      localStorage.setItem('peptide_user', JSON.stringify(updatedUser));
+      try {
+        if (updatedUser.id) {
+          setDoc(doc(db, 'users', updatedUser.id), cleanUndefinedForFirestore(updatedUser), { merge: true });
+        }
+      } catch (err) {
+        console.error('Error updating repurchaseBenefit in Firestore:', err);
+      }
     }
 
     // If coupon was applied, increment its usage and sync
@@ -2997,9 +3388,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         loginUser,
         loginWithGoogle,
         loginStaffOrAdmin,
+        loginClientWithEmail,
+        registerClientAccount,
         logoutUser,
         switchUserRole,
         updateUserProfile,
+        saveDoseProtocol,
+        deleteDoseProtocol,
+        saveDietProfile,
+        saveInjectionRecord,
+        deleteInjectionRecord,
         isAuthOpen,
         setIsAuthOpen,
         orders,
@@ -3034,6 +3432,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateStoreSettings,
         toggleStorePurchasesSuspension,
         deliveryFee,
+        getClientActiveBenefit,
         isSupabaseActive,
         supabaseConfigured,
         saveAllProductsToCloud,
@@ -3051,6 +3450,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSearchQuery,
         selectedProductDetail,
         setSelectedProductDetail,
+        selectedCalculatorProduct,
+        setSelectedCalculatorProduct,
         productRequests,
         addProductRequest,
         approveProductRequest,

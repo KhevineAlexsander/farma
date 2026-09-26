@@ -41,6 +41,7 @@ export type OrderStatus = 'Pendente' | 'Aguardando Baixa' | 'Pago' | 'Pago Parci
 export interface Order {
   id: string;
   orderNumber: string;
+  userId?: string;
   createdAt: string;
   customer: {
     name: string;
@@ -52,6 +53,8 @@ export interface Order {
   items: CartItem[];
   subtotal: number;
   shipping: number;
+  importTax?: number;
+  taxExemptionApplied?: boolean;
   discount: number;
   total: number;
   paidAmount?: number; // Valor pago (entrada ou baixa parcial)
@@ -84,12 +87,54 @@ export interface FinancialTransaction {
 
 export type UserRole = 'CLIENTE' | 'ADMIN';
 
+export interface SavedDoseProtocol {
+  id: string;
+  productId?: string;
+  productName: string;
+  dosageLabel: string;
+  vialMg: number;
+  waterMl: number;
+  doseValue: number;
+  doseUnit: 'mcg' | 'mg' | 'UI';
+  syringeUnits: number;
+  syringeType: string;
+  frequency: string;
+  concentrationMgPerMl: number;
+  totalDosesInVial: number;
+  notes?: string;
+  savedAt: string;
+}
+
+export interface InjectionRecord {
+  id: string;
+  date: string;
+  time: string;
+  peptideName: string;
+  dosage: string;
+  site: string;
+  notes?: string;
+}
+
+export interface RepurchaseBenefit {
+  couponCode: string;
+  firstOrderId: string;
+  firstOrderNumber?: string;
+  firstOrderDate: string;
+  expiresAt: string;
+  isUsed?: boolean;
+  usedInOrderId?: string;
+  usedAt?: string;
+  discountAmount: number;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   role: UserRole;
   phone: string;
+  cpf?: string;
+  password?: string;
   addresses: Address[];
   photoURL?: string;
   staffRole?: string;
@@ -103,6 +148,30 @@ export interface User {
     canManageCoupons: boolean;
     canManageReports: boolean;
   };
+  savedDoseProtocols?: SavedDoseProtocol[];
+  dietProfile?: {
+    gender: 'male' | 'female';
+    age: number;
+    weightKg: number;
+    heightCm: number;
+    activityLevel: 'sedentary' | 'light' | 'moderate' | 'high';
+    peptideProtocol: 'glp1' | 'gh' | 'cutting' | 'longevity';
+    updatedAt?: string;
+  };
+  dosageProfile?: {
+    lastSelectedProductId?: string;
+    vialQuantityMg?: number;
+    waterVolumeMl?: number;
+    targetDoseValue?: number;
+    targetDoseUnit?: 'mcg' | 'mg' | 'UI';
+    syringeType?: string;
+    frequency?: string;
+    updatedAt?: string;
+  };
+  injectionLogs?: InjectionRecord[];
+  repurchaseBenefit?: RepurchaseBenefit;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export type StaffRole = 'Administrador Geral' | 'Gerente de Produtos' | 'Atendente de Vendas' | 'Financeiro';

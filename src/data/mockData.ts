@@ -631,7 +631,7 @@ export const INITIAL_SETTINGS: StoreSettings = {
   heroDescription: 'Mais performance, saúde e bem-estar para a sua melhor versão.',
   announcementBar: 'Envio Imediato com Cadeia Fria para Todo o Brasil | Cupom PEPTIDE10 para 10% OFF',
   checkoutNotice: 'Finalize sua compra e envie o resumo detalhado direto para nosso WhatsApp oficial para liberação imediata!',
-  deliveryFee: 30.00,
+  deliveryFee: 100.00,
   pickupEnabled: true,
   pickupAddress: 'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
   pickupEstimatedTime: 'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',

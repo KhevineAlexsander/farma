@@ -59,12 +59,45 @@ export const Footer: React.FC = () => {
               <li>
                 <button
                   onClick={() => {
-                    setCurrentView('guide');
+                    setCurrentView('benefits');
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1.5 transition-colors"
                 >
-                  <span>Guia de Peptídeos (E-Book)</span>
+                  <span>Página de Benefícios</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setCurrentView('dosage-calculator');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <span>Cálculo de Doses & Seringa</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setCurrentView('diet-control');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <span>Controle de Dieta & Macros</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => {
+                    setCurrentView('guide');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="hover:text-cyan-400 transition-colors"
+                >
+                  Guia de Peptídeos (E-Book)
                 </button>
               </li>
               <li>

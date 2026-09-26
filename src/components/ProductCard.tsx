@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, ShoppingCart, Info, Star, Tag, Lock } from 'lucide-react';
+import { Check, ShoppingCart, Info, Star, Tag, Lock, Syringe } from 'lucide-react';
 import { Product } from '../types';
 import { PeptideVial } from './PeptideVial';
 import { useApp } from '../context/AppContext';
@@ -9,7 +9,14 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
-  const { addToCart, setSelectedProductDetail, storeSettings, showToast } = useApp();
+  const {
+    addToCart,
+    setSelectedProductDetail,
+    storeSettings,
+    showToast,
+    setCurrentView,
+    setSelectedCalculatorProduct,
+  } = useApp();
   const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
   return (
@@ -122,20 +129,35 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             <span className="truncate">Caixa Fechando • Compras Suspensas</span>
           </button>
         ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              addToCart(product);
-            }}
-            className={`w-full py-2.5 px-4 rounded-xl text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md cursor-pointer group/btn ${
-              product.isPromotion
-                ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
-                : 'bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4 text-cyan-400 group-hover/btn:translate-x-0.5 transition-transform" />
-            <span>{product.isPromotion ? 'Aproveitar Oferta' : 'Adicionar ao carrinho'}</span>
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedCalculatorProduct(product);
+                setCurrentView('dosage-calculator');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="p-2.5 rounded-xl bg-slate-100 hover:bg-cyan-50 border border-slate-200 hover:border-cyan-300 text-slate-700 hover:text-cyan-700 transition-colors cursor-pointer shrink-0"
+              title="Calcular dosagem e seringa para este peptídeo"
+            >
+              <Syringe className="w-4 h-4 text-cyan-600" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                addToCart(product);
+              }}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm hover:shadow-md cursor-pointer group/btn ${
+                product.isPromotion
+                  ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
+                  : 'bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600'
+              }`}
+            >
+              <ShoppingCart className="w-3.5 h-3.5 text-cyan-400 group-hover/btn:translate-x-0.5 transition-transform" />
+              <span className="truncate">{product.isPromotion ? 'Aproveitar' : 'Adicionar'}</span>
+            </button>
+          </div>
         )}
       </div>
     </div>

@@ -71,7 +71,9 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
 
   // Customer Ranking Filter & Discreet Collapse State
   const [customerSearch, setCustomerSearch] = useState('');
-  const [isCustomerRankingExpanded, setIsCustomerRankingExpanded] = useState<boolean>(false);
+  const [isCustomerRankingExpanded, setIsCustomerRankingExpanded] = useState<boolean>(true);
+  const [customerFilterSegment, setCustomerFilterSegment] = useState<'all' | 'active_benefit' | 'converted' | 'repeat' | 'first_time'>('all');
+  const [selectedCustomerProfile, setSelectedCustomerProfile] = useState<any | null>(null);
 
   // Sync and Real-Time Auto-Refresh state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -415,18 +417,35 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   const maxProductQty = rankedProducts.length > 0 ? Math.max(...rankedProducts.map((p) => p.qtySold), 1) : 1;
   const top3Products = rankedProducts.slice(0, 3);
 
-  // --- 2. QUEM COMPRA MAIS (RANKING DISCRETO & COMPACTO) ---
-  const rankedCustomers = useMemo(() => {
+  // --- 2. QUEM COMPRA MAIS & CRM CLIENT PROFILING ---
+  const { rankedCustomers, customerCrmStats } = useMemo(() => {
     const customerMap = new Map<
       string,
       {
+        id: string;
         name: string;
         email: string;
         phone: string;
         cpf?: string;
+        city?: string;
+        state?: string;
+        street?: string;
+        orders: Order[];
         ordersCount: number;
         totalSpent: number;
+        totalShipping: number;
+        totalDiscount: number;
+        averageTicket: number;
+        firstOrderDate: string;
         lastOrderDate: string;
+        sevenDayBenefit?: {
+          status: 'active' | 'converted' | 'expired' | 'none';
+          firstOrderNumber?: string;
+          firstOrderDate?: string;
+          expiresAt?: string;
+          daysRemaining?: number;
+          convertedOrderNumber?: string;
+        };
       }
     >();
 
@@ -435,31 +454,129 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       const email = order.customer?.email || (order as any).customerEmail || '';
       const phone = order.customer?.phone || (order as any).customerPhone || '';
       const cpf = order.customer?.cpf || '';
+      const city = order.address?.city || order.customer?.city || '';
+      const state = order.address?.state || order.customer?.state || '';
+      const street = order.address?.street || '';
 
       const key = (phone || email || name).toLowerCase().trim();
 
       const existing = customerMap.get(key) || {
+        id: (order as any).userId || `cust-${key.replace(/\W/g, '')}`,
         name,
         email,
         phone,
         cpf,
+        city,
+        state,
+        street,
+        orders: [],
         ordersCount: 0,
         totalSpent: 0,
+        totalShipping: 0,
+        totalDiscount: 0,
+        averageTicket: 0,
+        firstOrderDate: order.createdAt || '',
         lastOrderDate: order.createdAt || '',
       };
 
+      existing.orders.push(order);
       existing.ordersCount += 1;
       existing.totalSpent += order.total || 0;
+      existing.totalShipping += order.shipping || 0;
+      existing.totalDiscount += order.discount || 0;
 
-      if (order.createdAt && (!existing.lastOrderDate || new Date(order.createdAt) > new Date(existing.lastOrderDate))) {
-        existing.lastOrderDate = order.createdAt;
+      if (!existing.city && city) existing.city = city;
+      if (!existing.state && state) existing.state = state;
+      if (!existing.cpf && cpf) existing.cpf = cpf;
+
+      if (order.createdAt) {
+        if (!existing.firstOrderDate || new Date(order.createdAt) < new Date(existing.firstOrderDate)) {
+          existing.firstOrderDate = order.createdAt;
+        }
+        if (!existing.lastOrderDate || new Date(order.createdAt) > new Date(existing.lastOrderDate)) {
+          existing.lastOrderDate = order.createdAt;
+        }
       }
 
       customerMap.set(key, existing);
     });
 
-    return Array.from(customerMap.values())
-      .sort((a, b) => b.totalSpent - a.totalSpent)
+    const nowTime = Date.now();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+
+    const allList = Array.from(customerMap.values()).map((c) => {
+      c.orders.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+      c.averageTicket = c.ordersCount > 0 ? c.totalSpent / c.ordersCount : 0;
+
+      // Find first order that paid shipping fee
+      const firstWithShipping = c.orders.find((o) => (o.shipping || 0) > 0);
+      if (firstWithShipping && firstWithShipping.createdAt) {
+        const firstDate = new Date(firstWithShipping.createdAt);
+        const expiresDate = new Date(firstDate.getTime() + sevenDaysMs);
+        const hasRepurchasedIn7Days = c.orders.some(
+          (o) => o.id !== firstWithShipping.id && o.createdAt && new Date(o.createdAt).getTime() <= expiresDate.getTime()
+        );
+
+        if (hasRepurchasedIn7Days) {
+          const convertedOrd = c.orders.find(
+            (o) => o.id !== firstWithShipping.id && o.createdAt && new Date(o.createdAt).getTime() <= expiresDate.getTime()
+          );
+          c.sevenDayBenefit = {
+            status: 'converted',
+            firstOrderNumber: firstWithShipping.orderNumber,
+            firstOrderDate: firstWithShipping.createdAt,
+            expiresAt: expiresDate.toISOString(),
+            convertedOrderNumber: convertedOrd?.orderNumber,
+          };
+        } else if (nowTime <= expiresDate.getTime()) {
+          const daysRemaining = Math.max(0, Math.ceil((expiresDate.getTime() - nowTime) / (1000 * 60 * 60 * 24)));
+          c.sevenDayBenefit = {
+            status: 'active',
+            firstOrderNumber: firstWithShipping.orderNumber,
+            firstOrderDate: firstWithShipping.createdAt,
+            expiresAt: expiresDate.toISOString(),
+            daysRemaining,
+          };
+        } else {
+          c.sevenDayBenefit = {
+            status: 'expired',
+            firstOrderNumber: firstWithShipping.orderNumber,
+            firstOrderDate: firstWithShipping.createdAt,
+            expiresAt: expiresDate.toISOString(),
+          };
+        }
+      } else {
+        c.sevenDayBenefit = { status: 'none' };
+      }
+
+      return c;
+    });
+
+    // Compute CRM stats
+    const totalClients = allList.length;
+    const repeatClients = allList.filter((c) => c.ordersCount > 1).length;
+    const active7DayBenefit = allList.filter((c) => c.sevenDayBenefit?.status === 'active').length;
+    const converted7Day = allList.filter((c) => c.sevenDayBenefit?.status === 'converted').length;
+    const retentionRate = totalClients > 0 ? (repeatClients / totalClients) * 100 : 0;
+    const conversion7DayRate = (active7DayBenefit + converted7Day) > 0 ? (converted7Day / (active7DayBenefit + converted7Day)) * 100 : 0;
+    const avgLtv = totalClients > 0 ? allList.reduce((acc, c) => acc + c.totalSpent, 0) / totalClients : 0;
+
+    const filtered = allList
+      .filter((c) => {
+        if (customerFilterSegment === 'active_benefit') {
+          return c.sevenDayBenefit?.status === 'active';
+        }
+        if (customerFilterSegment === 'converted') {
+          return c.sevenDayBenefit?.status === 'converted';
+        }
+        if (customerFilterSegment === 'repeat') {
+          return c.ordersCount > 1;
+        }
+        if (customerFilterSegment === 'first_time') {
+          return c.ordersCount === 1;
+        }
+        return true;
+      })
       .filter((c) => {
         if (!customerSearch.trim()) return true;
         const q = customerSearch.toLowerCase();
@@ -467,10 +584,25 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           c.name.toLowerCase().includes(q) ||
           c.email.toLowerCase().includes(q) ||
           c.phone.includes(q) ||
-          (c.cpf && c.cpf.includes(q))
+          (c.cpf && c.cpf.includes(q)) ||
+          (c.city && c.city.toLowerCase().includes(q))
         );
-      });
-  }, [filteredOrders, customerSearch]);
+      })
+      .sort((a, b) => b.totalSpent - a.totalSpent);
+
+    return {
+      rankedCustomers: filtered,
+      customerCrmStats: {
+        totalClients,
+        repeatClients,
+        active7DayBenefit,
+        converted7Day,
+        retentionRate,
+        conversion7DayRate,
+        avgLtv,
+      },
+    };
+  }, [filteredOrders, customerSearch, customerFilterSegment]);
 
   const handleManualRefresh = async () => {
     setIsRefreshing(true);
@@ -1549,108 +1681,259 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       </div>
 
       {/* =========================================================================
-          SEÇÃO 2: RANKING DE QUEM MAIS COMPRA (DISCRETO & COMPACTO)
+          SEÇÃO 2: CRM & PERFIS DE CLIENTES (RELATÓRIOS INDIVIDUAIS & CUPOM 7 DIAS)
          ========================================================================= */}
-      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-5 shadow-xl">
+      <div className="bg-slate-900/95 border border-slate-800 rounded-2xl sm:rounded-3xl p-5 sm:p-7 shadow-xl space-y-6">
         
-        {/* Toggleable Accordion Header */}
-        <div
-          onClick={() => setIsCustomerRankingExpanded(!isCustomerRankingExpanded)}
-          className="flex items-center justify-between cursor-pointer select-none py-1"
-        >
-          <div className="flex items-center gap-2.5">
-            <span className="p-2 bg-slate-800 text-slate-400 rounded-xl">
-              <Users className="w-4 h-4" />
-            </span>
+        {/* Section Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-600 text-white flex items-center justify-center font-bold shadow-md">
+              <Users className="w-5 h-5" />
+            </div>
             <div>
               <div className="flex items-center gap-2">
-                <h4 className="text-sm sm:text-base font-bold text-slate-200">
-                  Ranking de Clientes (Quem Mais Compra)
+                <h4 className="text-base sm:text-lg font-extrabold text-white font-tech">
+                  CRM & RELATÓRIOS INDIVIDUAIS DE CLIENTES
                 </h4>
-                <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 text-[10px] font-mono">
+                <span className="px-2.5 py-0.5 rounded-full bg-cyan-950 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-bold">
                   {rankedCustomers.length} clientes
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Visualização secundária e discreta dos maiores compradores.
+              <p className="text-xs text-slate-400 mt-0.5">
+                Acompanhamento individual de perfis, valor do cliente (LTV), histórico e status do cupom automático de 7 dias.
               </p>
             </div>
           </div>
 
           <button
             type="button"
-            className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-950 border border-slate-800 flex items-center gap-1 text-xs font-semibold"
+            onClick={() => setIsCustomerRankingExpanded(!isCustomerRankingExpanded)}
+            className="self-start md:self-auto px-3.5 py-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
           >
-            <span>{isCustomerRankingExpanded ? 'Recolher' : 'Expandir'}</span>
+            <span>{isCustomerRankingExpanded ? 'Recolher CRM' : 'Expandir CRM'}</span>
             {isCustomerRankingExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
         </div>
 
-        {/* Expanded Customer List */}
+        {/* CRM KPI Metrics Strip */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total na Base</span>
+            <span className="text-lg sm:text-xl font-black font-mono text-white">
+              {customerCrmStats.totalClients}
+            </span>
+            <span className="text-[10px] text-slate-500 block">clientes únicos</span>
+          </div>
+
+          <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1">
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">Recompras (Retenção)</span>
+            <span className="text-lg sm:text-xl font-black font-mono text-emerald-400">
+              {customerCrmStats.repeatClients} <span className="text-xs font-normal text-slate-400">({customerCrmStats.retentionRate.toFixed(1)}%)</span>
+            </span>
+            <span className="text-[10px] text-slate-500 block">compraram 2+ vezes</span>
+          </div>
+
+          <div className="p-3.5 bg-emerald-950/30 rounded-2xl border border-emerald-500/30 space-y-1">
+            <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Cupons 7D Ativos</span>
+            <span className="text-lg sm:text-xl font-black font-mono text-emerald-300">
+              {customerCrmStats.active7DayBenefit}
+            </span>
+            <span className="text-[10px] text-emerald-400/80 block">na janela de frete grátis</span>
+          </div>
+
+          <div className="p-3.5 bg-cyan-950/30 rounded-2xl border border-cyan-500/30 space-y-1">
+            <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block">Conversão 7 Dias</span>
+            <span className="text-lg sm:text-xl font-black font-mono text-cyan-300">
+              {customerCrmStats.conversion7DayRate.toFixed(1)}%
+            </span>
+            <span className="text-[10px] text-cyan-400/80 block">recompraram no prazo</span>
+          </div>
+
+          <div className="p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1 col-span-2 lg:col-span-1">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">LTV Médio / Cliente</span>
+            <span className="text-lg sm:text-xl font-black font-mono text-amber-300">
+              R$ {customerCrmStats.avgLtv.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+            <span className="text-[10px] text-slate-500 block">ticket acumulado médio</span>
+          </div>
+        </div>
+
+        {/* Expanded CRM Workspace */}
         {isCustomerRankingExpanded && (
-          <div className="mt-4 pt-4 border-t border-slate-800 space-y-3 animate-in fade-in duration-150">
+          <div className="space-y-4 animate-in fade-in duration-200">
             
-            {/* Search customer input */}
-            <div className="relative max-w-sm">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Buscar cliente por nome ou WhatsApp..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-slate-700 min-h-[36px]"
-              />
+            {/* Filter and Search Controls */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Filter Segment Tabs */}
+              <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs overflow-x-auto">
+                {[
+                  { id: 'all', label: `Todos (${customerCrmStats.totalClients})` },
+                  { id: 'active_benefit', label: `🎁 Cupom 7D Ativo (${customerCrmStats.active7DayBenefit})` },
+                  { id: 'converted', label: `🚀 Recomprou no Prazo (${customerCrmStats.converted7Day})` },
+                  { id: 'repeat', label: `🔄 Recorrentes (${customerCrmStats.repeatClients})` },
+                  { id: 'first_time', label: `👤 1º Pedido (${customerCrmStats.totalClients - customerCrmStats.repeatClients})` },
+                ].map((seg) => (
+                  <button
+                    key={seg.id}
+                    type="button"
+                    onClick={() => setCustomerFilterSegment(seg.id as any)}
+                    className={`px-3 py-1.5 rounded-lg font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      customerFilterSegment === seg.id
+                        ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {seg.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Search customer input */}
+              <div className="relative flex-1 md:max-w-xs">
+                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Buscar por nome, telefone, email ou cidade..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-8 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 min-h-[38px]"
+                />
+                {customerSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomerSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
+            {/* Customers List Table / Grid */}
             {rankedCustomers.length === 0 ? (
-              <div className="text-center py-6 text-slate-500 text-xs">
-                Nenhum cliente registrado no período selecionado.
+              <div className="text-center py-10 bg-slate-950/60 rounded-2xl border border-slate-800/80 text-slate-500 text-xs space-y-1.5">
+                <Users className="w-8 h-8 mx-auto text-slate-600" />
+                <p className="font-bold">Nenhum perfil de cliente encontrado com os filtros selecionados.</p>
+                {customerFilterSegment !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => setCustomerFilterSegment('all')}
+                    className="text-cyan-400 hover:underline text-xs font-bold"
+                  >
+                    Ver todos os clientes
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto pr-1 text-xs">
+              <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                 {rankedCustomers.map((cust, idx) => {
                   const waLink = formatWhatsAppLink(cust.phone, cust.name);
+                  const is7DActive = cust.sevenDayBenefit?.status === 'active';
+                  const is7DConverted = cust.sevenDayBenefit?.status === 'converted';
+                  const is7DExpired = cust.sevenDayBenefit?.status === 'expired';
 
                   return (
                     <div
-                      key={idx}
-                      className="bg-slate-950 border border-slate-800/80 rounded-xl p-2.5 sm:p-3 flex items-center justify-between gap-3 text-xs"
+                      key={cust.id || idx}
+                      className="bg-slate-950 border border-slate-800/90 hover:border-cyan-500/50 rounded-2xl p-4 transition-all shadow-sm group space-y-3"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <span className="w-6 h-6 rounded-full bg-slate-900 border border-slate-700 text-slate-400 text-[11px] font-bold flex items-center justify-center shrink-0">
-                          {idx + 1}º
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <h6 className="font-bold text-slate-200 truncate">{cust.name}</h6>
-                          <div className="flex items-center gap-2 text-[10px] text-slate-500 truncate">
-                            {cust.phone && <span>{cust.phone}</span>}
-                            <span>•</span>
-                            <span>{cust.ordersCount} pedido(s)</span>
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                        {/* Customer Identification */}
+                        <div className="flex items-start gap-3.5 min-w-0 flex-1">
+                          {getRankBadge(idx)}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h5 className="font-extrabold text-white text-sm sm:text-base tracking-tight truncate group-hover:text-cyan-300 transition-colors">
+                                {cust.name}
+                              </h5>
+
+                              {/* 7-Day Coupon Status Chip */}
+                              {is7DActive && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-extrabold flex items-center gap-1 animate-pulse">
+                                  <span>🎁</span>
+                                  <span>Cupom 7D Ativo ({cust.sevenDayBenefit?.daysRemaining}d restantes)</span>
+                                </span>
+                              )}
+                              {is7DConverted && (
+                                <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold flex items-center gap-1">
+                                  <span>🚀</span>
+                                  <span>Recomprou no Prazo</span>
+                                </span>
+                              )}
+                              {is7DExpired && (
+                                <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-semibold">
+                                  Cupom 7D Expirado
+                                </span>
+                              )}
+                              {cust.ordersCount > 1 && (
+                                <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-bold">
+                                  {cust.ordersCount} Recompras
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 mt-1.5">
+                              {cust.email && (
+                                <span className="flex items-center gap-1 text-slate-400">
+                                  <Mail className="w-3.5 h-3.5 text-slate-500" />
+                                  <span className="truncate">{cust.email}</span>
+                                </span>
+                              )}
+                              {cust.phone && (
+                                <span className="flex items-center gap-1 text-slate-400">
+                                  <Phone className="w-3.5 h-3.5 text-slate-500" />
+                                  <span>{cust.phone}</span>
+                                </span>
+                              )}
+                              {cust.city && (
+                                <span className="text-slate-500">
+                                  📍 {cust.city}/{cust.state || ''}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <span className="font-mono font-bold text-emerald-400 block text-xs">
-                            R$ {cust.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          </span>
-                          <span className="text-[10px] text-slate-500 block">
-                            Última: {cust.lastOrderDate ? new Date(cust.lastOrderDate).toLocaleDateString('pt-BR') : '—'}
-                          </span>
+                        {/* Customer Financial Stats & Actions */}
+                        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-4 shrink-0 border-t lg:border-t-0 border-slate-900 pt-3 lg:pt-0">
+                          <div className="text-left lg:text-right">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Gasto (LTV):</span>
+                            <span className="font-mono font-black text-emerald-400 text-base sm:text-lg block">
+                              R$ {cust.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-[10px] text-slate-500 block">
+                              Ticket Médio: R$ {cust.averageTicket.toFixed(2).replace('.', ',')}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            {/* Open Detailed Customer Profile Modal */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCustomerProfile(cust)}
+                              className="px-3 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+                              title="Ver perfil completo e histórico de compras"
+                            >
+                              <User className="w-3.5 h-3.5 text-cyan-400" />
+                              <span>Ver Perfil ({cust.ordersCount})</span>
+                            </button>
+
+                            {/* WhatsApp Direct Contact */}
+                            {waLink && (
+                              <a
+                                href={waLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 transition-colors flex items-center justify-center cursor-pointer"
+                                title="Abrir conversa no WhatsApp"
+                              >
+                                <MessageSquare className="w-4 h-4" />
+                              </a>
+                            )}
+                          </div>
                         </div>
-
-                        {waLink && (
-                          <a
-                            href={waLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition-colors"
-                            title="Conversar no WhatsApp"
-                          >
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          </a>
-                        )}
                       </div>
                     </div>
                   );
@@ -1660,6 +1943,180 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           </div>
         )}
       </div>
+
+      {/* =========================================================================
+          MODAL: PERFIL COMPLETO DO CLIENTE & HISTÓRICO DE COMPRAS (CRM DRILLDOWN)
+         ========================================================================= */}
+      {selectedCustomerProfile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div
+            className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl my-6 flex flex-col max-h-[92vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-800 shrink-0 gap-3">
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-600 text-white flex items-center justify-center font-bold text-xl shadow-md font-tech shrink-0">
+                  {selectedCustomerProfile.name?.charAt(0) || 'C'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-lg sm:text-xl font-extrabold text-white tracking-tight truncate">
+                      {selectedCustomerProfile.name}
+                    </h3>
+                    {selectedCustomerProfile.sevenDayBenefit?.status === 'active' && (
+                      <span className="px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black animate-pulse">
+                        🎁 Cupom 7D Ativo ({selectedCustomerProfile.sevenDayBenefit?.daysRemaining}d restantes)
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-2">
+                    <span>{selectedCustomerProfile.email || 'Sem e-mail'}</span>
+                    <span>•</span>
+                    <span>{selectedCustomerProfile.phone || 'Sem telefone'}</span>
+                    {selectedCustomerProfile.cpf && (
+                      <>
+                        <span>•</span>
+                        <span>CPF: {selectedCustomerProfile.cpf}</span>
+                      </>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setSelectedCustomerProfile(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-full flex items-center justify-center cursor-pointer hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Financial & Loyalty Overview Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-4 border-b border-slate-800 shrink-0">
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total Investido (LTV)</span>
+                <span className="text-base sm:text-lg font-black font-mono text-emerald-400">
+                  R$ {selectedCustomerProfile.totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </span>
+                <span className="text-[10px] text-slate-500 block">em compras na loja</span>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Total de Pedidos</span>
+                <span className="text-base sm:text-lg font-black font-mono text-white">
+                  {selectedCustomerProfile.ordersCount}
+                </span>
+                <span className="text-[10px] text-slate-500 block">pedidos registrados</span>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Ticket Médio</span>
+                <span className="text-base sm:text-lg font-black font-mono text-cyan-300">
+                  R$ {selectedCustomerProfile.averageTicket.toFixed(2).replace('.', ',')}
+                </span>
+                <span className="text-[10px] text-slate-500 block">média por pedido</span>
+              </div>
+
+              <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Economia em Descontos</span>
+                <span className="text-base sm:text-lg font-black font-mono text-purple-300">
+                  R$ {selectedCustomerProfile.totalDiscount.toFixed(2).replace('.', ',')}
+                </span>
+                <span className="text-[10px] text-slate-500 block">descontos recebidos</span>
+              </div>
+            </div>
+
+            {/* Orders Timeline List */}
+            <div className="flex-1 overflow-y-auto py-4 space-y-3 pr-1">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Histórico Cronológico de Pedidos ({selectedCustomerProfile.orders.length})
+              </h4>
+
+              {selectedCustomerProfile.orders.map((order: Order) => {
+                const badge = getOrderStatusBadge(order.status);
+                const BadgeIcon = badge.icon;
+                const orderDateStr = order.createdAt ? new Date(order.createdAt).toLocaleString('pt-BR') : 'Data não informada';
+
+                return (
+                  <div
+                    key={order.id}
+                    className="bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 space-y-3"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-900">
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono font-extrabold text-white text-sm">
+                          {order.orderNumber || order.id}
+                        </span>
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 ${badge.bg}`}>
+                          <BadgeIcon className="w-3 h-3" />
+                          <span>{badge.label}</span>
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {orderDateStr}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-black text-emerald-400 text-sm">
+                          R$ {Number(order.total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCustomerProfile(null);
+                            handleOpenOrderInEdit(order.id);
+                          }}
+                          className="px-3 py-1 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          <span>Editar</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Items in this order */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {order.items?.map((it, itemIdx) => (
+                        <div key={itemIdx} className="p-2 bg-slate-900/70 rounded-xl border border-slate-800/80 flex items-center justify-between">
+                          <span className="font-bold text-slate-200 truncate">
+                            {it.quantity}x {it.product?.name || (it as any).name || 'Produto'} {it.product?.dosage || ''}
+                          </span>
+                          <span className="font-mono text-cyan-300 font-semibold shrink-0 ml-2">
+                            R$ {(((it.product?.price || (it as any).price || 0)) * (it.quantity || 1)).toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Order Footer info */}
+                    <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-500 pt-1">
+                      <span>Pagamento: <strong>{order.paymentMethod || 'PIX'}</strong></span>
+                      <span>Frete: R$ {(order.shipping || 0).toFixed(2).replace('.', ',')}</span>
+                      {order.discount ? <span>Desconto: -R$ {order.discount.toFixed(2).replace('.', ',')}</span> : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Actions Footer */}
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between shrink-0">
+              <span className="text-xs text-slate-500">
+                Perfil de cliente integrado e sincronizado em tempo real.
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedCustomerProfile(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Fechar Perfil
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* =========================================================================
           MODAL: PEDIDOS QUE CONTÊM O PRODUTO SELECIONADO (DRILL-DOWN & EDIÇÃO)

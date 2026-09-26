@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
-import { X, Check, ShieldCheck, Thermometer, FileText, ShoppingCart, Plus, Minus, Sparkles, Lock, AlertTriangle } from 'lucide-react';
+import { X, Check, ShieldCheck, Thermometer, FileText, ShoppingCart, Plus, Minus, Sparkles, Lock, AlertTriangle, Syringe } from 'lucide-react';
 import { PeptideVial } from './PeptideVial';
 import { useApp } from '../context/AppContext';
 
 export const ProductDetailModal: React.FC = () => {
-  const { selectedProductDetail, setSelectedProductDetail, addToCart, storeSettings, showToast } = useApp();
+  const {
+    selectedProductDetail,
+    setSelectedProductDetail,
+    addToCart,
+    storeSettings,
+    showToast,
+    setCurrentView,
+    setSelectedCalculatorProduct,
+  } = useApp();
   const [quantity, setQuantity] = useState(1);
   const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
@@ -15,6 +23,13 @@ export const ProductDetailModal: React.FC = () => {
   const handleAddToCart = () => {
     addToCart(product, quantity);
     setSelectedProductDetail(null);
+  };
+
+  const handleCalculateDose = () => {
+    setSelectedCalculatorProduct(product);
+    setSelectedProductDetail(null);
+    setCurrentView('dosage-calculator');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -157,14 +172,27 @@ export const ProductDetailModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Add to Cart CTA */}
-              <button
-                onClick={handleAddToCart}
-                className="w-full sm:w-auto flex-1 py-3 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg cursor-pointer"
-              >
-                <ShoppingCart className="w-4 h-4 text-cyan-400" />
-                <span>Adicionar {(quantity > 1 ? `(${quantity})` : '')} por R$ {(product.price * quantity).toFixed(2).replace('.', ',')}</span>
-              </button>
+              {/* Actions: Calculate Dose and Add to Cart */}
+              <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:flex-1">
+                <button
+                  type="button"
+                  onClick={handleCalculateDose}
+                  className="w-full sm:w-auto px-4 py-3 rounded-xl bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  title="Calcular marcação na seringa para este peptídeo"
+                >
+                  <Syringe className="w-4 h-4 text-cyan-600" />
+                  <span>Calcular Doses</span>
+                </button>
+
+                {/* Add to Cart CTA */}
+                <button
+                  onClick={handleAddToCart}
+                  className="w-full flex-1 py-3 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg cursor-pointer"
+                >
+                  <ShoppingCart className="w-4 h-4 text-cyan-400" />
+                  <span>Adicionar {(quantity > 1 ? `(${quantity})` : '')} por R$ {(product.price * quantity).toFixed(2).replace('.', ',')}</span>
+                </button>
+              </div>
             </>
           )}
         </div>

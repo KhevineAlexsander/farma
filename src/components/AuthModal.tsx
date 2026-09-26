@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext';
 import { DnaLogo } from './DnaLogo';
 
 export const AuthModal: React.FC = () => {
-  const { isAuthOpen, setIsAuthOpen, loginWithGoogle, loginStaffOrAdmin, switchUserRole } = useApp();
+  const { isAuthOpen, setIsAuthOpen, loginWithGoogle, loginStaffOrAdmin, loginClientWithEmail, registerClientAccount, switchUserRole } = useApp();
   
   // Tabs: 'CLIENTE' (Login Google ou e-mail) | 'STAFF' (Funcionários e Administradores)
   const [activeTab, setActiveTab] = useState<'CLIENTE' | 'STAFF'>('CLIENTE');
@@ -14,7 +14,10 @@ export const AuthModal: React.FC = () => {
   const [clientName, setClientName] = useState('');
   const [clientEmail, setClientEmail] = useState('');
   const [clientPassword, setClientPassword] = useState('');
+  const [clientPhone, setClientPhone] = useState('');
+  const [clientError, setClientError] = useState<string | null>(null);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Staff / Admin state
   const [staffEmail, setStaffEmail] = useState('');
@@ -26,24 +29,51 @@ export const AuthModal: React.FC = () => {
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true);
     setStaffError(null);
+    setClientError(null);
     try {
       const res = await loginWithGoogle();
       if (res.success) {
         setIsAuthOpen(false);
       } else {
-        setStaffError(res.message || 'Falha ao autenticar com o Google.');
+        setClientError(res.message || 'Falha ao autenticar com o Google.');
       }
     } finally {
       setIsGoogleLoading(false);
     }
   };
 
-  const handleClientSubmit = (e: React.FormEvent) => {
+  const handleClientSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientEmail) return;
-    const res = loginStaffOrAdmin(clientEmail, clientPassword || '123456');
-    if (res.success) {
-      setIsAuthOpen(false);
+    setClientError(null);
+    if (!clientEmail) {
+      setClientError('Informe seu e-mail.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (isRegister) {
+        if (!clientName) {
+          setClientError('Informe seu nome completo.');
+          setIsSubmitting(false);
+          return;
+        }
+        const res = await registerClientAccount(clientName, clientEmail, clientPassword, clientPhone);
+        if (res.success) {
+          setIsAuthOpen(false);
+        } else {
+          setClientError(res.message || 'Erro ao criar conta.');
+        }
+      } else {
+        const res = await loginClientWithEmail(clientEmail, clientPassword);
+        if (res.success) {
+          setIsAuthOpen(false);
+        } else {
+          setClientError(res.message || 'Falha ao realizar login.');
+        }
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -171,23 +201,46 @@ export const AuthModal: React.FC = () => {
               <div className="flex-1 border-t border-slate-200" />
             </div>
 
+            {/* Error feedback for client */}
+            {clientError && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700 animate-in fade-in duration-200">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-600" />
+                <span>{clientError}</span>
+              </div>
+            )}
+
             {/* Email form for client */}
             <form onSubmit={handleClientSubmit} className="space-y-3 text-xs">
               {isRegister && (
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Nome Completo</label>
-                  <div className="relative">
-                    <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      required
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                      placeholder="Seu nome completo"
-                      className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600 text-xs"
-                    />
+                <>
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">Nome Completo</label>
+                    <div className="relative">
+                      <UserIcon className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        required
+                        value={clientName}
+                        onChange={(e) => setClientName(e.target.value)}
+                        placeholder="Seu nome completo"
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600 text-xs"
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-semibold mb-1">WhatsApp / Telefone</label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        value={clientPhone}
+                        onChange={(e) => setClientPhone(e.target.value)}
+                        placeholder="(11) 99999-0000"
+                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600 text-xs"
+                      />
+                    </div>
+                  </div>
+                </>
               )}
 
               <div>
@@ -222,9 +275,14 @@ export const AuthModal: React.FC = () => {
 
               <button
                 type="submit"
-                className="w-full py-3 px-4 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-bold text-xs tracking-wide shadow-md transition-all cursor-pointer mt-2"
+                disabled={isSubmitting}
+                className="w-full py-3 px-4 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-bold text-xs tracking-wide shadow-md transition-all cursor-pointer mt-2 disabled:opacity-60"
               >
-                {isRegister ? 'CRIAR CONTA DE CLIENTE' : 'ENTRAR NA CONTA'}
+                {isSubmitting
+                  ? 'Processando...'
+                  : isRegister
+                  ? 'CRIAR CONTA DE CLIENTE'
+                  : 'ENTRAR NA CONTA'}
               </button>
             </form>
 
