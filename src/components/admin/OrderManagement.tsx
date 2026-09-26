@@ -42,10 +42,12 @@ import {
   BellRing,
   Calendar,
   CalendarClock,
+  Database,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
+import { DatabaseBackupModal } from './DatabaseBackupModal';
 import {
   exportOrdersListToExcel,
   exportOrdersListToTxt,
@@ -81,10 +83,18 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [statusFilter, setStatusFilter] = useState<string>('Todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [productSearchFilter, setProductSearchFilter] = useState<string>('');
+  const [dateFilterPreset, setDateFilterPreset] = useState<
+    'all' | 'today' | 'yesterday' | 'last7' | 'last30' | 'this_month' | 'custom'
+  >('all');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  const [showCustomDateInputs, setShowCustomDateInputs] = useState<boolean>(false);
+  const [isBillingPanelOpen, setIsBillingPanelOpen] = useState<boolean>(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [trackingInput, setTrackingInput] = useState('');
   const [isSavingOrders, setIsSavingOrders] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
 
   // Manual Order Creation State
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -907,24 +917,77 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
     return orders.filter((o) => o.status === 'Pendente').length;
   }, [orders]);
 
+  const pendingAndPartialCount = useMemo(() => {
+    return orders.filter(
+      (o) =>
+        o.status === 'Pendente' ||
+        o.status === 'Pago Parcial' ||
+        (o.remainingAmount !== undefined && o.remainingAmount > 0 && o.status !== 'Pago' && o.status !== 'Cancelado')
+    ).length;
+  }, [orders]);
+
   const filteredOrders = useMemo(() => {
     return orders.filter((order) => {
       let matchesStatus = true;
       if (statusFilter === 'Aguardando Baixa') {
         matchesStatus = !order.clearedManuallyAt && order.status !== 'Cancelado' && order.status !== 'Pago' && order.status !== 'Entregue' && order.status !== 'Enviado';
-      } else if (statusFilter === 'Pendente' || statusFilter === 'Pendentes') {
+      } else if (
+        statusFilter === 'Pendentes & Parciais' ||
+        statusFilter === 'Pendente / Parcial' ||
+        statusFilter === 'Pendentes'
+      ) {
+        matchesStatus =
+          order.status === 'Pendente' ||
+          order.status === 'Pago Parcial' ||
+          (order.remainingAmount !== undefined && order.remainingAmount > 0 && order.status !== 'Pago' && order.status !== 'Cancelado');
+      } else if (statusFilter === 'Pendente') {
         matchesStatus = order.status === 'Pendente';
       } else if (statusFilter === 'Pago Parcial') {
         matchesStatus = order.status === 'Pago Parcial';
       } else if (statusFilter === 'Cobrança / Vencidos') {
-        if (order.status !== 'Pago Parcial' && (!order.remainingAmount || order.remainingAmount <= 0)) {
-          matchesStatus = false;
-        } else {
-          const info = getDueDateInfo(order);
-          matchesStatus = info.status === 'overdue' || info.status === 'today';
-        }
+        const info = getDueDateInfo(order);
+        matchesStatus =
+          (order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || order.status === 'Pendente') &&
+          (info.status === 'overdue' || info.status === 'today');
       } else if (statusFilter !== 'Todos') {
         matchesStatus = order.status === statusFilter;
+      }
+
+      // Date filtering
+      let matchesDate = true;
+      if (dateFilterPreset !== 'all') {
+        const orderDate = new Date(order.createdAt);
+        const now = new Date();
+        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        if (dateFilterPreset === 'today') {
+          matchesDate = orderDate >= startOfToday && orderDate <= endOfToday;
+        } else if (dateFilterPreset === 'yesterday') {
+          const startOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+          const endOfYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59, 999);
+          matchesDate = orderDate >= startOfYesterday && orderDate <= endOfYesterday;
+        } else if (dateFilterPreset === 'last7') {
+          const sevenDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7);
+          matchesDate = orderDate >= sevenDaysAgo;
+        } else if (dateFilterPreset === 'last30') {
+          const thirtyDaysAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30);
+          matchesDate = orderDate >= thirtyDaysAgo;
+        } else if (dateFilterPreset === 'this_month') {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          matchesDate = orderDate >= startOfMonth;
+        } else if (dateFilterPreset === 'custom') {
+          if (customStartDate) {
+            const startParts = customStartDate.split('-');
+            const sDate = new Date(Number(startParts[0]), Number(startParts[1]) - 1, Number(startParts[2]), 0, 0, 0);
+            if (orderDate < sDate) matchesDate = false;
+          }
+          if (customEndDate && matchesDate) {
+            const endParts = customEndDate.split('-');
+            const eDate = new Date(Number(endParts[0]), Number(endParts[1]) - 1, Number(endParts[2]), 23, 59, 59, 999);
+            if (orderDate > eDate) matchesDate = false;
+          }
+        }
       }
 
       // Filter by dedicated product selection / search
@@ -954,9 +1017,9 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
           return pName.includes(q) || combined.includes(q);
         });
 
-      return matchesStatus && matchesSearch && matchesProductFilter;
+      return matchesStatus && matchesSearch && matchesProductFilter && matchesDate;
     });
-  }, [orders, statusFilter, searchTerm, productSearchFilter]);
+  }, [orders, statusFilter, searchTerm, productSearchFilter, dateFilterPreset, customStartDate, customEndDate]);
 
   const partialCount = partialOrders.length;
   const isSavingDueDate = isSavingChargeDate;
@@ -1304,28 +1367,44 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-200 w-full overflow-hidden">
       
       {/* Top Bar Summary & Header (Mobile Responsive) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-slate-900/90 border border-slate-800 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xl">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 sm:p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-xl sm:rounded-2xl shrink-0">
-            <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 bg-slate-900/90 border border-slate-800 p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl">
+        <div className="flex items-center justify-between sm:justify-start gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 sm:p-3 bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 rounded-xl sm:rounded-2xl shrink-0">
+              <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-xl font-extrabold text-white tracking-tight leading-tight">
+                Pedidos & Baixas Manuais
+              </h2>
+              <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
+                Conferência de pagamentos, cobrança de saldos parciais e vencimentos
+              </p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-base sm:text-xl font-extrabold text-white tracking-tight">
-              Pedidos & Baixas Manuais
-            </h2>
-            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
-              Conferência de pagamentos, cobrança de saldos parciais e vencimentos
-            </p>
-          </div>
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto w-full sm:w-auto justify-between sm:justify-end pt-1 sm:pt-0">
+          {/* Quick Add Button on Mobile Right */}
           <button
             onClick={() => {
               handleResetManualOrderForm();
               setIsManualModalOpen(true);
             }}
-            className="px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 cursor-pointer min-h-[36px]"
+            className="sm:hidden px-3 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 font-bold text-xs flex items-center gap-1 shadow-md shadow-cyan-500/20 cursor-pointer shrink-0 min-h-[36px]"
+            title="Criar novo pedido manual"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>+ Pedido</span>
+          </button>
+        </div>
+
+        {/* Action Toolbar */}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 self-stretch sm:self-auto w-full sm:w-auto justify-start sm:justify-end pt-1 sm:pt-0">
+          <button
+            onClick={() => {
+              handleResetManualOrderForm();
+              setIsManualModalOpen(true);
+            }}
+            className="hidden sm:flex px-3.5 py-1.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 active:bg-cyan-600 text-slate-950 font-bold text-xs items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 cursor-pointer min-h-[36px]"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
             <span>+ Novo Pedido Manual</span>
@@ -1333,83 +1412,132 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
 
           <button
             onClick={() => setStatusFilter('Aguardando Baixa')}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px] ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px] ${
               statusFilter === 'Aguardando Baixa'
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md'
                 : 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
             }`}
+            title="Filtrar pedidos aguardando confirmação de baixa manual"
           >
             <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
             <span>Aguardando Baixa: <strong>{waitingClearanceCount}</strong></span>
           </button>
 
-          {overduePartialOrders.length > 0 && (
-            <button
-              onClick={() => setStatusFilter('Cobrança / Vencidos')}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px] ${
-                statusFilter === 'Cobrança / Vencidos'
-                  ? 'bg-red-500 text-white border-red-400 shadow-md shadow-red-500/30'
-                  : 'bg-red-500/15 border-red-500/30 text-red-300 hover:bg-red-500/25 animate-pulse'
-              }`}
-              title="Filtrar pagamentos parciais vencidos ou que vencem hoje"
-            >
-              <BellRing className="w-3.5 h-3.5 text-red-400 shrink-0" />
-              <span>Cobrança Vencida: <strong>{overduePartialOrders.length}</strong></span>
-            </button>
-          )}
+          <button
+            onClick={handleExportOrdersExcel}
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+            title="Exportar pedidos da listagem em planilha Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Excel</span>
+          </button>
+
+          <button
+            onClick={handleExportOrdersTxt}
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+            title="Exportar pedidos da listagem em arquivo TXT (.txt)"
+          >
+            <FileText className="w-3.5 h-3.5 text-cyan-400" />
+            <span>TXT</span>
+          </button>
+
+          <button
+            onClick={() => setIsBackupModalOpen(true)}
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+            title="Salvar Backup completo de produtos e pedidos ou restaurar no banco de dados"
+          >
+            <Database className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline">Backup & Restaurar</span>
+            <span className="sm:hidden">Backup</span>
+          </button>
 
           {isMasterAdmin && (
             <button
               onClick={handleSaveOrdersToCloud}
               disabled={isSavingOrders}
-              className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
               title="Sincronizar pedidos com a nuvem (Exclusivo ADM Master)"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isSavingOrders ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">{isSavingOrders ? 'Salvando...' : 'Nuvem'}</span>
-              {lastSaved && <span className="text-[10px] text-emerald-400 font-mono hidden md:inline">({lastSaved})</span>}
+              <span className="hidden md:inline">{isSavingOrders ? 'Salvando...' : 'Nuvem'}</span>
+              {lastSaved && <span className="text-[10px] text-emerald-400 font-mono hidden lg:inline">({lastSaved})</span>}
             </button>
           )}
-
-          <button
-            onClick={handleExportOrdersExcel}
-            className="px-3 py-1.5 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
-            title="Exportar pedidos da listagem em planilha Excel (.xlsx)"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Excel</span>
-          </button>
-
-          <button
-            onClick={handleExportOrdersTxt}
-            className="px-3 py-1.5 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
-            title="Exportar pedidos da listagem em arquivo TXT (.txt)"
-          >
-            <FileText className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline">TXT</span>
-          </button>
         </div>
       </div>
 
-      {/* Painel de Alerta & Cobrança de Pagamentos Parciais (Vencimentos & Cobrança WhatsApp) */}
-      {partialOrders.length > 0 && (
-        <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-orange-950/40 border border-orange-500/30 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl space-y-3">
+      {/* Destaque Prioritário na Página Principal: Apenas Vencidos e Vence Hoje (Gestão Completa Fica Oculta/Retrátil) */}
+      {(overduePartialOrders.length > 0 || todayPartialOrders.length > 0) && (
+        <div className="bg-gradient-to-r from-red-950/40 via-slate-900 to-amber-950/40 border-2 border-red-500/40 p-3 sm:p-4 rounded-2xl sm:rounded-3xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-3 animate-in fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-red-500/20 text-red-400 rounded-xl border border-red-500/40 shrink-0">
+              <BellRing className="w-5 h-5 text-red-400 animate-bounce" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs sm:text-sm font-extrabold text-white">
+                  Cobranças Prioritárias:
+                </span>
+                {overduePartialOrders.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-red-500 text-white font-extrabold text-[11px] shadow-sm animate-pulse flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" />
+                    {overduePartialOrders.length} {overduePartialOrders.length === 1 ? 'Vencido em atraso' : 'Vencidos em atraso'}
+                  </span>
+                )}
+                {todayPartialOrders.length > 0 && (
+                  <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-extrabold text-[11px] shadow-sm flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {todayPartialOrders.length} {todayPartialOrders.length === 1 ? 'Vence Hoje' : 'Vencem Hoje'}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Saldos pendentes que exigem cobrança e acompanhamento pelo WhatsApp.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0 flex-wrap justify-between sm:justify-end">
+            <button
+              onClick={() => setStatusFilter('Cobrança / Vencidos')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 min-h-[36px] ${
+                statusFilter === 'Cobrança / Vencidos'
+                  ? 'bg-red-500 text-white shadow-md shadow-red-500/30 font-extrabold'
+                  : 'bg-red-500/20 hover:bg-red-500 text-red-300 hover:text-white border border-red-500/40'
+              }`}
+            >
+              <Filter className="w-3.5 h-3.5" />
+              <span>Filtrar Vencidos & Hoje ({overduePartialOrders.length + todayPartialOrders.length})</span>
+            </button>
+
+            <button
+              onClick={() => setIsBillingPanelOpen(!isBillingPanelOpen)}
+              className="px-3 py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 min-h-[36px]"
+              title="Expandir ou recolher a gestão completa de cobrança"
+            >
+              <span>{isBillingPanelOpen ? 'Ocultar Painel ▴' : 'Gestão Completa ▾'}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Painel Completo de Cobrança (Fica Oculto por padrão e abre sob demanda do usuário) */}
+      {isBillingPanelOpen && partialOrders.length > 0 && (
+        <div className="bg-slate-900/95 border border-orange-500/30 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl space-y-3 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-orange-500/20 text-orange-400 rounded-xl border border-orange-500/30 shrink-0">
-                <BellRing className="w-5 h-5 text-orange-400 animate-bounce" />
+                <DollarSign className="w-5 h-5 text-orange-400" />
               </div>
               <div>
                 <h3 className="text-sm sm:text-base font-extrabold text-white flex items-center gap-2">
-                  <span>Alerta de Pagamentos Parciais & Cobrança</span>
-                  {overduePartialOrders.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/40 text-[10px] font-bold animate-pulse">
-                      {overduePartialOrders.length} Vencido(s)
-                    </span>
-                  )}
+                  <span>Gestão Completa de Cobrança & Vencimentos</span>
+                  <span className="px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30 text-[10px] font-bold">
+                    {partialOrders.length} Parciais Ativos
+                  </span>
                 </h3>
                 <p className="text-[11px] text-slate-400">
-                  Gerencie vencimentos de saldos pendentes e dispare mensagens de cobrança direta no WhatsApp.
+                  Resumo de todos os saldos devedores parcelados e em aberto.
                 </p>
               </div>
             </div>
@@ -1417,7 +1545,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setStatusFilter('Pago Parcial')}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 min-h-[36px] ${
                   statusFilter === 'Pago Parcial'
                     ? 'bg-orange-500 text-slate-950 font-extrabold shadow-md'
                     : 'bg-orange-500/15 hover:bg-orange-500/25 border border-orange-500/30 text-orange-300'
@@ -1426,20 +1554,13 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 <DollarSign className="w-3.5 h-3.5" />
                 <span>Ver Todos Parciais ({partialOrders.length})</span>
               </button>
-
-              {overduePartialOrders.length > 0 && (
-                <button
-                  onClick={() => setStatusFilter('Cobrança / Vencidos')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                    statusFilter === 'Cobrança / Vencidos'
-                      ? 'bg-red-500 text-white font-extrabold shadow-md'
-                      : 'bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300'
-                  }`}
-                >
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Filtrar Vencidos ({overduePartialOrders.length})</span>
-                </button>
-              )}
+              <button
+                onClick={() => setIsBillingPanelOpen(false)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl bg-slate-950 border border-slate-800 cursor-pointer min-h-[36px]"
+                title="Fechar painel de cobrança"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -1448,7 +1569,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             <div className="bg-slate-950/80 p-3 rounded-xl border border-red-500/30">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">VENCIDOS EM ATRASO</span>
-                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+                {overduePartialOrders.length > 0 && <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>}
               </div>
               <p className="text-base sm:text-lg font-extrabold text-white mt-1 font-tech">
                 {overduePartialOrders.length} {overduePartialOrders.length === 1 ? 'pedido' : 'pedidos'}
@@ -1491,26 +1612,26 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
         </div>
       )}
 
-      {/* Search and Horizontal Filter Pills (Mobile & Desktop Optimized) */}
-      <div className="space-y-2.5 bg-slate-900/70 border border-slate-800 p-3 sm:p-4 rounded-2xl">
+      {/* Barra de Filtros Otimizada: Compacta, com Filtros de Datas e Status Unificado */}
+      <div className="space-y-2.5 bg-slate-900/80 border border-slate-800 p-3 sm:p-4 rounded-2xl shadow-md">
         
-        {/* Search Bar & Product Filter Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+        {/* Row 1: Busca + Filtro de Data + Filtro de Produto */}
+        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
           
-          {/* General Search Input */}
-          <div className="sm:col-span-7 relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          {/* Campo de Busca Geral */}
+          <div className="sm:col-span-5 relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar por nº, cliente, telefone ou produto..."
-              className="w-full pl-10 pr-9 py-2 sm:py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[40px]"
+              className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 min-h-[38px]"
             />
             {searchTerm && (
               <button
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
                 title="Limpar busca"
               >
                 <X className="w-3.5 h-3.5" />
@@ -1518,28 +1639,74 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             )}
           </div>
 
-          {/* Dedicated Product Filter Dropdown & Search */}
-          <div className="sm:col-span-5 relative flex items-center gap-1.5">
+          {/* Filtro de Datas com Atalhos */}
+          <div className="sm:col-span-3 relative flex items-center gap-1">
             <div className="relative flex-1">
-              <Package className="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Calendar className="w-3.5 h-3.5 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <select
+                value={dateFilterPreset}
+                onChange={(e) => {
+                  const val = e.target.value as any;
+                  setDateFilterPreset(val);
+                  setShowCustomDateInputs(val === 'custom');
+                }}
+                className={`w-full pl-8 pr-7 py-2 bg-slate-950 border rounded-xl text-xs focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer appearance-none ${
+                  dateFilterPreset !== 'all'
+                    ? 'border-cyan-500/60 text-cyan-300 font-bold bg-cyan-950/20'
+                    : 'border-slate-800 text-slate-300'
+                }`}
+                title="Filtrar pedidos por período de criação"
+              >
+                <option value="all">📅 Qualquer data</option>
+                <option value="today">Hoje</option>
+                <option value="yesterday">Ontem</option>
+                <option value="last7">Últimos 7 dias</option>
+                <option value="last30">Últimos 30 dias</option>
+                <option value="this_month">Este mês</option>
+                <option value="custom">Personalizado...</option>
+              </select>
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[10px]">
+                ▼
+              </div>
+            </div>
+            {dateFilterPreset !== 'all' && (
+              <button
+                onClick={() => {
+                  setDateFilterPreset('all');
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                  setShowCustomDateInputs(false);
+                }}
+                className="p-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 min-h-[38px] min-w-[34px] flex items-center justify-center shrink-0 cursor-pointer"
+                title="Limpar filtro de data"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Filtro por Produto Comprado */}
+          <div className="sm:col-span-4 relative flex items-center gap-1">
+            <div className="relative flex-1">
+              <Package className="w-3.5 h-3.5 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={productSearchFilter}
                 onChange={(e) => setProductSearchFilter(e.target.value)}
-                className={`w-full pl-9 pr-8 py-2 sm:py-2.5 bg-slate-950 border rounded-xl text-xs focus:outline-none focus:border-cyan-500 min-h-[40px] cursor-pointer appearance-none ${
+                className={`w-full pl-8 pr-7 py-2 bg-slate-950 border rounded-xl text-xs focus:outline-none focus:border-cyan-500 min-h-[38px] cursor-pointer appearance-none truncate ${
                   productSearchFilter
                     ? 'border-cyan-500/60 text-cyan-300 font-bold bg-cyan-950/20'
                     : 'border-slate-800 text-slate-300'
                 }`}
                 title="Filtrar pedidos pelo produto comprado"
               >
-                <option value="">📦 Todos os Produtos (Sem filtro)</option>
+                <option value="">📦 Todos os Produtos</option>
                 {availableProductOptions.map((prodName, idx) => (
                   <option key={idx} value={prodName}>
                     {prodName}
                   </option>
                 ))}
               </select>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[10px]">
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-500 text-[10px]">
                 ▼
               </div>
             </div>
@@ -1547,7 +1714,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             {productSearchFilter && (
               <button
                 onClick={() => setProductSearchFilter('')}
-                className="p-2.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 min-h-[40px] min-w-[40px] flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                className="p-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 min-h-[38px] min-w-[34px] flex items-center justify-center shrink-0 cursor-pointer"
                 title="Remover filtro de produto"
               >
                 <X className="w-4 h-4" />
@@ -1557,31 +1724,87 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
 
         </div>
 
-        {/* Active Product Filter Pill indicator */}
-        {productSearchFilter && (
+        {/* Seleção de Datas Personalizadas (De / Até) */}
+        {showCustomDateInputs && (
+          <div className="flex flex-wrap items-center gap-2 bg-slate-950/90 border border-cyan-500/30 p-2.5 rounded-xl text-xs text-slate-300 animate-in fade-in">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400 font-bold">De:</span>
+              <input
+                type="date"
+                value={customStartDate}
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-slate-400 font-bold">Até:</span>
+              <input
+                type="date"
+                value={customEndDate}
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-white text-xs focus:outline-none focus:border-cyan-500"
+              />
+            </div>
+            {(customStartDate || customEndDate) && (
+              <button
+                onClick={() => {
+                  setCustomStartDate('');
+                  setCustomEndDate('');
+                }}
+                className="px-2 py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg cursor-pointer"
+              >
+                Limpar Período
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Resumo de Filtros Ativos */}
+        {(productSearchFilter || dateFilterPreset !== 'all' || searchTerm) && (
           <div className="flex items-center justify-between bg-cyan-950/30 border border-cyan-500/30 rounded-xl px-3 py-1.5 text-xs text-cyan-300 animate-in fade-in">
-            <div className="flex items-center gap-2 truncate">
-              <Package className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="text-slate-400">Filtrando por produto:</span>
-              <strong className="text-white truncate">{productSearchFilter}</strong>
-              <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] font-mono">
+            <div className="flex items-center gap-2 truncate flex-wrap">
+              <Filter className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="text-slate-400">Filtros ativos:</span>
+              {searchTerm && (
+                <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-white font-mono text-[11px]">
+                  Busca: "{searchTerm}"
+                </span>
+              )}
+              {dateFilterPreset !== 'all' && (
+                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold">
+                  Data: {dateFilterPreset === 'today' ? 'Hoje' : dateFilterPreset === 'yesterday' ? 'Ontem' : dateFilterPreset === 'last7' ? 'Últimos 7 dias' : dateFilterPreset === 'last30' ? 'Últimos 30 dias' : dateFilterPreset === 'this_month' ? 'Este mês' : `${customStartDate || 'Início'} até ${customEndDate || 'Hoje'}`}
+                </span>
+              )}
+              {productSearchFilter && (
+                <span className="px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-[11px] font-bold truncate max-w-[200px]">
+                  {productSearchFilter}
+                </span>
+              )}
+              <span className="px-1.5 py-0.5 rounded bg-cyan-500/30 text-white text-[10px] font-mono font-bold">
                 {filteredOrders.length} {filteredOrders.length === 1 ? 'pedido' : 'pedidos'}
               </span>
             </div>
             <button
-              onClick={() => setProductSearchFilter('')}
-              className="text-xs text-cyan-400 hover:text-white underline ml-2 shrink-0 cursor-pointer"
+              onClick={() => {
+                setSearchTerm('');
+                setProductSearchFilter('');
+                setDateFilterPreset('all');
+                setCustomStartDate('');
+                setCustomEndDate('');
+                setShowCustomDateInputs(false);
+              }}
+              className="text-xs text-cyan-400 hover:text-white underline ml-2 shrink-0 cursor-pointer font-bold"
             >
-              Limpar Filtro
+              Limpar Todos
             </button>
           </div>
         )}
 
-        {/* Scrollable Pills for Mobile & Desktop */}
+        {/* Status Pills: Pendente e Parcialmente Pendente Juntos! */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
           <button
             onClick={() => setStatusFilter('Todos')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[34px] flex items-center gap-1 ${
               statusFilter === 'Todos'
                 ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
                 : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
@@ -1592,7 +1815,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
 
           <button
             onClick={() => setStatusFilter('Aguardando Baixa')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[34px] flex items-center gap-1.5 border ${
               statusFilter === 'Aguardando Baixa'
                 ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md font-extrabold'
                 : 'bg-slate-950 text-amber-400/90 border-amber-500/30 hover:bg-amber-500/10'
@@ -1602,34 +1825,24 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             <span>Aguardando Baixa ({waitingClearanceCount})</span>
           </button>
 
+          {/* COMBINED: Pendente e Pago Parcial juntos conforme solicitado pelo usuário */}
           <button
-            onClick={() => setStatusFilter('Pendente')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
-              statusFilter === 'Pendente' || statusFilter === 'Pendentes'
-                ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md font-extrabold'
-                : 'bg-slate-950 text-amber-300 border-amber-500/20 hover:bg-amber-500/10'
+            onClick={() => setStatusFilter('Pendentes & Parciais')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[34px] flex items-center gap-1.5 border ${
+              statusFilter === 'Pendentes & Parciais' || statusFilter === 'Pendente / Parcial' || statusFilter === 'Pendentes'
+                ? 'bg-gradient-to-r from-amber-400 to-orange-400 text-slate-950 border-amber-300 shadow-md font-extrabold'
+                : 'bg-slate-950 text-amber-300 border-amber-500/30 hover:bg-amber-500/10'
             }`}
+            title="Exibir pedidos pendentes de baixa e pagamentos parciais com saldo a quitar"
           >
-            <Clock className="w-3 h-3" />
-            <span>Pendentes ({pendingOnlyCount})</span>
-          </button>
-
-          <button
-            onClick={() => setStatusFilter('Pago Parcial')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
-              statusFilter === 'Pago Parcial'
-                ? 'bg-orange-500 text-slate-950 border-orange-400 shadow-md font-extrabold'
-                : 'bg-slate-950 text-orange-400 border-orange-500/30 hover:bg-orange-500/10'
-            }`}
-          >
-            <DollarSign className="w-3 h-3 text-orange-400" />
-            <span>Pago Parcial ({partialCount})</span>
+            <DollarSign className="w-3 h-3 text-amber-400" />
+            <span>Pendentes & Parciais ({pendingAndPartialCount})</span>
           </button>
 
           {(overduePartialOrders.length > 0 || todayPartialOrders.length > 0) && (
             <button
               onClick={() => setStatusFilter('Cobrança / Vencidos')}
-              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1.5 border ${
+              className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[34px] flex items-center gap-1.5 border ${
                 statusFilter === 'Cobrança / Vencidos'
                   ? 'bg-red-500 text-white border-red-400 shadow-md font-extrabold'
                   : 'bg-slate-950 text-red-400 border-red-500/40 hover:bg-red-500/10 animate-pulse'
@@ -1648,7 +1861,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 <button
                   key={st}
                   onClick={() => setStatusFilter(st)}
-                  className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[36px] flex items-center gap-1 ${
+                  className={`px-3 py-1.5 rounded-xl font-bold transition-all shrink-0 cursor-pointer text-xs min-h-[34px] flex items-center gap-1 ${
                     statusFilter === st
                       ? 'bg-cyan-500 text-slate-950 shadow-md font-extrabold'
                       : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
@@ -1800,60 +2013,79 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                   </div>
                 )}
 
-                {/* Mobile Action Buttons */}
-                <div className="grid grid-cols-6 gap-1 pt-1">
-                  <button
-                    onClick={(e) => handleOpenClearModal(order, e)}
-                    className="px-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer shadow-md shadow-emerald-600/20 min-h-[38px]"
-                    title="Dar baixa no pedido"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Baixa</span>
-                  </button>
-                  <button
-                    onClick={(e) => handleOpenChargeModal(order, e)}
-                    className={`px-1 py-2 rounded-xl font-bold flex items-center justify-center gap-1 transition-all cursor-pointer min-h-[38px] ${
-                      order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
-                        ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/20 font-extrabold'
-                        : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30'
-                    }`}
-                    title="Cobrança e alerta WhatsApp"
-                  >
-                    <BellRing className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Cobrar</span>
-                  </button>
-                  <button
-                    onClick={() => handleOpenDetail(order)}
-                    className="px-1 py-2 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[38px] cursor-pointer"
-                    title="Ver detalhes"
-                  >
-                    <Eye className="w-3.5 h-3.5 shrink-0" />
-                    <span>Ver</span>
-                  </button>
-                  <button
-                    onClick={(e) => handleOpenEditModal(order, e)}
-                    className="px-1 py-2 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/30 cursor-pointer min-h-[38px]"
-                    title="Editar informações do pedido"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                    <span>Editar</span>
-                  </button>
-                  <button
-                    onClick={(e) => handleOpenOrderSummaryModal(order, e)}
-                    className="px-1 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-teal-500/30 cursor-pointer min-h-[38px]"
-                    title="Enviar resumo do pedido para o WhatsApp"
-                  >
-                    <Share2 className="w-3.5 h-3.5 shrink-0" />
-                    <span className="truncate">Relatório</span>
-                  </button>
-                  <button
-                    onClick={(e) => handleOpenDeleteModal(order, e)}
-                    className="px-1 py-2 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[38px]"
-                    title="Excluir pedido"
-                  >
-                    <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                    <span>Excluir</span>
-                  </button>
+                {/* Mobile Action Buttons (Optimized Responsive Layout) */}
+                <div className="space-y-1.5 pt-1">
+                  {/* Primary Row: Baixa + Cobrança/Relatório */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      onClick={(e) => handleOpenClearModal(order, e)}
+                      className="w-full py-2 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-600/25 min-h-[40px]"
+                      title="Dar baixa no pedido"
+                    >
+                      <CheckCircle className="w-4 h-4 shrink-0" />
+                      <span>Dar Baixa</span>
+                    </button>
+
+                    {(order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0) || order.status === 'Pendente') ? (
+                      <button
+                        onClick={(e) => handleOpenChargeModal(order, e)}
+                        className={`w-full py-2 px-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[40px] ${
+                          order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
+                            ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md shadow-amber-500/25'
+                            : 'bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300'
+                        }`}
+                        title="Cobrança e lembrete no WhatsApp"
+                      >
+                        <BellRing className="w-4 h-4 shrink-0" />
+                        <span>Cobrar WhatsApp</span>
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                        className="w-full py-2 px-2 rounded-xl bg-teal-500/20 hover:bg-teal-500 text-teal-300 hover:text-slate-950 border border-teal-500/30 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[40px]"
+                        title="Enviar relatório do pedido para o WhatsApp"
+                      >
+                        <Share2 className="w-4 h-4 shrink-0" />
+                        <span>Relatório WhatsApp</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Secondary Row: Detalhes, Editar, Resumo TXT, Excluir */}
+                  <div className="grid grid-cols-4 gap-1">
+                    <button
+                      onClick={() => handleOpenDetail(order)}
+                      className="py-1.5 px-1 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-colors border border-slate-800 min-h-[36px] cursor-pointer"
+                      title="Ver detalhes completos do pedido"
+                    >
+                      <Eye className="w-3.5 h-3.5 shrink-0" />
+                      <span>Detalhes</span>
+                    </button>
+                    <button
+                      onClick={(e) => handleOpenEditModal(order, e)}
+                      className="py-1.5 px-1 rounded-xl bg-cyan-500/10 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-cyan-500/20 cursor-pointer min-h-[36px]"
+                      title="Editar informações do pedido"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Editar</span>
+                    </button>
+                    <button
+                      onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                      className="py-1.5 px-1 rounded-xl bg-teal-500/10 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-teal-500/20 cursor-pointer min-h-[36px]"
+                      title="Relatório / Resumo"
+                    >
+                      <Share2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>TXT</span>
+                    </button>
+                    <button
+                      onClick={(e) => handleOpenDeleteModal(order, e)}
+                      className="py-1.5 px-1 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-[11px] font-semibold flex items-center justify-center gap-1 transition-all border border-red-500/20 cursor-pointer min-h-[36px]"
+                      title="Excluir pedido com senha 8817"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Excluir</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -4758,6 +4990,12 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
           </div>
         </div>
       )}
+
+      {/* Database Backup & Restore Modal */}
+      <DatabaseBackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+      />
     </div>
   );
 };

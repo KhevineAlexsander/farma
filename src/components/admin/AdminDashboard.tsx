@@ -35,6 +35,7 @@ import { EmployeeManagement } from './EmployeeManagement';
 import { StoreSettingsTab } from './StoreSettingsTab';
 import { CouponManagement } from './CouponManagement';
 import { SalesReportsTab } from './SalesReportsTab';
+import { DatabaseBackupModal } from './DatabaseBackupModal';
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -50,6 +51,7 @@ export const AdminDashboard: React.FC = () => {
   } = useApp();
   const [isSavingAll, setIsSavingAll] = useState(false);
   const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [showBackupModal, setShowBackupModal] = useState(false);
   const [showSuspensionModal, setShowSuspensionModal] = useState(false);
   const [suspensionLoading, setSuspensionLoading] = useState(false);
   const [customSuspensionMsg, setCustomSuspensionMsg] = useState(
@@ -267,6 +269,17 @@ export const AdminDashboard: React.FC = () => {
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Firestore Conectado</span>
               </div>
+
+              {/* Database Backup & Restore Button */}
+              <button
+                onClick={() => setShowBackupModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 via-slate-800 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all border border-cyan-500/40 cursor-pointer shadow-sm shadow-cyan-500/10"
+                title="Backup e Restauração de Produtos e Pedidos no Banco de Dados"
+              >
+                <Database className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Backup & Restaurar</span>
+                <span className="sm:hidden">Backup</span>
+              </button>
 
               {isMasterAdmin && (
                 <button
@@ -545,6 +558,12 @@ export const AdminDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Database Backup & Restore Modal */}
+      <DatabaseBackupModal
+        isOpen={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+      />
 
       {/* Admin Panel Footer */}
       <footer className="border-t border-slate-800/60 bg-slate-950/80 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">

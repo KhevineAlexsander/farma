@@ -43,6 +43,10 @@ import {
   auditDatabaseDeduplication,
   DeduplicationAuditReport,
 } from '../utils/productDeduplication';
+import {
+  BackupDataPayload,
+  generateBackupPayload,
+} from '../utils/backupUtils';
 
 /**
  * Recursively cleans an object to remove any keys with 'undefined' values,
@@ -259,6 +263,21 @@ interface AppContextType {
   saveAllCouponsToCloud: () => Promise<boolean>;
   saveAllSettingsToCloud: (customSettings?: Partial<StoreSettings>) => Promise<boolean>;
   saveEverythingToCloud: () => Promise<boolean>;
+
+  // Database Backup and Restore
+  createDatabaseBackupPayload: () => BackupDataPayload;
+  restoreAndDeployBackup: (
+    backupData: BackupDataPayload,
+    options?: {
+      mode?: 'replace' | 'merge';
+      onProgress?: (step: string, current: number, total: number) => void;
+    }
+  ) => Promise<{
+    success: boolean;
+    productsCount: number;
+    ordersCount: number;
+    message: string;
+  }>;
 
   selectedCategory: ProductCategory;
   setSelectedCategory: (cat: ProductCategory) => void;
@@ -1877,6 +1896,144 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const createDatabaseBackupPayload = useCallback((): BackupDataPayload => {
+    return generateBackupPayload(products, orders, {
+      storeSettings,
+      financialTransactions,
+      userEmail: currentUser?.email,
+    });
+  }, [products, orders, storeSettings, financialTransactions, currentUser]);
+
+  const restoreAndDeployBackup = async (
+    backupData: BackupDataPayload,
+    options?: {
+      mode?: 'replace' | 'merge';
+      onProgress?: (step: string, current: number, total: number) => void;
+    }
+  ): Promise<{ success: boolean; productsCount: number; ordersCount: number; message: string }> => {
+    try {
+      const mode = options?.mode || 'replace';
+      options?.onProgress?.('Iniciando validação e preparação do backup...', 0, 100);
+
+      // 1. Process products
+      let finalProducts: Product[] = [];
+      if (mode === 'replace') {
+        finalProducts = [...backupData.products];
+      } else {
+        const prodMap = new Map<string, Product>();
+        products.forEach((p) => prodMap.set(p.id, p));
+        backupData.products.forEach((p) => prodMap.set(p.id, p));
+        finalProducts = Array.from(prodMap.values());
+      }
+
+      // 2. Process orders (filter out any blacklisted orders)
+      let finalOrders: Order[] = [];
+      const incomingValidOrders = (backupData.orders || []).filter((o) => !isBlacklistedOrder(o));
+      if (mode === 'replace') {
+        finalOrders = incomingValidOrders;
+      } else {
+        const orderMap = new Map<string, Order>();
+        orders.forEach((o) => {
+          if (!isBlacklistedOrder(o)) {
+            const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+            if (k) orderMap.set(k, o);
+          }
+        });
+        incomingValidOrders.forEach((o) => {
+          const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+          if (k) orderMap.set(k, o);
+        });
+        finalOrders = Array.from(orderMap.values());
+      }
+      finalOrders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
+      // 3. Update React states & localStorage immediately
+      setProducts(finalProducts);
+      localStorage.setItem('peptide_products', JSON.stringify(finalProducts));
+
+      setOrders(finalOrders);
+      localStorage.setItem('peptide_orders', JSON.stringify(finalOrders));
+
+      const totalSteps = finalProducts.length + finalOrders.length;
+      let completedSteps = 0;
+
+      // 4. Deploy Products to Firebase Firestore
+      for (let i = 0; i < finalProducts.length; i++) {
+        const prod = finalProducts[i];
+        try {
+          await setDoc(doc(db, 'products', prod.id), cleanUndefinedForFirestore(prod), { merge: true });
+        } catch (e) {
+          console.error(`Erro ao gravar produto ${prod.id} no Firestore:`, e);
+        }
+        completedSteps++;
+        options?.onProgress?.(`Gravando produtos no Firebase Firestore (${i + 1}/${finalProducts.length})...`, completedSteps, totalSteps);
+      }
+
+      // 5. Deploy Orders to Firebase Firestore
+      for (let i = 0; i < finalOrders.length; i++) {
+        const ord = finalOrders[i];
+        try {
+          await setDoc(doc(db, 'orders', ord.id), cleanUndefinedForFirestore(ord), { merge: true });
+        } catch (e) {
+          console.error(`Erro ao gravar pedido ${ord.id} no Firestore:`, e);
+        }
+        completedSteps++;
+        options?.onProgress?.(`Gravando pedidos no Firebase Firestore (${i + 1}/${finalOrders.length})...`, completedSteps, totalSteps);
+      }
+
+      // 6. Deploy to Supabase if configured
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConfigured()) {
+        try {
+          options?.onProgress?.('Sincronizando produtos com Supabase PostgreSQL...', completedSteps, totalSteps);
+          const dbProds = finalProducts.map(mapProductToDB);
+          await supabase.from('products').upsert(dbProds);
+
+          options?.onProgress?.('Sincronizando pedidos com Supabase PostgreSQL...', completedSteps, totalSteps);
+          const dbOrders = finalOrders.map(mapOrderToDB);
+          await supabase.from('orders').upsert(dbOrders);
+        } catch (supaErr) {
+          console.error('Aviso ao sincronizar backup com Supabase:', supaErr);
+        }
+      }
+
+      // 7. If storeSettings is in backup, optionally restore & deploy it
+      if (backupData.storeSettings) {
+        try {
+          const mergedSettings: StoreSettings = {
+            ...storeSettings,
+            ...backupData.storeSettings,
+          };
+          setStoreSettings(mergedSettings);
+          localStorage.setItem('peptide_settings', JSON.stringify(mergedSettings));
+          await setDoc(doc(db, 'settings', 'config'), cleanUndefinedForFirestore(mergedSettings), { merge: true });
+          if (supabase && isSupabaseConfigured()) {
+            await supabase.from('store_settings').upsert(mapSettingsToDB(mergedSettings));
+          }
+        } catch (settErr) {
+          console.error('Aviso ao restaurar configurações:', settErr);
+        }
+      }
+
+      showToast(`🎉 Backup implantado com sucesso! ${finalProducts.length} produtos e ${finalOrders.length} pedidos no banco.`);
+      return {
+        success: true,
+        productsCount: finalProducts.length,
+        ordersCount: finalOrders.length,
+        message: `Backup implantado com sucesso no Firebase Firestore e Supabase (${finalProducts.length} produtos e ${finalOrders.length} pedidos)!`,
+      };
+    } catch (err: any) {
+      console.error('Erro na restauração e implantação do backup:', err);
+      showToast('Erro ao implantar backup no banco de dados.');
+      return {
+        success: false,
+        productsCount: 0,
+        ordersCount: 0,
+        message: `Falha ao restaurar backup: ${err?.message || 'Erro desconhecido'}`,
+      };
+    }
+  };
+
   const auditDeduplication = (): DeduplicationAuditReport => {
     return auditDatabaseDeduplication(products, orders);
   };
@@ -2886,6 +3043,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         saveAllCouponsToCloud,
         saveAllSettingsToCloud,
         saveEverythingToCloud,
+        createDatabaseBackupPayload,
+        restoreAndDeployBackup,
         selectedCategory,
         setSelectedCategory,
         searchQuery,

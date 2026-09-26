@@ -31,19 +31,24 @@ import {
   PauseCircle,
   PlayCircle,
   AlertTriangle,
+  Download,
+  Upload,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { INITIAL_SETTINGS } from '../../data/mockData';
 import { isSupabaseConfigured, setSupabaseCredentials, testSupabaseConnection } from '../../lib/supabase';
+import { DatabaseBackupModal } from './DatabaseBackupModal';
 
 export const StoreSettingsTab: React.FC = () => {
-  const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast, isSupabaseActive, currentUser } = useApp();
+  const { storeSettings, updateStoreSettings, saveAllSettingsToCloud, showToast, isSupabaseActive, currentUser, products, orders } = useApp();
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
   const [isSaving, setIsSaving] = useState(false);
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
   const [showSqlModal, setShowSqlModal] = useState(false);
+  const [showBackupModal, setShowBackupModal] = useState(false);
+  const [backupModalTab, setBackupModalTab] = useState<'export' | 'import'>('export');
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<{ success?: boolean; message?: string } | null>(null);
 
@@ -474,6 +479,69 @@ export const StoreSettingsTab: React.FC = () => {
             </div>
           </div>
 
+        </div>
+
+        {/* SECTION: DATABASE BACKUP & RESTORE BANNER */}
+        <div className="bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/30 border border-cyan-500/30 rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white font-tech flex items-center gap-2">
+                  <span>BACKUP GERAL & IMPLANTAÇÃO DE DADOS (PRODUTOS & PEDIDOS)</span>
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 text-[10px] font-mono font-bold">
+                    FIRESTORE & SUPABASE
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Salve todos os {products.length} produtos e {orders.length} pedidos em arquivo .JSON de segurança ou importe backups para restaurar e implantar no banco.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setBackupModalTab('export');
+                  setShowBackupModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-cyan-500/20 transition-all cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Fazer Backup Agora (.JSON)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBackupModalTab('import');
+                  setShowBackupModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-emerald-400" />
+                <span>Importar & Restaurar Banco</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
+              <span className="text-slate-400">Catálogo de Produtos:</span>
+              <strong className="text-cyan-300 font-mono">{products.length} itens ativos</strong>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
+              <span className="text-slate-400">Histórico de Pedidos:</span>
+              <strong className="text-emerald-300 font-mono">{orders.length} pedidos reais</strong>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
+              <span className="text-slate-400">Persistência Cloud:</span>
+              <strong className="text-emerald-400 font-mono">100% Sincronizado</strong>
+            </div>
+          </div>
         </div>
         
         {/* ROW 1: WhatsApp Channel & Shipping Rules */}
@@ -1126,6 +1194,12 @@ CREATE POLICY "Public full access store_settings" ON public.store_settings FOR A
         </div>
       )}
 
+      {/* Database Backup & Restore Modal */}
+      <DatabaseBackupModal
+        isOpen={showBackupModal}
+        onClose={() => setShowBackupModal(false)}
+        defaultTab={backupModalTab}
+      />
     </div>
   );
 };

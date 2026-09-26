@@ -45,6 +45,11 @@ CREATE TABLE IF NOT EXISTS public.orders (
   shipping NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   discount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   total NUMERIC(10, 2) NOT NULL,
+  paid_amount NUMERIC(10, 2) DEFAULT NULL,
+  remaining_amount NUMERIC(10, 2) DEFAULT NULL,
+  due_date TEXT DEFAULT NULL,
+  last_reminder_sent_at TIMESTAMPTZ DEFAULT NULL,
+  reminders_count INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'Pendente',
   payment_method TEXT NOT NULL DEFAULT 'WhatsApp / PIX',
   tracking_code TEXT,
@@ -119,8 +124,29 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
   site_url TEXT DEFAULT 'https://peptideimports.vercel.app',
   vercel_domain TEXT DEFAULT 'peptideimports.vercel.app',
   custom_domain_notes TEXT DEFAULT '',
+  purchases_suspended BOOLEAN NOT NULL DEFAULT false,
+  suspension_title TEXT DEFAULT 'Estamos Fechando o Caixa',
+  suspension_message TEXT DEFAULT 'Estamos fechando o caixa no momento. Voltaremos em breve!',
+  suspension_estimated_return TEXT DEFAULT 'Voltaremos em breve',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- ==============================================================================
+-- 7.1. MIGRAÇÃO SEGURA (CASO AS TABELAS JÁ TENHAM SIDO CRIADAS ANTERIORMENTE)
+-- ==============================================================================
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(10, 2) DEFAULT NULL;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS remaining_amount NUMERIC(10, 2) DEFAULT NULL;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS due_date TEXT DEFAULT NULL;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS reminders_count INTEGER DEFAULT 0;
+
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS site_url TEXT DEFAULT 'https://peptideimports.vercel.app';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS vercel_domain TEXT DEFAULT 'peptideimports.vercel.app';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS custom_domain_notes TEXT DEFAULT '';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS purchases_suspended BOOLEAN DEFAULT false;
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS suspension_title TEXT DEFAULT 'Estamos Fechando o Caixa';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS suspension_message TEXT DEFAULT 'Estamos fechando o caixa no momento. Voltaremos em breve!';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS suspension_estimated_return TEXT DEFAULT 'Voltaremos em breve';
 
 -- 8. ÍNDICES DE ALTA PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_products_category ON public.products(category);

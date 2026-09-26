@@ -39,6 +39,7 @@ import {
   normalizeProductName,
   normalizeDosage,
 } from '../../utils/productDeduplication';
+import { DatabaseBackupModal } from './DatabaseBackupModal';
 
 export const ProductManagement: React.FC = () => {
   const { 
@@ -67,6 +68,7 @@ export const ProductManagement: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingProducts, setIsSavingProducts] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
+  const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [showRequestsPanel, setShowRequestsPanel] = useState(true);
 
@@ -494,6 +496,16 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               <span>Importar CSV</span>
             </button>
           )}
+
+          <button
+            onClick={() => setIsBackupModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+            title="Salvar Backup completo de produtos e pedidos ou restaurar no banco de dados"
+          >
+            <Database className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">Backup & Restaurar</span>
+            <span className="sm:hidden">Backup</span>
+          </button>
 
           {/* Direct link for the store owner to request/register products - ONLY FOR MASTER ADMIN */}
           {isMasterAdmin && (
@@ -1455,6 +1467,12 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
           </div>
         </div>
       )}
+
+      {/* Database Backup & Restore Modal */}
+      <DatabaseBackupModal
+        isOpen={isBackupModalOpen}
+        onClose={() => setIsBackupModalOpen(false)}
+      />
     </div>
   );
 };
