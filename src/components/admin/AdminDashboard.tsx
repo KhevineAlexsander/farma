@@ -282,16 +282,18 @@ export const AdminDashboard: React.FC = () => {
                 <span>Firestore Conectado</span>
               </div>
 
-              {/* Database Backup & Restore Button */}
-              <button
-                onClick={() => setShowBackupModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 via-slate-800 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all border border-cyan-500/40 cursor-pointer shadow-sm shadow-cyan-500/10"
-                title="Backup e Restauração de Produtos e Pedidos no Banco de Dados"
-              >
-                <Database className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Backup & Restaurar</span>
-                <span className="sm:hidden">Backup</span>
-              </button>
+              {/* Database Backup & Restore Button - Master Admin Only */}
+              {isMasterAdmin && (
+                <button
+                  onClick={() => setShowBackupModal(true)}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/20 via-slate-800 to-emerald-500/20 hover:from-cyan-500/30 hover:to-emerald-500/30 text-cyan-300 hover:text-white text-xs font-bold flex items-center gap-1.5 transition-all border border-cyan-500/40 cursor-pointer shadow-sm shadow-cyan-500/10"
+                  title="Backup e Restauração de Produtos e Pedidos no Banco de Dados (Exclusivo ADM Master)"
+                >
+                  <Database className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="hidden sm:inline">Backup & Restaurar</span>
+                  <span className="sm:hidden">Backup</span>
+                </button>
+              )}
 
               {isMasterAdmin && (
                 <button

@@ -254,7 +254,7 @@ export const ClientAccountModal: React.FC = () => {
                   <p className={`text-xs sm:text-sm leading-relaxed max-w-2xl ${
                     activeBenefit.isActive ? 'text-emerald-100/90' : 'text-slate-600'
                   }`}>
-                    Regra oficial: <strong>Ao comprar pela primeira vez com taxa de entrega</strong>, você ganha <strong>7 dias corridos de Frete Grátis</strong> para todas as suas recompras adicionais. Se comprar novamente após os 7 dias, a taxa de entrega volta a ser cobrada normalmente.
+                    Regra oficial: <strong>Ao comprar pela primeira vez com taxa de entrega</strong>, você ganha <strong>12 dias corridos de Frete Grátis</strong> para todas as suas recompras adicionais. Se comprar novamente após os 12 dias, a taxa de entrega volta a ser cobrada normalmente.
                   </p>
 
                   {/* Status Box */}
@@ -281,10 +281,10 @@ export const ClientAccountModal: React.FC = () => {
                   ) : activeBenefit.isExpired ? (
                     <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
                       <p className="text-xs text-slate-700">
-                        ⏱️ Seu último período de 7 dias com frete grátis expirou em <strong>{activeBenefit.expiresAtFormatted}</strong>.
+                        ⏱️ Seu último período de 12 dias com frete grátis expirou em <strong>{activeBenefit.expiresAtFormatted}</strong>.
                       </p>
                       <p className="text-xs text-slate-500">
-                        Ao realizar uma nova compra com taxa de entrega normal, um novo ciclo de 7 dias de Frete Grátis será ativado para você!
+                        Ao realizar uma nova compra com taxa de entrega normal, um novo ciclo de 12 dias de Frete Grátis será ativado para você!
                       </p>
                       <button
                         onClick={() => setCurrentView('store')}
@@ -297,10 +297,10 @@ export const ClientAccountModal: React.FC = () => {
                   ) : (
                     <div className="p-4 rounded-2xl bg-cyan-50 border border-cyan-200 space-y-2 text-cyan-950">
                       <p className="text-xs font-bold">
-                        Como ativar seu benefício de 7 dias:
+                        Como ativar seu benefício de 12 dias:
                       </p>
                       <p className="text-xs text-cyan-800 leading-relaxed">
-                        Faça seu primeiro pedido na loja pagando a taxa de entrega. Imediatamente após a finalização, o sistema libera o <strong>Cupom Automático de Frete Grátis</strong> válido por 7 dias para suas próximas compras!
+                        Faça seu primeiro pedido na loja pagando a taxa de entrega. Imediatamente após a finalização, o sistema libera o <strong>Cupom Automático de Frete Grátis</strong> válido por 12 dias para suas próximas compras!
                       </p>
                       <button
                         onClick={() => setCurrentView('store')}
@@ -331,9 +331,9 @@ export const ClientAccountModal: React.FC = () => {
                 <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-sm">
                   2
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Janela de 7 Dias Grátis</h4>
+                <h4 className="text-sm font-bold text-slate-900">Janela de 12 Dias Grátis</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Durante 7 dias após o primeiro pedido, todas as suas compras no site têm taxa de entrega zerada automaticamente.
+                  Durante 12 dias após o primeiro pedido, todas as suas compras no site têm taxa de entrega zerada automaticamente.
                 </p>
               </div>
 
@@ -341,9 +341,9 @@ export const ClientAccountModal: React.FC = () => {
                 <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-bold text-sm">
                   3
                 </div>
-                <h4 className="text-sm font-bold text-slate-900">Após os 7 Dias</h4>
+                <h4 className="text-sm font-bold text-slate-900">Após os 12 Dias</h4>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Se comprar após o término dos 7 dias, a taxa normal é cobrada e você ganha um novo ciclo de benefícios.
+                  Se comprar após o término dos 12 dias, a taxa normal é cobrada e você ganha um novo ciclo de benefícios.
                 </p>
               </div>
             </div>

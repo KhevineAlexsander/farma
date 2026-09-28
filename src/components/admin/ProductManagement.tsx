@@ -489,35 +489,39 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
 
         {/* Add Product Buttons: Peptides and Other Products with Photo */}
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-          <button
-            onClick={async () => {
-              setIsSavingProducts(true);
-              const ok = await saveAllProductsToCloud();
-              if (ok) setLastSaved(new Date().toLocaleTimeString('pt-BR'));
-              setIsSavingProducts(false);
-            }}
-            disabled={isSavingProducts}
-            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/40 hover:to-blue-600/40 text-cyan-300 hover:text-white border border-cyan-500/50 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
-            title="Gravar todos os produtos ativos diretamente no Supabase (Banco Principal)"
-          >
-            <UploadCloud className={`w-4 h-4 ${isSavingProducts ? 'animate-bounce text-cyan-400' : 'text-cyan-400'}`} />
-            <span>{isSavingProducts ? 'Gravando no Supabase...' : `Salvar no Supabase (${products.length})`}</span>
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={async () => {
+                setIsSavingProducts(true);
+                const ok = await saveAllProductsToCloud();
+                if (ok) setLastSaved(new Date().toLocaleTimeString('pt-BR'));
+                setIsSavingProducts(false);
+              }}
+              disabled={isSavingProducts}
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/40 hover:to-blue-600/40 text-cyan-300 hover:text-white border border-cyan-500/50 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+              title="Gravar todos os produtos ativos diretamente no Supabase (Banco Principal)"
+            >
+              <UploadCloud className={`w-4 h-4 ${isSavingProducts ? 'animate-bounce text-cyan-400' : 'text-cyan-400'}`} />
+              <span>{isSavingProducts ? 'Gravando no Supabase...' : `Salvar no Supabase (${products.length})`}</span>
+            </button>
+          )}
 
-          <button
-            onClick={async () => {
-              setIsSyncing(true);
-              await syncOfficialCatalog();
-              setIsSyncing(false);
-            }}
-            disabled={isSyncing}
-            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
-            title="Restaurar e gravar o catálogo oficial original diretamente no banco de dados"
-          >
-            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
-            <span className="hidden sm:inline">{isSyncing ? 'Gravando...' : 'Restaurar Catálogo Base'}</span>
-            <span className="sm:hidden">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={async () => {
+                setIsSyncing(true);
+                await syncOfficialCatalog();
+                setIsSyncing(false);
+              }}
+              disabled={isSyncing}
+              className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+              title="Restaurar e gravar o catálogo oficial original diretamente no banco de dados"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-cyan-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">{isSyncing ? 'Gravando...' : 'Restaurar Catálogo Base'}</span>
+              <span className="sm:hidden">{isSyncing ? 'Gravando...' : 'Catálogo Base'}</span>
+            </button>
+          )}
 
           <button
             onClick={() => setIsAuditModalOpen(true)}
@@ -528,11 +532,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
             }`}
             title="Sistema de Prevenção e Auditoria de Duplicidades"
           >
-            {auditReport.isClean ? (
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <ShieldAlert className="w-4 h-4 text-amber-400" />
-            )}
+            <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span className="hidden sm:inline">
               {auditReport.isClean ? 'Sistema Anti-Duplicidade' : `Duplicidades (${auditReport.totalCatalogDuplicates})`}
             </span>
@@ -552,26 +552,30 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
             </button>
           )}
 
-          <button
-            onClick={handleRefreshDatabase}
-            disabled={isRefreshingDb}
-            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-60"
-            title="Sincronizar produtos com o Supabase (Banco Principal) em tempo real"
-          >
-            <RefreshCw className={`w-4 h-4 text-cyan-400 ${isRefreshingDb ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sincronizar Supabase</span>
-            <span className="sm:hidden">Supabase</span>
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={handleRefreshDatabase}
+              disabled={isRefreshingDb}
+              className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-60"
+              title="Sincronizar produtos com o Supabase (Banco Principal) em tempo real"
+            >
+              <RefreshCw className={`w-4 h-4 text-cyan-400 ${isRefreshingDb ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Sincronizar Supabase</span>
+              <span className="sm:hidden">Supabase</span>
+            </button>
+          )}
 
-          <button
-            onClick={() => setIsBackupModalOpen(true)}
-            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
-            title="Salvar Backup completo de produtos e pedidos ou restaurar no banco de dados"
-          >
-            <Database className="w-4 h-4 text-emerald-400" />
-            <span className="hidden sm:inline">Backup & Restaurar</span>
-            <span className="sm:hidden">Backup</span>
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={() => setIsBackupModalOpen(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/40 text-emerald-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer"
+              title="Salvar Backup completo de produtos e pedidos ou restaurar no banco de dados"
+            >
+              <Database className="w-4 h-4 text-emerald-400" />
+              <span className="hidden sm:inline">Backup & Restaurar</span>
+              <span className="sm:hidden">Backup</span>
+            </button>
+          )}
 
           {/* Direct link for the store owner to request/register products - ONLY FOR MASTER ADMIN */}
           {isMasterAdmin && (

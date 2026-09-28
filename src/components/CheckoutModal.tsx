@@ -842,7 +842,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                 <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-2 text-xs text-emerald-900">
                   <span className="text-base">🎉</span>
                   <div>
-                    <p className="font-bold">Cupom Automático 7 Dias Ativo!</p>
+                    <p className="font-bold">Cupom Automático 12 Dias Ativo!</p>
                     <p className="text-[11px] text-emerald-700 mt-0.5">
                       Você possui frete grátis por mais <strong>{activeBenefit.daysRemaining} {activeBenefit.daysRemaining === 1 ? 'dia' : 'dias'}</strong> (expira em {activeBenefit.expiresAtFormatted}).
                     </p>
@@ -851,7 +851,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               ) : activeBenefit.isExpired ? (
                 <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl flex items-start gap-2 text-[11px] text-slate-600">
                   <span>⏱️</span>
-                  <p>Seu cupom de 7 dias expirou em {activeBenefit.expiresAtFormatted}. Taxa de entrega aplicada normalmente.</p>
+                  <p>Seu cupom de 12 dias expirou em {activeBenefit.expiresAtFormatted}. Taxa de entrega aplicada normalmente.</p>
                 </div>
               ) : null}
 

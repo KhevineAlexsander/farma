@@ -507,7 +507,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     });
 
     const nowTime = Date.now();
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    const twelveDaysMs = 12 * 24 * 60 * 60 * 1000;
 
     const allList = Array.from(customerMap.values()).map((c) => {
       c.orders.sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
@@ -517,12 +517,12 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       const firstWithShipping = c.orders.find((o) => (o.shipping || 0) > 0);
       if (firstWithShipping && firstWithShipping.createdAt) {
         const firstDate = new Date(firstWithShipping.createdAt);
-        const expiresDate = new Date(firstDate.getTime() + sevenDaysMs);
-        const hasRepurchasedIn7Days = c.orders.some(
+        const expiresDate = new Date(firstDate.getTime() + twelveDaysMs);
+        const hasRepurchasedIn12Days = c.orders.some(
           (o) => o.id !== firstWithShipping.id && o.createdAt && new Date(o.createdAt).getTime() <= expiresDate.getTime()
         );
 
-        if (hasRepurchasedIn7Days) {
+        if (hasRepurchasedIn12Days) {
           const convertedOrd = c.orders.find(
             (o) => o.id !== firstWithShipping.id && o.createdAt && new Date(o.createdAt).getTime() <= expiresDate.getTime()
           );
@@ -1709,7 +1709,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Acompanhamento individual de perfis, valor do cliente (LTV), histórico e status do cupom automático de 7 dias.
+                Acompanhamento individual de perfis, valor do cliente (LTV), histórico e status do cupom automático de 12 dias.
               </p>
             </div>
           </div>
@@ -1743,7 +1743,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           </div>
 
           <div className="p-3.5 bg-emerald-950/30 rounded-2xl border border-emerald-500/30 space-y-1">
-            <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Cupons 7D Ativos</span>
+            <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider block">Cupons 12D Ativos</span>
             <span className="text-lg sm:text-xl font-black font-mono text-emerald-300">
               {customerCrmStats.active7DayBenefit}
             </span>
@@ -1751,7 +1751,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           </div>
 
           <div className="p-3.5 bg-cyan-950/30 rounded-2xl border border-cyan-500/30 space-y-1">
-            <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block">Conversão 7 Dias</span>
+            <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-wider block">Conversão 12 Dias</span>
             <span className="text-lg sm:text-xl font-black font-mono text-cyan-300">
               {customerCrmStats.conversion7DayRate.toFixed(1)}%
             </span>
@@ -1777,7 +1777,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-xl border border-slate-800 text-xs overflow-x-auto">
                 {[
                   { id: 'all', label: `Todos (${customerCrmStats.totalClients})` },
-                  { id: 'active_benefit', label: `🎁 Cupom 7D Ativo (${customerCrmStats.active7DayBenefit})` },
+                  { id: 'active_benefit', label: `🎁 Cupom 12D Ativo (${customerCrmStats.active7DayBenefit})` },
                   { id: 'converted', label: `🚀 Recomprou no Prazo (${customerCrmStats.converted7Day})` },
                   { id: 'repeat', label: `🔄 Recorrentes (${customerCrmStats.repeatClients})` },
                   { id: 'first_time', label: `👤 1º Pedido (${customerCrmStats.totalClients - customerCrmStats.repeatClients})` },
@@ -1857,11 +1857,11 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                                 {cust.name}
                               </h5>
 
-                              {/* 7-Day Coupon Status Chip */}
+                              {/* 12-Day Coupon Status Chip */}
                               {is7DActive && (
                                 <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-extrabold flex items-center gap-1 animate-pulse">
                                   <span>🎁</span>
-                                  <span>Cupom 7D Ativo ({cust.sevenDayBenefit?.daysRemaining}d restantes)</span>
+                                  <span>Cupom 12D Ativo ({cust.sevenDayBenefit?.daysRemaining}d restantes)</span>
                                 </span>
                               )}
                               {is7DConverted && (
@@ -1872,7 +1872,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                               )}
                               {is7DExpired && (
                                 <span className="px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 text-[10px] font-semibold">
-                                  Cupom 7D Expirado
+                                  Cupom 12D Expirado
                                 </span>
                               )}
                               {cust.ordersCount > 1 && (
@@ -1974,7 +1974,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                     </h3>
                     {selectedCustomerProfile.sevenDayBenefit?.status === 'active' && (
                       <span className="px-3 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black animate-pulse">
-                        🎁 Cupom 7D Ativo ({selectedCustomerProfile.sevenDayBenefit?.daysRemaining}d restantes)
+                        🎁 Cupom 12D Ativo ({selectedCustomerProfile.sevenDayBenefit?.daysRemaining}d restantes)
                       </span>
                     )}
                   </div>

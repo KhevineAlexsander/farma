@@ -1525,15 +1525,17 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             <span>TXT</span>
           </button>
 
-          <button
-            onClick={() => setIsBackupModalOpen(true)}
-            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
-            title="Salvar Backup completo de produtos e pedidos ou restaurar no banco de dados"
-          >
-            <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Backup & Restaurar</span>
-            <span className="sm:hidden">Backup</span>
-          </button>
+          {isMasterAdmin && (
+            <button
+              onClick={() => setIsBackupModalOpen(true)}
+              className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 hover:from-emerald-500/30 hover:to-cyan-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer min-h-[36px]"
+              title="Salvar Backup completo de produtos e pedidos ou restaurar no banco de dados (Exclusivo ADM Master)"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden sm:inline">Backup & Restaurar</span>
+              <span className="sm:hidden">Backup</span>
+            </button>
+          )}
 
           {isMasterAdmin && (
             <button

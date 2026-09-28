@@ -3151,19 +3151,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.log('Error saving order to Firestore:', e);
     }
 
-    // Automatic 7-day coupon calculation and user profile update:
-    // If client paid shipping fee (shipping > 0), grant / refresh their 7-day automatic free delivery coupon!
+    // Automatic 12-day coupon calculation and user profile update:
+    // If client paid shipping fee (shipping > 0), grant / refresh their 12-day automatic free delivery coupon!
     if (currentUser) {
       const nowIso = new Date().toISOString();
-      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      const expiryIso = new Date(Date.now() + sevenDaysMs).toISOString();
+      const twelveDaysMs = 12 * 24 * 60 * 60 * 1000;
+      const expiryIso = new Date(Date.now() + twelveDaysMs).toISOString();
 
       let updatedUser: User = { ...currentUser };
 
       if (shipping > 0) {
-        // Grant / renew 7-day free shipping benefit starting from this order
+        // Grant / renew 12-day free shipping benefit starting from this order
         const newBenefit: RepurchaseBenefit = {
-          couponCode: 'FRETEGRATIS7D',
+          couponCode: 'FRETEGRATIS12D',
           firstOrderId: newOrder.id,
           firstOrderNumber: newOrder.orderNumber,
           firstOrderDate: nowIso,
@@ -3176,7 +3176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           repurchaseBenefit: newBenefit,
           updatedAt: nowIso,
         };
-        showToast('🎉 Pedido realizado! Você ganhou um Cupom Automático de Frete Grátis válido por 7 dias para suas próximas compras!');
+        showToast('🎉 Pedido realizado! Você ganhou um Cupom Automático de Frete Grátis válido por 12 dias para suas próximas compras!');
       } else if (currentUser.repurchaseBenefit) {
         // Free shipping benefit was enjoyed
         const activeBenefit = getClientActiveBenefit(currentUser);

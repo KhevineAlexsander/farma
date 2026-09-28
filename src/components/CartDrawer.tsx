@@ -249,14 +249,14 @@ export const CartDrawer: React.FC = () => {
                 <div className="p-2.5 bg-slate-100 border border-slate-200 rounded-xl flex items-start gap-2 text-[11px] text-slate-600">
                   <span className="text-slate-400">⏱️</span>
                   <p>
-                    Seu cupom de 7 dias expirou em {activeBenefit.expiresAtFormatted}. A taxa de entrega é cobrada normalmente.
+                    Seu cupom de 12 dias expirou em {activeBenefit.expiresAtFormatted}. A taxa de entrega é cobrada normalmente.
                   </p>
                 </div>
               ) : (
                 <div className="p-2.5 bg-cyan-50/80 border border-cyan-200/80 rounded-xl flex items-start gap-2 text-[11px] text-cyan-900">
                   <span className="text-cyan-600 font-bold">✨</span>
                   <p>
-                    <strong>Bônus de 1ª Compra:</strong> Finalize seu pedido e ganhe <strong>7 dias de Frete Grátis automático</strong> para todas as suas próximas compras!
+                    <strong>Bônus de 1ª Compra:</strong> Finalize seu pedido e ganhe <strong>12 dias de Frete Grátis automático</strong> para todas as suas próximas compras!
                   </p>
                 </div>
               )}
