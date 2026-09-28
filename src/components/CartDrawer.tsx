@@ -57,11 +57,6 @@ export const CartDrawer: React.FC = () => {
   const estimatedTotal = subtotalAfterCoupon + (cart.length > 0 ? effectiveShipping : 0);
 
   const handleProceedToCheckout = () => {
-    if (!currentUser) {
-      showToast('Por favor, faça login ou cadastre-se para finalizar seu pedido com segurança.');
-      setIsAuthOpen(true);
-      return;
-    }
     setIsCartOpen(false);
     setCurrentView('checkout');
   };
