@@ -1896,7 +1896,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
             }`}
           >
-            Todos ({orders.length})
+            Todos ({activeOrders.length})
           </button>
 
           <button
@@ -2205,13 +2205,13 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                         <Package className="w-7 h-7 text-cyan-400" />
                       </div>
                       <p className="text-white font-bold text-sm sm:text-base">
-                        {orders.length === 0
-                          ? 'Nenhum pedido registrado no momento'
+                        {activeOrders.length === 0
+                          ? 'Nenhum pedido ativo no período atual'
                           : 'Nenhum pedido encontrado com os filtros selecionados'}
                       </p>
                       <p className="text-slate-400 text-xs leading-relaxed">
-                        {orders.length === 0
-                          ? 'O sistema está zerado e pronto para o início das vendas reais! Conforme novos pedidos forem realizados, eles serão sincronizados aqui em tempo real.'
+                        {activeOrders.length === 0
+                          ? 'O caixa anterior foi fechado com sucesso e os pedidos foram arquivados na aba Pedidos Fechados (Caixa). A listagem está zerada para o novo período!'
                           : 'Tente alterar os termos de busca ou o filtro de status para ver os pedidos cadastrados.'}
                       </p>
                     </div>
