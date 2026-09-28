@@ -243,6 +243,7 @@ interface AppContextType {
   closeCashRegister: (password: string, notes?: string) => Promise<{ success: boolean; message: string; session?: CashRegisterSession }>;
   reopenOrderInActiveSession: (orderId: string) => Promise<boolean>;
   reopenEntireCashSession: (sessionId: string, password: string) => Promise<{ success: boolean; message: string }>;
+  migrateClosedOrdersToSupabase: () => Promise<{ success: boolean; message: string }>;
 
   financialTransactions: FinancialTransaction[];
   addFinancialTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
@@ -665,6 +666,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Fetch Orders and Closed Orders from Supabase
           const { data: ordData, error: ordErr } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+          
+          // Automatically migrate any closed orders still in 'orders' table to 'closed_orders' table
+          if (ordData && ordData.length > 0) {
+            const closedInActive = ordData.filter((o: any) => o.is_closed || o.isClosed || o.closed_at || o.closedAt);
+            if (closedInActive.length > 0) {
+              supabase.from('closed_orders').upsert(closedInActive).then(({ error: upErr }) => {
+                if (!upErr) {
+                  const idsToRemove = closedInActive.map((o: any) => o.id);
+                  supabase.from('orders').delete().in('id', idsToRemove).then(({ error: delErr }) => {
+                    if (!delErr) console.log(`Migrated ${closedInActive.length} closed orders from 'orders' to 'closed_orders' table successfully!`);
+                  });
+                }
+              });
+            }
+          }
+
           const { data: closedOrdData, error: closedOrdErr } = await supabase.from('closed_orders').select('*').order('created_at', { ascending: false });
           
           const combinedOrdRaw = [
@@ -4003,6 +4020,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: `Caixa ${session.name} reaberto com sucesso!` };
   };
 
+  const migrateClosedOrdersToSupabase = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const supabase = getSupabaseClient();
+      if (!supabase || !isSupabaseConfigured()) {
+        showToast('Supabase não está configurado.');
+        return { success: false, message: 'Supabase não configurado.' };
+      }
+      const closedOrdersToMigrate = orders.filter((o) => o.isClosed || o.closedAt);
+      if (closedOrdersToMigrate.length === 0) {
+        showToast('Nenhum pedido fechado localmente para migrar.');
+        return { success: true, message: 'Nenhum pedido para migrar.' };
+      }
+      const dbOrders = closedOrdersToMigrate.map(mapOrderToDB);
+      const { error: upsertErr } = await supabase.from('closed_orders').upsert(dbOrders);
+      if (upsertErr) {
+        showToast(`Erro ao migrar para closed_orders: ${upsertErr.message}`);
+        return { success: false, message: upsertErr.message };
+      }
+      const ids = closedOrdersToMigrate.map((o) => o.id);
+      await supabase.from('orders').delete().in('id', ids);
+
+      showToast(`✨ ${closedOrdersToMigrate.length} pedidos fechados migrados com sucesso para a tabela 'closed_orders' no Supabase!`);
+      return { success: true, message: `${closedOrdersToMigrate.length} pedidos migrados.` };
+    } catch (e: any) {
+      showToast(`Erro na migração: ${e.message || e}`);
+      return { success: false, message: e.message };
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -4056,6 +4102,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         closeCashRegister,
         reopenOrderInActiveSession,
         reopenEntireCashSession,
+        migrateClosedOrdersToSupabase,
         financialTransactions,
         addFinancialTransaction,
         deleteFinancialTransaction,

@@ -48,6 +48,7 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
     cashRegisterSessions,
     reopenOrderInActiveSession,
     reopenEntireCashSession,
+    migrateClosedOrdersToSupabase,
     storeSettings,
     isSupabaseActive,
     showToast,
@@ -331,6 +332,17 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
               <span>Pedidos Ativos</span>
             </button>
           )}
+
+          <button
+            onClick={async () => {
+              await migrateClosedOrdersToSupabase();
+            }}
+            className="px-3.5 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer min-h-[36px]"
+            title="Enviar e migrar todos os pedidos fechados para a tabela 'closed_orders' no Supabase"
+          >
+            <Archive className="w-4 h-4 text-amber-400" />
+            <span>Migrar p/ Supabase</span>
+          </button>
 
           <button
             onClick={handleExportExcel}
