@@ -53,6 +53,7 @@ export const ProductManagement: React.FC = () => {
     syncOfficialCatalog, 
     executeCatalogDeduplication,
     saveAllProductsToCloud, 
+    refreshProductsFromDatabase,
     currentUser,
     productRequests,
     approveProductRequest,
@@ -71,6 +72,33 @@ export const ProductManagement: React.FC = () => {
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [showRequestsPanel, setShowRequestsPanel] = useState(true);
+
+  // Database Deletion & Sync Modal States
+  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [isDeletingProduct, setIsDeletingProduct] = useState(false);
+  const [isRefreshingDb, setIsRefreshingDb] = useState(false);
+
+  const handleConfirmDeleteProduct = async () => {
+    if (!productToDelete) return;
+    setIsDeletingProduct(true);
+    try {
+      await deleteProduct(productToDelete.id);
+      setProductToDelete(null);
+    } catch (err) {
+      console.error('Falha ao excluir produto:', err);
+    } finally {
+      setIsDeletingProduct(false);
+    }
+  };
+
+  const handleRefreshDatabase = async () => {
+    setIsRefreshingDb(true);
+    try {
+      await refreshProductsFromDatabase();
+    } finally {
+      setIsRefreshingDb(false);
+    }
+  };
 
   // Anti-Deduplication System State
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -188,11 +216,11 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
       }
     }
 
-    let msg = `Importação concluída!\n• ${importedCount} novos produtos adicionados com validação anti-duplicidade.\n• ${skippedCount} produtos ignorados por já existirem no catálogo (duplicidades bloqueadas).`;
+    let msg = `Importação concluída: ${importedCount} novos produtos cadastrados, ${skippedCount} duplicados ignorados.`;
     if (errorCount > 0) {
-      msg += `\n• ${errorCount} linhas ignoradas por formatação inválida.`;
+      msg += ` (${errorCount} linhas com formato inválido).`;
     }
-    alert(msg);
+    showToast(msg);
     setIsImportModalOpen(false);
   };
 
@@ -322,8 +350,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
     );
 
     if (!validation.isValid && validation.isDuplicate) {
-      showToast(validation.message || 'Produto com mesma especificação já cadastrado no catálogo!');
-      alert(`Atenção: Duplicidade Detectada!\n\n${validation.message}\n\nPara manter a integridade dos relatórios e vendas, edite o produto já existente ou altere a especificação.`);
+      showToast(validation.message || 'Atenção: Produto com mesma especificação já cadastrado!');
       return;
     }
 
@@ -445,6 +472,17 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               );
             })()}
           </div>
+
+          {/* Database Sync Status Indicator */}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-medium text-slate-300">
+              Banco: <strong className="text-emerald-400">Sincronizado</strong> ({products.length} itens)
+            </span>
+          </div>
         </div>
 
         {/* Add Product Buttons: Peptides and Other Products with Photo */}
@@ -511,6 +549,17 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               <span>Importar CSV</span>
             </button>
           )}
+
+          <button
+            onClick={handleRefreshDatabase}
+            disabled={isRefreshingDb}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-60"
+            title="Sincronizar produtos diretamente com o banco de dados (Supabase & Firebase) em tempo real"
+          >
+            <RefreshCw className={`w-4 h-4 text-cyan-400 ${isRefreshingDb ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">Sincronizar Banco</span>
+            <span className="sm:hidden">Sincronizar</span>
+          </button>
 
           <button
             onClick={() => setIsBackupModalOpen(true)}
@@ -684,13 +733,9 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                           </button>
                         )}
                         <button
-                          onClick={() => {
-                            if (confirm(`Excluir o pedido de "${req.name}"?`)) {
-                              deleteProductRequest(req.id);
-                            }
-                          }}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Excluir pedido"
+                          onClick={() => deleteProductRequest(req.id)}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          title="Excluir solicitação de cadastro"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -826,13 +871,9 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => {
-                          if (confirm(`Tem certeza que deseja excluir ${product.name}?`)) {
-                            deleteProduct(product.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-500 hover:text-white text-slate-300 transition-colors"
-                        title="Excluir Produto"
+                        onClick={() => setProductToDelete(product)}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-red-500 hover:text-white text-slate-300 transition-colors cursor-pointer"
+                        title="Excluir Produto do Catálogo e Banco de Dados"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -844,6 +885,78 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
           </table>
         </div>
       </div>
+
+      {/* Delete Product Confirmation Modal */}
+      {productToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 text-white shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center shrink-0">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Excluir Produto</h3>
+                <p className="text-xs text-slate-400">Sincronização imediata com o banco de dados</p>
+              </div>
+            </div>
+
+            <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 flex items-center gap-3.5">
+              <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 overflow-hidden">
+                {productToDelete.imageUrl ? (
+                  <img src={productToDelete.imageUrl} alt={productToDelete.name} className="w-full h-full object-cover" />
+                ) : (
+                  <PeptideVial capColor={productToDelete.capColor} size="sm" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-white truncate font-tech">{productToDelete.name}</h4>
+                <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                  <span className="text-cyan-400 font-semibold">{productToDelete.dosage}</span>
+                  <span>•</span>
+                  <span className="text-white font-bold">R$ {(productToDelete.price || 0).toFixed(2).replace('.', ',')}</span>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Tem certeza que deseja excluir permanentemente <strong>{productToDelete.name} ({productToDelete.dosage})</strong>? 
+              O produto será excluído do banco de dados (Supabase & Firebase Firestore) e removido do catálogo da loja.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={() => setProductToDelete(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingProduct}
+                onClick={handleConfirmDeleteProduct}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold transition-all shadow-lg shadow-red-600/30 flex items-center gap-2 cursor-pointer disabled:opacity-60"
+              >
+                {isDeletingProduct ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Excluindo do Banco...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Excluir Definitivamente</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product Create / Edit Modal */}
       {isModalOpen && (

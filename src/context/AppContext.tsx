@@ -164,7 +164,9 @@ interface AppContextType {
   products: Product[];
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
-  deleteProduct: (id: string) => void;
+  deleteProduct: (id: string) => Promise<boolean>;
+  refreshProductsFromDatabase: () => Promise<{ success: boolean; count: number; message: string }>;
+  deletedProductIds: string[];
   toggleProductPromotion: (id: string, isPromotion?: boolean, discount?: number) => void;
   toggleProductFeatured: (id: string) => void;
   syncOfficialCatalog: () => Promise<void>;
@@ -330,19 +332,40 @@ interface AppContextType {
 }
 
 /**
- * Ensures all 68 official catalog products are perpetually present,
- * eliminates any duplicates across IDs, names, and dosages,
- * and guarantees that updated official prices are strictly preserved.
+ * Synchronizes incoming products with the catalog:
+ * - Excludes any product whose ID or canonical deduplication key is in deletedIds
+ * - If incoming products exist from the database, uses those products and does NOT resurrect deleted items
+ * - Guarantees official prices & metadata for items matching official catalog entries
+ * - Eliminates duplicate products across IDs, names, and dosages
+ * - If no incoming products are provided, returns the official catalog filtered by deletedIds
  */
-export const mergeProductsWithCatalog = (incoming?: Product[] | null): Product[] => {
-  // 1. Preload with entire official catalog (68 products) with updated prices
-  const catalogList = INITIAL_PRODUCTS.map((p) => ({ ...p }));
-  const canonicalById = new Map<string, Product>();
-  const canonicalByKey = new Map<string, Product>();
+export const mergeProductsWithCatalog = (
+  incoming?: Product[] | null,
+  deletedIds?: Set<string> | string[]
+): Product[] => {
+  const deletedSet = new Set<string>();
+  if (deletedIds) {
+    const arr = Array.isArray(deletedIds) ? deletedIds : Array.from(deletedIds);
+    arr.forEach((id) => deletedSet.add(id));
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('peptide_deleted_product_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id) => deletedSet.add(id));
+        }
+      }
+    } catch {}
+  }
 
-  catalogList.forEach((p) => {
-    canonicalById.set(p.id, p);
-    canonicalByKey.set(getProductDeduplicationKey(p.name, p.dosage), p);
+  // Official catalog reference map for canonical data & updated prices
+  const officialById = new Map<string, Product>();
+  const officialByKey = new Map<string, Product>();
+  INITIAL_PRODUCTS.forEach((p) => {
+    officialById.set(p.id, p);
+    officialByKey.set(getProductDeduplicationKey(p.name, p.dosage), p);
   });
 
   const ID_ALIASES: Record<string, string> = {
@@ -357,12 +380,17 @@ export const mergeProductsWithCatalog = (incoming?: Product[] | null): Product[]
     'prod-tesamorelin-10': 'prod-tesamorelin-10-cat',
   };
 
-  // If no incoming items, return pristine official catalog
+  // Case 1: No incoming items provided -> return official catalog minus deleted items
   if (!Array.isArray(incoming) || incoming.length === 0) {
-    return catalogList;
+    return INITIAL_PRODUCTS.filter((p) => {
+      const k = getProductDeduplicationKey(p.name, p.dosage);
+      return !deletedSet.has(p.id) && !deletedSet.has(k);
+    });
   }
 
-  // 2. Map and overlay incoming products
+  // Case 2: Incoming products provided from Database or Storage
+  // Keep incoming items, enrich with official prices, exclude deleted items, and strictly deduplicate
+  const result: Product[] = [];
   const processedKeys = new Set<string>();
 
   incoming.forEach((p) => {
@@ -371,43 +399,57 @@ export const mergeProductsWithCatalog = (incoming?: Product[] | null): Product[]
     const targetId = ID_ALIASES[p.id] || p.id;
     const dedupeKey = getProductDeduplicationKey(p.name, p.dosage);
 
-    // Find canonical counterpart
-    const canonical = canonicalById.get(targetId) || canonicalByKey.get(dedupeKey) || findCanonicalCatalogProduct(p, catalogList);
+    // If marked as deleted, drop it
+    if (deletedSet.has(p.id) || deletedSet.has(targetId) || deletedSet.has(dedupeKey)) {
+      return;
+    }
 
-    if (canonical) {
-      const canonicalKey = getProductDeduplicationKey(canonical.name, canonical.dosage);
-      if (!processedKeys.has(canonicalKey)) {
-        processedKeys.add(canonicalKey);
-        // Retain canonical official ID, name, dosage and guaranteed updated price
-        if (typeof p.stock === 'number' && !isNaN(p.stock)) {
-          canonical.stock = p.stock;
-        }
-        if (p.description && !canonical.description) canonical.description = p.description;
-      }
+    if (processedKeys.has(dedupeKey)) {
+      return; // Already processed
+    }
+    processedKeys.add(dedupeKey);
+
+    // Look for matching official catalog product to guarantee updated prices
+    const official =
+      officialById.get(targetId) ||
+      officialByKey.get(dedupeKey) ||
+      findCanonicalCatalogProduct(p, INITIAL_PRODUCTS);
+
+    if (official) {
+      result.push({
+        ...official,
+        id: official.id,
+        stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : official.stock,
+        imageUrl: p.imageUrl || official.imageUrl,
+        isPromotion: p.isPromotion !== undefined ? p.isPromotion : official.isPromotion,
+        promotionDiscount: p.promotionDiscount !== undefined ? p.promotionDiscount : official.promotionDiscount,
+        featured: p.featured !== undefined ? p.featured : official.featured,
+        description: p.description || official.description,
+      });
     } else {
-      // Truly distinct custom product created by user/admin
-      if (!processedKeys.has(dedupeKey)) {
-        processedKeys.add(dedupeKey);
-        catalogList.push(p);
-      }
+      // Custom user product
+      result.push(p);
     }
   });
 
-  // 3. Strict final deduplication by canonical key & ID
-  const finalMap = new Map<string, Product>();
-  catalogList.forEach((p) => {
-    const k = getProductDeduplicationKey(p.name, p.dosage);
-    if (!finalMap.has(k) && !finalMap.has(p.id)) {
-      finalMap.set(k, p);
-    }
-  });
-
-  return Array.from(finalMap.values());
+  return result;
 };
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // --- Deleted Products Tracker (Tombstone set to guarantee persistence of deletions) ---
+  const [deletedProductIds, setDeletedProductIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('peptide_deleted_product_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {}
+    return [];
+  });
+
   // --- Products State ---
   const [products, setProducts] = useState<Product[]>(() => {
     try {
@@ -419,7 +461,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     } catch {}
-    return INITIAL_PRODUCTS;
+    return mergeProductsWithCatalog(INITIAL_PRODUCTS);
   });
 
   useEffect(() => {
@@ -501,13 +543,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
           if (!prodErr && prodData) {
             const mapped = prodData.map(mapDBToProduct);
-            const merged = mergeProductsWithCatalog(mapped);
-            setProducts(merged);
-            localStorage.setItem('peptide_products', JSON.stringify(merged));
-
-            // If Supabase has fewer products than the full official catalog, automatically upsert the complete list
-            if (prodData.length < INITIAL_PRODUCTS.length) {
-              const dbProds = merged.map(mapProductToDB);
+            if (mapped.length > 0) {
+              const merged = mergeProductsWithCatalog(mapped, deletedProductIds);
+              setProducts(merged);
+              localStorage.setItem('peptide_products', JSON.stringify(merged));
+            } else if (mapped.length === 0 && deletedProductIds.length === 0) {
+              // Only on first run when database is completely empty, populate initial catalog
+              const initialMerged = mergeProductsWithCatalog(INITIAL_PRODUCTS, deletedProductIds);
+              setProducts(initialMerged);
+              localStorage.setItem('peptide_products', JSON.stringify(initialMerged));
+              const dbProds = initialMerged.map(mapProductToDB);
               await supabase.from('products').upsert(dbProds);
             }
           }
@@ -626,11 +671,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         supabaseChannel = supabase
           .channel('peptide_realtime_channel')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async (payload: any) => {
+            // Immediate optimistic handling if product was deleted on remote
+            if (payload?.eventType === 'DELETE' && payload.old?.id) {
+              const deletedId = payload.old.id;
+              setProducts((prev) => prev.filter((p) => p.id !== deletedId));
+              return;
+            }
             const { data } = await supabase.from('products').select('*');
-            if (data && data.length > 0) {
+            if (data) {
               const mapped = data.map(mapDBToProduct);
-              const merged = mergeProductsWithCatalog(mapped);
+              const merged = mergeProductsWithCatalog(mapped, deletedProductIds);
               setProducts(merged);
               localStorage.setItem('peptide_products', JSON.stringify(merged));
             }
@@ -719,21 +770,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('peptide_product_requests', JSON.stringify(list));
         }
       }, () => {});
+      // Firestore deleted_products settings sync across sessions
+      onSnapshot(doc(db, 'settings', 'deleted_products'), (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (Array.isArray(data?.ids)) {
+            setDeletedProductIds((prev) => {
+              const combined = Array.from(new Set([...prev, ...data.ids]));
+              localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(combined));
+              return combined;
+            });
+          }
+        }
+      }, () => {});
+
       unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
         if (!snapshot.empty) {
           const list: Product[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Product), id: d.id }));
 
-          const mergedList = mergeProductsWithCatalog(list);
+          const mergedList = mergeProductsWithCatalog(list, deletedProductIds);
           setProducts(mergedList);
           localStorage.setItem('peptide_products', JSON.stringify(mergedList));
-        } else {
-          // If Firestore is empty, auto-populate from INITIAL_PRODUCTS
+        } else if (snapshot.empty && deletedProductIds.length === 0) {
+          // If Firestore is empty and no deletions have occurred, auto-populate from INITIAL_PRODUCTS
           for (const p of INITIAL_PRODUCTS) {
             setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true }).catch(() => {});
           }
-          setProducts(INITIAL_PRODUCTS);
-          localStorage.setItem('peptide_products', JSON.stringify(INITIAL_PRODUCTS));
+          const initialList = mergeProductsWithCatalog(INITIAL_PRODUCTS, deletedProductIds);
+          setProducts(initialList);
+          localStorage.setItem('peptide_products', JSON.stringify(initialList));
         }
       }, () => {});
 
@@ -1469,8 +1535,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       dosage: canonicalDosage,
       id: newId,
     };
+
+    // If re-creating a previously deleted product, un-tombstone it
+    const newKey = getProductDeduplicationKey(canonicalName, canonicalDosage);
+    if (deletedProductIds.includes(newId) || deletedProductIds.includes(newKey)) {
+      const nextDeleted = deletedProductIds.filter((x) => x !== newId && x !== newKey);
+      setDeletedProductIds(nextDeleted);
+      localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(nextDeleted));
+    }
+
     setProducts((prev) => {
-      const updated = [newProduct, ...prev];
+      const updated = [newProduct, ...prev.filter((p) => p.id !== newId && getProductDeduplicationKey(p.name, p.dosage) !== newKey)];
       localStorage.setItem('peptide_products', JSON.stringify(updated));
       return updated;
     });
@@ -1529,27 +1604,89 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const deleteProduct = async (id: string) => {
-    setProducts((prev) => {
-      const updated = prev.filter((p) => p.id !== id);
+  const deleteProduct = async (id: string): Promise<boolean> => {
+    try {
+      const targetProduct = products.find((p) => p.id === id);
+      const targetKey = targetProduct ? getProductDeduplicationKey(targetProduct.name, targetProduct.dosage) : '';
+
+      // 1. Register in deletedProductIds (both ID and key to prevent resurrection)
+      const nextDeleted = Array.from(new Set([...deletedProductIds, id, targetKey].filter(Boolean)));
+      setDeletedProductIds(nextDeleted);
+      localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(nextDeleted));
+
+      // 2. Remove immediately from local state
+      const updated = products.filter(
+        (p) => p.id !== id && (!targetKey || getProductDeduplicationKey(p.name, p.dosage) !== targetKey)
+      );
+      setProducts(updated);
       localStorage.setItem('peptide_products', JSON.stringify(updated));
-      return updated;
-    });
-    showToast('Produto removido do catálogo.');
 
-    try {
-      const supabase = getSupabaseClient();
-      if (supabase) {
-        await supabase.from('products').delete().eq('id', id);
+      // 3. Remove from cart if present
+      setCart((prev) =>
+        prev.filter(
+          (item) => item.product.id !== id && (!targetKey || getProductDeduplicationKey(item.product.name, item.product.dosage) !== targetKey)
+        )
+      );
+
+      showToast(`Excluindo "${targetProduct?.name || id}" do banco de dados...`);
+
+      // 4. Delete from Supabase
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          await supabase.from('products').delete().eq('id', id);
+          if (targetKey) {
+            const { data: allProds } = await supabase.from('products').select('id, name, dosage');
+            if (allProds) {
+              const extraIds = allProds
+                .filter((d: any) => getProductDeduplicationKey(d.name, d.dosage) === targetKey)
+                .map((d: any) => d.id);
+              if (extraIds.length > 0) {
+                await supabase.from('products').delete().in('id', extraIds);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error deleting product from Supabase:', e);
       }
-    } catch (e) {
-      console.log('Error deleting product from Supabase:', e);
-    }
 
-    try {
-      await deleteDoc(doc(db, 'products', id));
-    } catch (e) {
-      console.log('Error deleting product from Firestore:', e);
+      // 5. Delete from Firestore
+      try {
+        await deleteDoc(doc(db, 'products', id));
+        if (targetKey) {
+          const snap = await getDocs(collection(db, 'products'));
+          for (const d of snap.docs) {
+            const dData = d.data();
+            if (getProductDeduplicationKey(dData.name, dData.dosage) === targetKey) {
+              await deleteDoc(doc(db, 'products', d.id));
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Error deleting product from Firestore:', e);
+      }
+
+      // 6. Record tombstone in Firestore settings
+      try {
+        await setDoc(
+          doc(db, 'settings', 'deleted_products'),
+          {
+            ids: nextDeleted,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        console.warn('Error recording deleted products in Firestore settings:', e);
+      }
+
+      showToast(`Produto "${targetProduct?.name || id}" excluído com sucesso do banco de dados e da loja!`);
+      return true;
+    } catch (err) {
+      console.error('Erro geral ao excluir produto:', err);
+      showToast('Erro ao excluir produto do banco de dados.');
+      return false;
     }
   };
 
@@ -1629,7 +1766,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncOfficialCatalog = async () => {
     try {
-      showToast('Sincronizando catálogo oficial e eliminando duplicidades...');
+      showToast('Sincronizando catálogo oficial e restaurando produtos...');
+      // Clear tombstones since user intentionally requested official catalog restoration
+      setDeletedProductIds([]);
+      localStorage.removeItem('peptide_deleted_product_ids');
+      try {
+        await setDoc(doc(db, 'settings', 'deleted_products'), { ids: [], updatedAt: new Date().toISOString() });
+      } catch {}
+
       const officialIds = new Set(INITIAL_PRODUCTS.map((p) => p.id));
       const supabase = getSupabaseClient();
       if (supabase) {
@@ -1658,10 +1802,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       setProducts(INITIAL_PRODUCTS);
       localStorage.setItem('peptide_products', JSON.stringify(INITIAL_PRODUCTS));
-      showToast(`Catálogo oficial (${INITIAL_PRODUCTS.length} produtos) 100% atualizado e sem duplicidades!`);
+      showToast(`Catálogo oficial (${INITIAL_PRODUCTS.length} produtos) 100% atualizado e sincronizado!`);
     } catch (err) {
       console.error('Erro ao sincronizar catálogo:', err);
       showToast('Erro ao sincronizar com banco de dados.');
+    }
+  };
+
+  const refreshProductsFromDatabase = async (): Promise<{ success: boolean; count: number; message: string }> => {
+    try {
+      showToast('Sincronizando catálogo com o banco de dados em tempo real...');
+      let dbProducts: Product[] = [];
+      const supabase = getSupabaseClient();
+
+      if (supabase && isSupabaseConfigured()) {
+        const { data, error } = await supabase.from('products').select('*');
+        if (!error && data && data.length > 0) {
+          dbProducts = data.map(mapDBToProduct);
+        }
+      }
+
+      if (dbProducts.length === 0) {
+        const snap = await getDocs(collection(db, 'products'));
+        if (!snap.empty) {
+          snap.forEach((d) => {
+            dbProducts.push({ ...(d.data() as Product), id: d.id });
+          });
+        }
+      }
+
+      if (dbProducts.length === 0) {
+        dbProducts = products;
+      }
+
+      const merged = mergeProductsWithCatalog(dbProducts, deletedProductIds);
+      setProducts(merged);
+      localStorage.setItem('peptide_products', JSON.stringify(merged));
+
+      const msg = `Catálogo sincronizado com sucesso! ${merged.length} produtos ativos no banco.`;
+      showToast(msg);
+      return { success: true, count: merged.length, message: msg };
+    } catch (err: any) {
+      console.error('Erro ao sincronizar produtos com banco:', err);
+      showToast('Erro ao sincronizar com banco de dados.');
+      return { success: false, count: products.length, message: err?.message || 'Erro' };
     }
   };
 
@@ -1669,14 +1853,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveAllProductsToCloud = async (): Promise<boolean> => {
     try {
       showToast('Salvando catálogo completo no banco de dados...');
-      const fullList = mergeProductsWithCatalog(products);
+      const fullList = mergeProductsWithCatalog(products, deletedProductIds);
       const supabase = getSupabaseClient();
       if (supabase) {
         const dbProds = fullList.map(mapProductToDB);
         await supabase.from('products').upsert(dbProds);
+        if (deletedProductIds.length > 0) {
+          await supabase.from('products').delete().in('id', deletedProductIds);
+        }
       }
       for (const p of fullList) {
         await setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true });
+      }
+      for (const delId of deletedProductIds) {
+        await deleteDoc(doc(db, 'products', delId)).catch(() => {});
       }
       setProducts(fullList);
       localStorage.setItem('peptide_products', JSON.stringify(fullList));
@@ -3494,6 +3684,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addProduct,
         updateProduct,
         deleteProduct,
+        refreshProductsFromDatabase,
+        deletedProductIds,
         toggleProductPromotion,
         toggleProductFeatured,
         syncOfficialCatalog,
