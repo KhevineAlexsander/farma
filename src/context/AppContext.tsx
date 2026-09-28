@@ -42,6 +42,8 @@ import {
   mergeDuplicateProductGroup,
   auditDatabaseDeduplication,
   DeduplicationAuditReport,
+  getProductDeduplicationKey,
+  findCanonicalCatalogProduct,
 } from '../utils/productDeduplication';
 import {
   BackupDataPayload,
@@ -327,11 +329,96 @@ interface AppContextType {
   showToast: (msg: string) => void;
 }
 
+/**
+ * Ensures all 68 official catalog products are perpetually present,
+ * eliminates any duplicates across IDs, names, and dosages,
+ * and guarantees that updated official prices are strictly preserved.
+ */
+export const mergeProductsWithCatalog = (incoming?: Product[] | null): Product[] => {
+  // 1. Preload with entire official catalog (68 products) with updated prices
+  const catalogList = INITIAL_PRODUCTS.map((p) => ({ ...p }));
+  const canonicalById = new Map<string, Product>();
+  const canonicalByKey = new Map<string, Product>();
+
+  catalogList.forEach((p) => {
+    canonicalById.set(p.id, p);
+    canonicalByKey.set(getProductDeduplicationKey(p.name, p.dosage), p);
+  });
+
+  const ID_ALIASES: Record<string, string> = {
+    'prod-epithalon-10': 'prod-epithalon-10-cat',
+    'prod-ghkcu-100': 'prod-ghk-cu-100',
+    'prod-glow-70': 'prod-glow-70-cat',
+    'prod-klow-80': 'prod-klow-80-cat',
+    'prod-motsc-40': 'prod-mots-c-40mg',
+    'prod-retratutida-60': 'prod-retratutide-60',
+    'prod-selank-10': 'prod-selank-10mg',
+    'prod-semax-10': 'prod-semax-10-cat',
+    'prod-tesamorelin-10': 'prod-tesamorelin-10-cat',
+  };
+
+  // If no incoming items, return pristine official catalog
+  if (!Array.isArray(incoming) || incoming.length === 0) {
+    return catalogList;
+  }
+
+  // 2. Map and overlay incoming products
+  const processedKeys = new Set<string>();
+
+  incoming.forEach((p) => {
+    if (!p || !p.name) return;
+
+    const targetId = ID_ALIASES[p.id] || p.id;
+    const dedupeKey = getProductDeduplicationKey(p.name, p.dosage);
+
+    // Find canonical counterpart
+    const canonical = canonicalById.get(targetId) || canonicalByKey.get(dedupeKey) || findCanonicalCatalogProduct(p, catalogList);
+
+    if (canonical) {
+      const canonicalKey = getProductDeduplicationKey(canonical.name, canonical.dosage);
+      if (!processedKeys.has(canonicalKey)) {
+        processedKeys.add(canonicalKey);
+        // Retain canonical official ID, name, dosage and guaranteed updated price
+        if (typeof p.stock === 'number' && !isNaN(p.stock)) {
+          canonical.stock = p.stock;
+        }
+        if (p.description && !canonical.description) canonical.description = p.description;
+      }
+    } else {
+      // Truly distinct custom product created by user/admin
+      if (!processedKeys.has(dedupeKey)) {
+        processedKeys.add(dedupeKey);
+        catalogList.push(p);
+      }
+    }
+  });
+
+  // 3. Strict final deduplication by canonical key & ID
+  const finalMap = new Map<string, Product>();
+  catalogList.forEach((p) => {
+    const k = getProductDeduplicationKey(p.name, p.dosage);
+    if (!finalMap.has(k) && !finalMap.has(p.id)) {
+      finalMap.set(k, p);
+    }
+  });
+
+  return Array.from(finalMap.values());
+};
+
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // --- Products State ---
   const [products, setProducts] = useState<Product[]>(() => {
+    try {
+      const saved = localStorage.getItem('peptide_products');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return mergeProductsWithCatalog(parsed);
+        }
+      }
+    } catch {}
     return INITIAL_PRODUCTS;
   });
 
@@ -346,9 +433,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const parsed = JSON.parse(saved);
       if (Array.isArray(parsed)) {
-        return parsed.filter(
+        const valid = parsed.filter(
           (item) => item && item.product && typeof item.product.price === 'number'
         );
+        return sanitizeOrderItems(valid, INITIAL_PRODUCTS);
       }
       return [];
     } catch {
@@ -412,14 +500,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Fetch Products
           const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
           if (!prodErr && prodData) {
-            if (prodData.length === 0) {
-              // Auto-seed initial products to Supabase
-              const dbProds = INITIAL_PRODUCTS.map(mapProductToDB);
-              await supabase.from('products').insert(dbProds);
-            } else {
-              const mapped = prodData.map(mapDBToProduct);
-              setProducts(mapped);
-              localStorage.setItem('peptide_products', JSON.stringify(mapped));
+            const mapped = prodData.map(mapDBToProduct);
+            const merged = mergeProductsWithCatalog(mapped);
+            setProducts(merged);
+            localStorage.setItem('peptide_products', JSON.stringify(merged));
+
+            // If Supabase has fewer products than the full official catalog, automatically upsert the complete list
+            if (prodData.length < INITIAL_PRODUCTS.length) {
+              const dbProds = merged.map(mapProductToDB);
+              await supabase.from('products').upsert(dbProds);
             }
           }
 
@@ -541,8 +630,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const { data } = await supabase.from('products').select('*');
             if (data && data.length > 0) {
               const mapped = data.map(mapDBToProduct);
-              setProducts(mapped);
-              localStorage.setItem('peptide_products', JSON.stringify(mapped));
+              const merged = mergeProductsWithCatalog(mapped);
+              setProducts(merged);
+              localStorage.setItem('peptide_products', JSON.stringify(merged));
             }
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
@@ -633,8 +723,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!snapshot.empty) {
           const list: Product[] = [];
           snapshot.forEach((d) => list.push({ ...(d.data() as Product), id: d.id }));
-          setProducts((prev) => (isSupabaseConfigured() && prev.length > 0 ? prev : list));
-          localStorage.setItem('peptide_products', JSON.stringify(list));
+
+          const mergedList = mergeProductsWithCatalog(list);
+          setProducts(mergedList);
+          localStorage.setItem('peptide_products', JSON.stringify(mergedList));
+        } else {
+          // If Firestore is empty, auto-populate from INITIAL_PRODUCTS
+          for (const p of INITIAL_PRODUCTS) {
+            setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true }).catch(() => {});
+          }
+          setProducts(INITIAL_PRODUCTS);
+          localStorage.setItem('peptide_products', JSON.stringify(INITIAL_PRODUCTS));
         }
       }, () => {});
 
@@ -858,13 +957,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...INITIAL_SETTINGS,
           ...parsed,
-          deliveryFee: typeof parsed.deliveryFee === 'number' ? parsed.deliveryFee : INITIAL_SETTINGS.deliveryFee,
+          deliveryFee: 100.00,
         };
       } catch {
-        return INITIAL_SETTINGS;
+        return { ...INITIAL_SETTINGS, deliveryFee: 100.00 };
       }
     }
-    return INITIAL_SETTINGS;
+    return { ...INITIAL_SETTINGS, deliveryFee: 100.00 };
   });
 
   useEffect(() => {
@@ -1530,18 +1629,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const syncOfficialCatalog = async () => {
     try {
-      showToast('Sincronizando catálogo oficial com o banco de dados...');
+      showToast('Sincronizando catálogo oficial e eliminando duplicidades...');
+      const officialIds = new Set(INITIAL_PRODUCTS.map((p) => p.id));
       const supabase = getSupabaseClient();
       if (supabase) {
+        // Remove non-canonical products from Supabase
+        const { data: supaProds } = await supabase.from('products').select('id');
+        if (supaProds) {
+          const obsoleteSupa = supaProds.filter((p: any) => !officialIds.has(p.id)).map((p: any) => p.id);
+          if (obsoleteSupa.length > 0) {
+            await supabase.from('products').delete().in('id', obsoleteSupa);
+          }
+        }
         const dbProds = INITIAL_PRODUCTS.map(mapProductToDB);
         await supabase.from('products').upsert(dbProds);
       }
+
+      // Remove non-canonical products from Firestore
+      const fireSnap = await getDocs(collection(db, 'products'));
+      for (const d of fireSnap.docs) {
+        if (!officialIds.has(d.id)) {
+          await deleteDoc(doc(db, 'products', d.id));
+        }
+      }
+
       for (const product of INITIAL_PRODUCTS) {
         await setDoc(doc(db, 'products', product.id), cleanUndefinedForFirestore(product), { merge: true });
       }
       setProducts(INITIAL_PRODUCTS);
       localStorage.setItem('peptide_products', JSON.stringify(INITIAL_PRODUCTS));
-      showToast(`Catálogo oficial (${INITIAL_PRODUCTS.length} produtos) gravado no banco de dados com sucesso!`);
+      showToast(`Catálogo oficial (${INITIAL_PRODUCTS.length} produtos) 100% atualizado e sem duplicidades!`);
     } catch (err) {
       console.error('Erro ao sincronizar catálogo:', err);
       showToast('Erro ao sincronizar com banco de dados.');
@@ -1551,17 +1668,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Bulk Cloud Sync / Push Methods for all Admin Tabs ---
   const saveAllProductsToCloud = async (): Promise<boolean> => {
     try {
-      showToast('Salvando catálogo de produtos no banco de dados...');
+      showToast('Salvando catálogo completo no banco de dados...');
+      const fullList = mergeProductsWithCatalog(products);
       const supabase = getSupabaseClient();
       if (supabase) {
-        const dbProds = products.map(mapProductToDB);
+        const dbProds = fullList.map(mapProductToDB);
         await supabase.from('products').upsert(dbProds);
       }
-      for (const p of products) {
+      for (const p of fullList) {
         await setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true });
       }
-      localStorage.setItem('peptide_products', JSON.stringify(products));
-      showToast(`Todos os ${products.length} produtos foram salvos no banco e atualizados no site!`);
+      setProducts(fullList);
+      localStorage.setItem('peptide_products', JSON.stringify(fullList));
+      showToast(`Todos os ${fullList.length} produtos foram gravados no banco e atualizados no site!`);
       return true;
     } catch (err) {
       console.error('Erro ao salvar produtos:', err);
@@ -1740,8 +1859,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (fetchedProducts.length > 0) {
-        setProducts(fetchedProducts);
-        localStorage.setItem('peptide_products', JSON.stringify(fetchedProducts));
+        const merged = mergeProductsWithCatalog(fetchedProducts);
+        setProducts(merged);
+        localStorage.setItem('peptide_products', JSON.stringify(merged));
       }
 
       if (!silent) {
@@ -2138,11 +2258,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Cart Actions ---
   const addToCart = (product: Product, quantity = 1) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.product.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
+      const targetKey = getProductDeduplicationKey(product.name, product.dosage);
+      const existingIndex = prev.findIndex(
+        (item) => item.product.id === product.id || getProductDeduplicationKey(item.product.name, item.product.dosage) === targetKey
+      );
+
+      if (existingIndex >= 0) {
+        return prev.map((item, idx) =>
+          idx === existingIndex
+            ? { ...item, product: { ...item.product, price: product.price }, quantity: item.quantity + quantity }
             : item
         );
       }
@@ -2184,7 +2308,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : Number((Math.min(cartTotal, appliedCoupon.value || 0) || 0).toFixed(2))
     : 0;
 
-  const deliveryFee = typeof storeSettings.deliveryFee === 'number' ? storeSettings.deliveryFee : 30.00;
+  const deliveryFee = 100.00;
 
   // --- Auth & Role Switching ---
   const loginWithGoogle = async (): Promise<{ success: boolean; message?: string }> => {

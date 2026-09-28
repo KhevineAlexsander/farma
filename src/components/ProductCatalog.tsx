@@ -3,6 +3,7 @@ import { ArrowRight, SearchX, SlidersHorizontal, Tag, Star, Sparkles, Search, X 
 import { ProductCategory } from '../types';
 import { ProductCard } from './ProductCard';
 import { useApp } from '../context/AppContext';
+import { getProductDeduplicationKey } from '../utils/productDeduplication';
 
 export const ProductCatalog: React.FC = () => {
   const {
@@ -24,9 +25,15 @@ export const ProductCatalog: React.FC = () => {
   const promoCount = products.filter((p) => p.isPromotion).length;
   const featuredCount = products.filter((p) => p.featured).length;
 
-  // Filter products based on Category, Search Query, and Special Filters
+  // Filter products based on Category, Search Query, and Special Filters with strict deduplication
+  const seenCatalogKeys = new Set<string>();
   const filteredProducts = products
     .filter((product) => {
+      if (!product || !product.id) return false;
+      const dedupeKey = getProductDeduplicationKey(product.name, product.dosage);
+      if (seenCatalogKeys.has(dedupeKey)) return false;
+      seenCatalogKeys.add(dedupeKey);
+
       const matchesCategory =
         selectedCategory === 'Todos' || product.category === selectedCategory;
 

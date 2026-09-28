@@ -451,6 +451,21 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           <button
             onClick={async () => {
+              setIsSavingProducts(true);
+              const ok = await saveAllProductsToCloud();
+              if (ok) setLastSaved(new Date().toLocaleTimeString('pt-BR'));
+              setIsSavingProducts(false);
+            }}
+            disabled={isSavingProducts}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/40 hover:to-blue-600/40 text-cyan-300 hover:text-white border border-cyan-500/50 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
+            title="Gravar todos os produtos ativos diretamente no banco de dados Firestore"
+          >
+            <UploadCloud className={`w-4 h-4 ${isSavingProducts ? 'animate-bounce text-cyan-400' : 'text-cyan-400'}`} />
+            <span>{isSavingProducts ? 'Gravando no Banco...' : `Salvar no Banco (${products.length})`}</span>
+          </button>
+
+          <button
+            onClick={async () => {
               setIsSyncing(true);
               await syncOfficialCatalog();
               setIsSyncing(false);

@@ -33,22 +33,22 @@ export function normalizeDosage(dosage: string): string {
  */
 const CANONICAL_NAME_ALIASES: Array<{ regex: RegExp; canonical: string }> = [
   // Retratutida / Retatrutide variations
-  { regex: /^(RETATRUTIDE|RETRATUTIDE|RETATUTIDA|RETRATUTIDA|RETATRUTIDA|RETRATUTIDE|RETATRUTID|RETRATUTID)$/i, canonical: 'RETRATUTIDA' },
+  { regex: /^(RETATRUTIDE|RETRATUTIDE|RETATUTIDA|RETRATUTIDA|RETATRUTIDA|RETRATUTIDE|RETATRUTID|RETRATUTID)$/i, canonical: 'Retatrutida' },
 
   // Epithalon / Epitalon / Ephitalon variations
-  { regex: /^(EPITHALON|EPITALON|EPHITALON|EPHITHALON|EPITHALONE|EPITALONE)$/i, canonical: 'EPITHALON' },
+  { regex: /^(EPITHALON|EPITALON|EPHITALON|EPHITHALON|EPITHALONE|EPITALONE)$/i, canonical: 'Epithalon' },
 
   // MOTS-C / MOST-C variations
-  { regex: /^(MOTS-C|MOST-C|MOTSC|MOSTC|MOTS\s*C|MOST\s*C)$/i, canonical: 'MOTS-C' },
+  { regex: /^(MOTS-C|MOST-C|MOTSC|MOSTC|MOTS\s*C|MOST\s*C)$/i, canonical: 'MOTS-c' },
 
   // Tirzepatida / Tirze variations
-  { regex: /^(TIRZEPATIDA|TIRZEPATIDE|TIRZE|TIRZEPATID)$/i, canonical: 'TIRZEPATIDA' },
+  { regex: /^(TIRZEPATIDA|TIRZEPATIDE|TIRZE|TIRZEPATID|TIZERPATIDA)$/i, canonical: 'Tirzepatida' },
 
-  // Água Acética variations
-  { regex: /^(AGUA\s*ACETICA|AGUA\s*ACERTICA|AGUA\s*ACETICA\s*ESTERTIL|AGUA\s*ACERTICA)$/i, canonical: 'ÁGUA ACETICA' },
+  // Ácido Acético Estéril variations
+  { regex: /^(ACIDO\s*ACETICO.*|AGUA\s*ACETICA.*|AGUA\s*ACERTICA.*|ACIDO\s*BAC.*)$/i, canonical: 'Ácido Acético Estéril' },
 
-  // Água Bac / Bacteriostática variations
-  { regex: /^(AGUA\s*BAC|AGUA\s*BACTERIOSTATICA|ACIDO\s*BAC|AGUA\s*BAC\s*10|AGUA\s*BAC\s*3)$/i, canonical: 'ÁGUA BAC' },
+  // Água Bacteriostática variations
+  { regex: /^(AGUA\s*BACTERIOSTATICA.*|AGUA\s*BAC.*|AGUA\s*BAC)$/i, canonical: 'Água Bacteriostática' },
 
   // Botox variations (keep generic Botox and Botox Allergan distinct)
   { regex: /^(BOTOX\s*ALLERGAN|BOTOX\s*ALERGAN)$/i, canonical: 'BOTOX ALLERGAN' },
@@ -56,31 +56,77 @@ const CANONICAL_NAME_ALIASES: Array<{ regex: RegExp; canonical: string }> = [
 
   // BPC-157 + TB-500 variations
   { regex: /^(BPC\s*157\s*\+\s*TB\s*500|BPC-157\s*\+\s*TB-500|BPC157\s*\+\s*TB500|BPC\s*\+\s*TB|BPC157\+TB500)$/i, canonical: 'BPC-157 + TB-500' },
+  { regex: /^(BPC\s*157|BPC-157|BPC157)$/i, canonical: 'BPC-157' },
 
   // CJC + Ipamorelin variations
-  { regex: /^(CJC\s*\+\s*IPAMORELIN|CJC-1295\s*\+\s*IPAMORELIN|CJC1295\s*\+\s*IPAMORELIN|CJC\s*IPAMORELIN)$/i, canonical: 'CJC + IPAMORELIN' },
+  { regex: /^(CJC\s*\+\s*IPAMORELIN|CJC-1295\s*\+\s*IPAMORELIN|CJC1295\s*\+\s*IPAMORELIN|CJC\s*IPAMORELIN|CJC\s*\+\s*IPA)$/i, canonical: 'CJC + Ipamorelin' },
+  { regex: /^(CJC-1295\s*\(?SEM\s*DAC\)?|CJC-1295\s*NO\s*DAC|CJC1295\s*\(?SEM\s*DAC\)?)$/i, canonical: 'CJC-1295 (Sem DAC)' },
 
   // Cagrilintide variations
-  { regex: /^(CAGRILINTIDE|CAGRILINTIDA|CAGRI)$/i, canonical: 'CAGRILINTIDE' },
+  { regex: /^(CAGRILINTIDE|CAGRILINTIDA|CAGRI)$/i, canonical: 'Cagrilintide' },
 
   // Semaglutida variations
-  { regex: /^(SEMAGLUTIDA|SEMAGLUTIDE|SEMA)$/i, canonical: 'SEMAGLUTIDA' },
+  { regex: /^(SEMAGLUTIDA|SEMAGLUTIDE|SEMA)$/i, canonical: 'Semaglutida' },
 
   // AOD-9604 variations
   { regex: /^(AOD-9604|AOD9604|AOD\s*9604)$/i, canonical: 'AOD-9604' },
 
   // GHK-Cu variations
-  { regex: /^(GHK-CU|GHKCU|GHK\s*CU|GHK\s*COPPER)$/i, canonical: 'GHK-CU' },
+  { regex: /^(GHK-CU|GHKCU|GHK\s*CU|GHK\s*COPPER)$/i, canonical: 'GHK-Cu' },
+
+  // AHK-Cu variations
+  { regex: /^(AHK-CU|AHKCU|AHK\s*CU)$/i, canonical: 'AHK-Cu' },
 
   // Tesamorelin variations
-  { regex: /^(TESAMORELIN|TESAMORELINA|TESA)$/i, canonical: 'TESAMORELIN' },
+  { regex: /^(TESAMORELIN|TESAMORELINA|TESA)$/i, canonical: 'Tesamorelin' },
 
   // Semax & Selank
-  { regex: /^(SEMAX)$/i, canonical: 'SEMAX' },
-  { regex: /^(SELANK)$/i, canonical: 'SELANK' },
+  { regex: /^(SEMAX)$/i, canonical: 'Semax' },
+  { regex: /^(SELANK)$/i, canonical: 'Selank' },
 
-  // Glutathione
-  { regex: /^(GLUTATHIONE|GLUTATIONA|GLUTATHION)$/i, canonical: 'GLUTATHIONE' },
+  // Glutathione / Glutationa
+  { regex: /^(GLUTATHIONE|GLUTATIONA|GLUTATHION)$/i, canonical: 'Glutationa (Glutathione)' },
+
+  // Eloratide variations
+  { regex: /^(ELORATIDE|ELORALINTIDE|ELORATINDE|ELORATID)$/i, canonical: 'Eloratide' },
+
+  // SS-31 variations
+  { regex: /^(SS-31.*|SS31.*|ELAMIPRETIDE.*)$/i, canonical: 'SS-31 (Elamipretide)' },
+
+  // PT-141 variations
+  { regex: /^(PT-141.*|PT141.*|BREMELANOTIDE.*)$/i, canonical: 'PT-141 (Bremelanotide)' },
+
+  // Melanotan variations
+  { regex: /^(MELANOTAN\s*2.*|MELANOTAN\s*II.*|MELANOTAN2.*)$/i, canonical: 'Melanotan 2 (Melanotan II)' },
+  { regex: /^(MELANOTAN\s*1.*|MELANOTAN\s*I.*|MELANOTAN1.*)$/i, canonical: 'Melanotan 1' },
+
+  // TB-500 variations
+  { regex: /^(TB-500.*|TB500.*|THYMOSIN\s*BETA-?4.*)$/i, canonical: 'TB-500 (Thymosin Beta-4)' },
+
+  // Thymosin Alpha-1
+  { regex: /^(THYMOSIN\s*ALPHA-?1.*)$/i, canonical: 'Thymosin Alpha-1' },
+
+  // Thymulin
+  { regex: /^(THYMULIN|TIMULINA)$/i, canonical: 'Thymulin' },
+
+  // HGH
+  { regex: /^(HGH.*|SOMATROPINA.*)$/i, canonical: 'HGH Somatropina' },
+
+  // 5-Amino-1MQ
+  { regex: /^(5-AMINO-?1MQ|5\s*AMINO\s*1MQ)$/i, canonical: '5-Amino-1MQ' },
+
+  // GLOW & KLOW
+  { regex: /^(GLOW)$/i, canonical: 'GLOW' },
+  { regex: /^(KLOW)$/i, canonical: 'KLOW' },
+
+  // Vitamina B12
+  { regex: /^(VITAMINA\s*B12.*|METILCOBALAMINA.*)$/i, canonical: 'Vitamina B12 (Metilcobalamina)' },
+
+  // Lemon Bottle
+  { regex: /^(LEMON\s*BOTTLE)$/i, canonical: 'Lemon Bottle' },
+
+  // L-Carnitina
+  { regex: /^(L-CARNITINA.*|L-CARNITINE.*)$/i, canonical: 'L-Carnitina Injetável' },
 ];
 
 /**
@@ -104,9 +150,9 @@ export function normalizeProductName(name: string): string {
  * E.g.: "RETRATUTIDA_60_MG", "EPITHALON_10_MG".
  */
 export function getProductDeduplicationKey(name: string, dosage?: string): string {
-  const normName = normalizeProductName(name);
-  const normDosage = normalizeDosage(dosage || '');
-  return `${normName}_${normDosage}`.replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_');
+  const normName = cleanString(normalizeProductName(name));
+  const normDosage = cleanString(normalizeDosage(dosage || ''));
+  return `${normName}_${normDosage}`.replace(/[^A-Z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
 }
 
 /**

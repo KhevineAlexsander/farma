@@ -27,6 +27,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
+import { getProductDeduplicationKey } from '../../utils/productDeduplication';
 
 interface ScientificPeptideData {
   id: string;
@@ -68,6 +69,28 @@ const SCIENTIFIC_CATALOG_DATA: Record<string, ScientificPeptideData> = {
     synergyWith: ['GHK-Cu (regeneração dérmica e sustentação de colágeno)'],
     scientificReference: 'Carruthers et al., Aesthetic Plastic Surgery & Consensus Guidelines for Botulinum Toxin Type A.',
     hplcHighlight: '100 U Allergan Biológico Padrão Farmacêutico',
+  },
+  'prod-botox-100': {
+    id: 'prod-botox-100',
+    name: 'BOTOX (100 UI)',
+    categoryGoal: 'estetica',
+    headline: 'Toxina Botulínica Tipo A Liofilizada para Linhas de Expressão & Harmonização',
+    cellularMechanism: 'Bloqueio neuromuscular reversível da liberação pré-sináptica de acetilcolina na placa motora, promovendo relaxamento estético e atenuação rápida de rugas dinâmicas.',
+    clinicalBenefits: [
+      'Atenuação rápida de rugas e linhas hipercinéticas da face',
+      'Investimento acessível de R$ 100,00 com padrão internacional de pureza',
+      'Frasco estéril liofilizado com 100 Unidades Internacionais (UI)',
+      'Excelente durabilidade clínica de 4 a 6 meses pós-aplicação',
+    ],
+    protocolSuggestion: {
+      route: 'Intramuscular pontual estéril',
+      frequency: 'A cada 4 a 6 meses',
+      timing: 'Realização com profissional capacitado',
+      cycleDuration: 'Manutenção periódica semestral',
+    },
+    synergyWith: ['GHK-Cu', 'SNAP-8'],
+    scientificReference: 'Consensus Guidelines on Botulinum Toxin Type A for Aesthetic Indications.',
+    hplcHighlight: '100 UI Padrão Farmacêutico Internacional',
   },
   'prod-tirzepatida-60': {
     id: 'prod-tirzepatida-60',
@@ -595,23 +618,43 @@ export const BenefitsPage: React.FC = () => {
 
   // Filter products based on search and objective
   const filteredPeptides = useMemo(() => {
+    const mapCategoryToGoal: Record<string, string> = {
+      'emagrecimento': 'emagrecimento',
+      'beleza': 'estetica',
+      'desempenho': 'hipertrofia',
+      'saúde': 'longevidade',
+      'saude': 'longevidade',
+      'acessórios': 'recuperacao',
+      'acessorios': 'recuperacao',
+    };
+
+    const seenBenefitKeys = new Set<string>();
     return products.filter((prod) => {
+      if (!prod || !prod.id) return false;
+      const dedupeKey = getProductDeduplicationKey(prod.name, prod.dosage);
+      if (seenBenefitKeys.has(dedupeKey)) return false;
+      seenBenefitKeys.add(dedupeKey);
+
       const sciData = SCIENTIFIC_CATALOG_DATA[prod.id];
+      const fallbackGoal = mapCategoryToGoal[(prod.category || '').toLowerCase()];
       const categoryMatches =
-        activeObjective === 'todos' || (sciData && sciData.categoryGoal === activeObjective);
+        activeObjective === 'todos' ||
+        (sciData && sciData.categoryGoal === activeObjective) ||
+        (fallbackGoal === activeObjective);
 
       if (!categoryMatches) return false;
 
       if (!searchTerm.trim()) return true;
 
       const q = searchTerm.toLowerCase();
-      const nameMatch = prod.name.toLowerCase().includes(q);
-      const descMatch = prod.description.toLowerCase().includes(q);
+      const nameMatch = (prod.name || '').toLowerCase().includes(q);
+      const descMatch = (prod.description || '').toLowerCase().includes(q);
+      const dosageMatch = (prod.dosage || '').toLowerCase().includes(q);
       const headlineMatch = sciData?.headline.toLowerCase().includes(q) || false;
-      const benefitsMatch = prod.benefits.some((b) => b.toLowerCase().includes(q));
+      const benefitsMatch = Array.isArray(prod.benefits) && prod.benefits.some((b) => typeof b === 'string' && b.toLowerCase().includes(q));
       const mechanismMatch = sciData?.cellularMechanism.toLowerCase().includes(q) || false;
 
-      return nameMatch || descMatch || headlineMatch || benefitsMatch || mechanismMatch;
+      return nameMatch || descMatch || dosageMatch || headlineMatch || benefitsMatch || mechanismMatch;
     });
   }, [products, activeObjective, searchTerm]);
 
@@ -996,15 +1039,27 @@ export const BenefitsPage: React.FC = () => {
                 <td className="py-3 px-4 text-slate-400">Duplo agonista GIP + GLP-1, saciedade profunda e controle de insulina</td>
                 <td className="py-3 px-4">1x por semana (SubQ)</td>
                 <td className="py-3 px-4 text-right">
-                  <button
-                    onClick={() => {
-                      const p = products.find((x) => x.id === 'prod-tirzepatida-60');
-                      if (p) handleOpenCalculator(p);
-                    }}
-                    className="text-cyan-400 hover:text-cyan-300 font-bold underline"
-                  >
-                    Calcular Dose
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        const p = products.find((x) => x.id === 'prod-tirzepatida-60');
+                        if (p) handleOpenCalculator(p);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 font-bold underline text-xs"
+                    >
+                      Dose 60mg
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      onClick={() => {
+                        const p = products.find((x) => x.id === 'prod-tirzepatida-100');
+                        if (p) handleOpenCalculator(p);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 font-bold underline text-xs"
+                    >
+                      Dose 100mg
+                    </button>
+                  </div>
                 </td>
               </tr>
 
@@ -1017,15 +1072,27 @@ export const BenefitsPage: React.FC = () => {
                 <td className="py-3 px-4 text-slate-400">Triplo agonista GLP-1 + GIP + Glucagon com gasto calórico basal</td>
                 <td className="py-3 px-4">1x por semana (SubQ)</td>
                 <td className="py-3 px-4 text-right">
-                  <button
-                    onClick={() => {
-                      const p = products.find((x) => x.id === 'prod-retratutide-30');
-                      if (p) handleOpenCalculator(p);
-                    }}
-                    className="text-cyan-400 hover:text-cyan-300 font-bold underline"
-                  >
-                    Calcular Dose
-                  </button>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        const p = products.find((x) => x.id === 'prod-retratutide-30');
+                        if (p) handleOpenCalculator(p);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 font-bold underline text-xs"
+                    >
+                      Dose 30mg
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      onClick={() => {
+                        const p = products.find((x) => x.id === 'prod-retratutide-60');
+                        if (p) handleOpenCalculator(p);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 font-bold underline text-xs"
+                    >
+                      Dose 60mg
+                    </button>
+                  </div>
                 </td>
               </tr>
 
@@ -1082,13 +1149,46 @@ export const BenefitsPage: React.FC = () => {
                 <td className="py-3 px-4 text-right">
                   <button
                     onClick={() => {
-                      const p = products.find((x) => x.id === 'prod-ghk-cu-100');
+                      const p = products.find((x) => x.id === 'prod-ghk-cu-100' || x.id === 'prod-ghkcu-100');
                       if (p) handleOpenCalculator(p);
                     }}
                     className="text-cyan-400 hover:text-cyan-300 font-bold underline"
                   >
                     Calcular Dose
                   </button>
+                </td>
+              </tr>
+
+              <tr className="hover:bg-slate-800/30 transition-colors">
+                <td className="py-3 px-4 font-bold text-pink-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Harmonização Facial & Rugas Dinâmicas
+                </td>
+                <td className="py-3 px-4 font-semibold text-white">BOTOX (100 UI) / Allergan (100 UI)</td>
+                <td className="py-3 px-4 text-slate-400">Bloqueio neuromuscular reversível com relaxamento facial e prevenção de linhas</td>
+                <td className="py-3 px-4">Semestral (4 a 6 meses)</td>
+                <td className="py-3 px-4 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => {
+                        const p = products.find((x) => x.id === 'prod-botox-100');
+                        if (p) handleOpenCalculator(p);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 font-bold underline text-xs"
+                    >
+                      Botox 100 UI (R$ 100)
+                    </button>
+                    <span className="text-slate-600">|</span>
+                    <button
+                      onClick={() => {
+                        const p = products.find((x) => x.id === 'prod-botox-allergan-100');
+                        if (p) handleOpenCalculator(p);
+                      }}
+                      className="text-cyan-400 hover:text-cyan-300 font-bold underline text-xs"
+                    >
+                      Allergan 100 UI (R$ 300)
+                    </button>
+                  </div>
                 </td>
               </tr>
 
@@ -1103,7 +1203,7 @@ export const BenefitsPage: React.FC = () => {
                 <td className="py-3 px-4 text-right">
                   <button
                     onClick={() => {
-                      const p = products.find((x) => x.id === 'prod-semax-10-cat');
+                      const p = products.find((x) => x.id === 'prod-semax-10-cat' || x.id === 'prod-semax-10');
                       if (p) handleOpenCalculator(p);
                     }}
                     className="text-cyan-400 hover:text-cyan-300 font-bold underline"
