@@ -7,27 +7,55 @@ export const HeroSection: React.FC = () => {
   const { setSelectedCategory, storeSettings, setCurrentView, showToast } = useApp();
   const [activeSlide, setActiveSlide] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallModal, setShowInstallModal] = useState<boolean>(false);
+  const [isInstalled, setIsInstalled] = useState<boolean>(false);
+  const [isInstalling, setIsInstalling] = useState<boolean>(false);
 
   useEffect(() => {
+    const checkInstalled = () => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+      if (isStandalone) {
+        setIsInstalled(true);
+      }
+    };
+    checkInstalled();
+
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setInstallPrompt(e);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    window.addEventListener('appinstalled', () => {
+      setIsInstalled(true);
+      setInstallPrompt(null);
+      showToast('✓ Aplicativo instalado com sucesso!');
+    });
+
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     };
   }, []);
 
   const handleInstallClick = async () => {
+    if (isInstalled) return;
     if (installPrompt) {
-      installPrompt.prompt();
-      const { outcome } = await installPrompt.userChoice;
-      if (outcome === 'accepted') {
-        setInstallPrompt(null);
+      setIsInstalling(true);
+      try {
+        installPrompt.prompt();
+        const { outcome } = await installPrompt.userChoice;
+        if (outcome === 'accepted') {
+          setInstallPrompt(null);
+          setIsInstalled(true);
+          showToast('✓ Aplicativo instalado com sucesso!');
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsInstalling(false);
       }
     } else {
-      showToast('Para instalar o aplicativo no celular:\n• Android: Toque no menu (3 pontinhos) e escolha "Instalar app" ou "Adicionar à tela inicial".\n• iPhone: Toque em Compartilhar e selecione "Adicionar à Tela de Início".');
+      setShowInstallModal(true);
     }
   };
 
@@ -130,10 +158,29 @@ export const HeroSection: React.FC = () => {
 
               <button
                 onClick={handleInstallClick}
-                className="inline-flex md:hidden items-center justify-center gap-2 px-5 py-3.5 rounded-full bg-gradient-to-r from-cyan-500/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-600/30 text-cyan-300 hover:text-white font-bold text-sm border border-cyan-500/40 transition-all cursor-pointer shadow-lg shadow-cyan-950/40"
+                disabled={isInstalling || isInstalled}
+                className={`inline-flex md:hidden items-center justify-center gap-2 px-5 py-3.5 rounded-full font-bold text-sm border transition-all cursor-pointer shadow-lg shadow-cyan-950/40 ${
+                  isInstalled
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 cursor-default'
+                    : 'bg-gradient-to-r from-cyan-500/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-600/30 text-cyan-300 hover:text-white border-cyan-500/40'
+                }`}
               >
-                <DownloadCloud className="w-4 h-4 text-cyan-400 animate-bounce" />
-                <span>Instalar App no Celular</span>
+                {isInstalled ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>✓ Aplicativo instalado</span>
+                  </>
+                ) : isInstalling ? (
+                  <>
+                    <DownloadCloud className="w-4 h-4 text-cyan-400 animate-spin" />
+                    <span>⏳ Instalando...</span>
+                  </>
+                ) : (
+                  <>
+                    <DownloadCloud className="w-4 h-4 text-cyan-400 animate-bounce" />
+                    <span>⬇ Instalar aplicativo</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -244,6 +291,61 @@ export const HeroSection: React.FC = () => {
 
         </div>
       </div>
+
+      {showInstallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-cyan-500/30 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 relative">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center">
+                  <DownloadCloud className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Instalar App no Celular</h3>
+                  <p className="text-xs text-cyan-400 font-mono">Adicione à tela inicial em segundos</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInstallModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white flex items-center justify-center transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4 text-sm text-slate-300">
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-white text-xs uppercase font-tech tracking-wide text-cyan-300">
+                  <span>🤖 Android (Google Chrome / Samsung)</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  1. Toque no menu de <b>três pontinhos</b> (canto superior direito do navegador).<br/>
+                  2. Selecione <b>"Adicionar à tela inicial"</b> ou <b>"Instalar aplicativo"</b>.<br/>
+                  3. Confirme para criar o atalho na sua tela principal.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-white text-xs uppercase font-tech tracking-wide text-blue-300">
+                  <span>🍏 iPhone / iPad (Safari)</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  1. Toque no botão de <b>Compartilhar</b> (quadrado com seta para cima na barra inferior).<br/>
+                  2. Role para baixo e toque em <b>"Adicionar à Tela de Início"</b>.<br/>
+                  3. Toque em <b>"Adicionar"</b> no canto superior direito.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInstallModal(false)}
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-sm tracking-wide shadow-lg shadow-cyan-950/50 transition-all cursor-pointer"
+            >
+              Entendido, obrigado!
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
