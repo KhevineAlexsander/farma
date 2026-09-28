@@ -432,7 +432,23 @@ export const mergeProductsWithCatalog = (
         });
       } else {
         // Custom user product
-        result.push(p);
+        const lowerName = (p.name || '').toLowerCase();
+        if (
+          lowerName.includes('água bacteriostática') ||
+          lowerName.includes('agua bacteriostatica') ||
+          lowerName.includes('agua bac') ||
+          lowerName.includes('água bac') ||
+          lowerName.includes('ácido acético') ||
+          lowerName.includes('acido acetico') ||
+          lowerName.includes('ácido bac') ||
+          lowerName.includes('acido bac') ||
+          lowerName.includes('agua acetica') ||
+          lowerName.includes('água acética')
+        ) {
+          result.push({ ...p, category: 'Insumos' });
+        } else {
+          result.push(p);
+        }
       }
     });
   }

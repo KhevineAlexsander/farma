@@ -372,7 +372,7 @@ VALUES
   '/images/botox_allergan_100u.jpg', true, false, 0.00
 ),
 (
-  'prod-agua-bac-3', 'ÁGUA BAC', '3 MG', 'Saúde',
+  'prod-agua-bac-3', 'ÁGUA BAC', '3 MG', 'Insumos',
   'Água bacteriostática estéril para reconstituição de peptídeos, com 0,9% de álcool benzílico bacteriostático. Impede a proliferação bacteriana por semanas.',
   '["Pureza microbiológica estéril", "Preserva peptídeos na geladeira por 30+ dias", "Ampola/frasco de grau farmacêutico"]'::jsonb,
   20.00, 25.00, 6.00, 120, '#0891B2', 'Grau Farmacêutico USP',
@@ -380,7 +380,7 @@ VALUES
   NULL, false, false, 0.00
 ),
 (
-  'prod-acido-bac-10', 'ÁCIDO BAC', '10 MG', 'Saúde',
+  'prod-acido-bac-10', 'ÁCIDO BAC', '10 MG', 'Insumos',
   'Solução bacteriostática de pH levemente ácido formulada especificamente para a dissolução imediata de peptídeos com solubilidade hidrofóbica e sensíveis.',
   '["Solubilização instantânea e transparente", "pH calibrado para máxima estabilidade", "Grau laboratorial de alta pureza"]'::jsonb,
   25.00, 32.00, 8.00, 90, '#7C3AED', 'Pureza Laboratorial',

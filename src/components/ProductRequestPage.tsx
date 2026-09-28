@@ -27,6 +27,7 @@ import { PeptideVial } from './PeptideVial';
 
 const POPULAR_CATEGORIES = [
   'Emagrecimento & Metabolismo',
+  'Insumos & Diluentes',
   'Recuperação & Peptídeos',
   'Neurológicos & Sono',
   'Longevidade & Metabolismo Celular',

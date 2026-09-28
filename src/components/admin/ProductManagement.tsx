@@ -242,7 +242,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
   // Form State
   const [name, setName] = useState('');
   const [dosage, setDosage] = useState('');
-  const [category, setCategory] = useState<'Emagrecimento' | 'Saúde' | 'Beleza' | 'Desempenho'>('Saúde');
+  const [category, setCategory] = useState<'Emagrecimento' | 'Saúde' | 'Beleza' | 'Desempenho' | 'Insumos' | string>('Saúde');
   const [price, setPrice] = useState('');
   const [costPrice, setCostPrice] = useState('');
   const [capColor, setCapColor] = useState('#0088FF');
@@ -435,6 +435,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                 { id: 'Saúde', label: 'Saúde' },
                 { id: 'Beleza', label: 'Beleza' },
                 { id: 'Desempenho', label: 'Desempenho' },
+                { id: 'Insumos', label: 'Insumos' },
               ];
               const currentLabel = filterOptions.find(f => f.id === categoryFilter)?.label || categoryFilter;
 
@@ -1106,6 +1107,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                     <option value="Saúde">Saúde</option>
                     <option value="Beleza">Beleza</option>
                     <option value="Desempenho">Desempenho</option>
+                    <option value="Insumos">Insumos</option>
                   </select>
                 </div>
                 <div>
