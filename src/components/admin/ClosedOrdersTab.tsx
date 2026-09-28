@@ -49,6 +49,7 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
     reopenOrderInActiveSession,
     reopenEntireCashSession,
     storeSettings,
+    isSupabaseActive,
     showToast,
   } = useApp();
 
@@ -305,6 +306,12 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold border border-amber-500/30">
                 {allClosedOrders.length} {allClosedOrders.length === 1 ? 'pedido fechado' : 'pedidos fechados'}
               </span>
+              {isSupabaseActive && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-300 font-mono">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Banco Principal: Supabase</span>
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               Consulte os pedidos arquivados no fechamento de caixa, acompanhe pendências e emita relatórios.

@@ -647,20 +647,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await supabase.from('store_settings').upsert(mapSettingsToDB(INITIAL_SETTINGS));
           }
 
-          // Fetch Orders (Always merge with Firestore/Local to prevent losing orders)
+          // Fetch Orders (Supabase PostgreSQL is PRIMARY - merges all existing local/cloud orders safely)
           const { data: ordData, error: ordErr } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
           if (!ordErr && ordData) {
             const mapped = ordData.map(mapDBToOrder).filter((o) => !isBlacklistedOrder(o));
             setOrders((prev) => {
               const orderMap = new Map<string, Order>();
-              // 1. Keep all current orders (keyed strictly by unique ID)
+              // 1. Keep all existing orders currently in memory / localStorage
               prev.forEach((o) => {
                 if (!isBlacklistedOrder(o)) {
                   const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
                   if (k) orderMap.set(k, o);
                 }
               });
-              // 2. Merge with Supabase orders without deduplicating separate records
+              // 2. Incorporate Supabase orders as primary truth
               mapped.forEach((o) => {
                 if (!isBlacklistedOrder(o)) {
                   const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
@@ -674,7 +674,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
               localStorage.setItem('peptide_orders', JSON.stringify(merged));
 
-              // 3. Auto-sync: if Firestore has more orders than Supabase, immediately upload missing orders to Supabase
+              // 3. Primary sync: if there are any existing orders not yet in Supabase, upload them immediately
               if (merged.length > mapped.length) {
                 const missingForSupabase = merged
                   .filter((o) => !mapped.some((so) => (so.id && so.id === o.id) || (so.orderNumber && so.orderNumber === o.orderNumber)))
@@ -682,7 +682,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (missingForSupabase.length > 0) {
                   supabase.from('orders').upsert(missingForSupabase).then(({ error: upErr }) => {
                     if (upErr) console.warn('Supabase missing orders replication note:', upErr.message);
-                    else console.log(`Auto-replicated ${missingForSupabase.length} missing orders to Supabase!`);
+                    else console.log(`Auto-seeded ${missingForSupabase.length} existing orders to Supabase (Primary DB)!`);
                   });
                 }
               }
@@ -914,8 +914,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         
         list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-        setOrders(list);
-        localStorage.setItem('peptide_orders', JSON.stringify(list));
+
+        if (isSupabaseConfigured()) {
+          // When Supabase is primary, merge any Firestore backup records into state without overwriting Supabase updates
+          setOrders((prev) => {
+            const orderMap = new Map<string, Order>();
+            prev.forEach((o) => {
+              if (!isBlacklistedOrder(o)) {
+                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                if (k) orderMap.set(k, o);
+              }
+            });
+            list.forEach((o) => {
+              if (!isBlacklistedOrder(o)) {
+                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+                if (k && !orderMap.has(k)) {
+                  orderMap.set(k, o);
+                }
+              }
+            });
+            const merged = Array.from(orderMap.values()).filter((o) => !isBlacklistedOrder(o));
+            merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+            localStorage.setItem('peptide_orders', JSON.stringify(merged));
+            return merged;
+          });
+        } else {
+          setOrders(list);
+          localStorage.setItem('peptide_orders', JSON.stringify(list));
+        }
 
         // If Supabase is active, ensure sync
         const supabaseClient = getSupabaseClient();

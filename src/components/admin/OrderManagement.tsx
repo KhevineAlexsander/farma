@@ -82,6 +82,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     refreshSalesData,
     closeCashRegister,
     cashRegisterSessions,
+    isSupabaseActive,
     showToast,
   } = useApp();
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
@@ -1416,9 +1417,17 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
               <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-xl font-extrabold text-white tracking-tight leading-tight">
-                Pedidos & Baixas Manuais
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-xl font-extrabold text-white tracking-tight leading-tight">
+                  Pedidos & Baixas Manuais
+                </h2>
+                {isSupabaseActive && (
+                  <span className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] text-emerald-300 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Banco Principal: Supabase</span>
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
                 Conferência de pagamentos, cobrança de saldos parciais e vencimentos
               </p>
