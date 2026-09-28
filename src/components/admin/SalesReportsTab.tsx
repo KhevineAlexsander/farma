@@ -155,6 +155,11 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   const [whatsAppTopProductsLimit, setWhatsAppTopProductsLimit] = useState<number>(0); // 0 = Todos os produtos vendidos
   const [copiedSummary, setCopiedSummary] = useState(false);
 
+  // Active / open period orders only (excluding closed cashier orders)
+  const activeOrders = useMemo(() => {
+    return orders.filter((o) => !o.isClosed && !o.closedAt);
+  }, [orders]);
+
   // Period statistics before status filter (to display exact counts of pending vs confirmed in the time window)
   const periodOrdersStats = useMemo(() => {
     const now = new Date();
@@ -167,7 +172,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-    const timeMatched = orders.filter((order) => {
+    const timeMatched = activeOrders.filter((order) => {
       if (order.status === 'Cancelado') return false;
       if (timeFilter !== 'all') {
         const orderTime = new Date(order.createdAt || Date.now()).getTime();
@@ -198,7 +203,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
       totalActiveCount,
       timeMatched,
     };
-  }, [orders, timeFilter]);
+  }, [activeOrders, timeFilter]);
 
   // Real-time filtering of orders
   const filteredOrders = useMemo(() => {
@@ -1041,8 +1046,11 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base sm:text-xl font-black text-white tracking-tight">
-                  Relatório de Vendas em Tempo Real
+                  Relatório de Vendas (Período Aberto)
                 </h3>
+                <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 shadow-sm shrink-0">
+                  {activeOrders.length} pedidos ativos
+                </span>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5 shadow-sm shrink-0">
                   <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -1052,7 +1060,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span>Métricas atualizadas automaticamente ao abrir e a cada 1 min.</span>
+                <span>Métricas exclusivas dos pedidos abertos no período atual (pedidos de caixas fechados ficam salvos na aba <strong>Pedidos Fechados</strong>).</span>
                 <span className="text-slate-500 hidden sm:inline">•</span>
                 <span className="text-slate-300 font-medium">
                   Última atualização: <strong className="text-cyan-400 font-mono">{lastUpdatedAt.toLocaleTimeString('pt-BR')}</strong>
@@ -2528,7 +2536,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                       Período de Vendas:
                     </span>
                     <span className="text-[10px] text-cyan-400 font-mono">
-                      {orders.length} pedidos no sistema
+                      {activeOrders.length} pedidos ativos no período
                     </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
