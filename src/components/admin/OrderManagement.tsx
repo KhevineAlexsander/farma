@@ -1062,7 +1062,7 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
 
       return matchesStatus && matchesSearch && matchesProductFilter && matchesDate;
     });
-  }, [orders, statusFilter, searchTerm, productSearchFilter, dateFilterPreset, customStartDate, customEndDate]);
+  }, [activeOrders, statusFilter, searchTerm, productSearchFilter, dateFilterPreset, customStartDate, customEndDate]);
 
   const partialCount = partialOrders.length;
   const isSavingDueDate = isSavingChargeDate;
