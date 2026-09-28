@@ -136,6 +136,17 @@ export const mapDBToProduct = (d: any): Product => ({
 });
 
 export const mapOrderToDB = (o: Order) => {
+  // If order is closed in a cash session, encode in notes tag to guarantee persistence across databases
+  let finalNotes = o.notes || '';
+  if (o.isClosed && o.closedSessionId) {
+    const tag = `[CAIXA_FECHADO:${o.closedSessionId}|${o.closedAt || ''}|${o.closedSessionName || ''}]`;
+    if (!finalNotes.includes('[CAIXA_FECHADO:')) {
+      finalNotes = finalNotes ? `${finalNotes} ${tag}` : tag;
+    }
+  } else if (!o.isClosed && finalNotes.includes('[CAIXA_FECHADO:')) {
+    finalNotes = finalNotes.replace(/\[CAIXA_FECHADO:[^\]]+\]/g, '').trim();
+  }
+
   return {
     id: o.id,
     order_number: o.orderNumber,
@@ -156,7 +167,7 @@ export const mapOrderToDB = (o: Order) => {
     tracking_code: o.trackingCode || null,
     cleared_manually_at: o.clearedManuallyAt || null,
     cleared_by: o.clearedBy || null,
-    notes: o.notes || null,
+    notes: finalNotes || null,
     created_at: o.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -204,6 +215,29 @@ export const mapDBToOrder = (d: any): Order => {
   }
   if (d.notes) {
     o.notes = d.notes;
+
+    // Parse closed cash session tag if present
+    const match = d.notes.match(/\[CAIXA_FECHADO:([^|]+)\|([^|]*)\|([^\]]*)\]/);
+    if (match) {
+      o.isClosed = true;
+      o.closedSessionId = match[1];
+      if (match[2]) o.closedAt = match[2];
+      if (match[3]) o.closedSessionName = match[3];
+    }
+  }
+
+  // Also support direct columns if present in database
+  if (d.is_closed !== undefined || d.isClosed !== undefined) {
+    o.isClosed = Boolean(d.is_closed ?? d.isClosed);
+  }
+  if (d.closed_at || d.closedAt) {
+    o.closedAt = d.closed_at || d.closedAt;
+  }
+  if (d.closed_session_id || d.closedSessionId) {
+    o.closedSessionId = d.closed_session_id || d.closedSessionId;
+  }
+  if (d.closed_session_name || d.closedSessionName) {
+    o.closedSessionName = d.closed_session_name || d.closedSessionName;
   }
 
   return o;

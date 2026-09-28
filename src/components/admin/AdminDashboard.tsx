@@ -25,11 +25,13 @@ import {
   AlertTriangle,
   X,
   Store,
+  Archive,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { DnaLogo } from '../DnaLogo';
 import { ProductManagement } from './ProductManagement';
 import { OrderManagement } from './OrderManagement';
+import { ClosedOrdersTab } from './ClosedOrdersTab';
 import { FinancialManagement } from './FinancialManagement';
 import { EmployeeManagement } from './EmployeeManagement';
 import { StoreSettingsTab } from './StoreSettingsTab';
@@ -80,7 +82,8 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
-  const pendingOrdersCount = orders.filter((o) => o.status === 'Pendente').length;
+  const pendingOrdersCount = orders.filter((o) => !o.isClosed && !o.closedAt && o.status === 'Pendente').length;
+  const closedOrdersCount = orders.filter((o) => Boolean(o.isClosed || o.closedAt)).length;
   const pendingProductRequestsCount = (productRequests || []).filter((r) => r.status === 'Pendente').length;
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
 
@@ -117,6 +120,13 @@ export const AdminDashboard: React.FC = () => {
       label: 'Pedidos & Baixa',
       icon: ShoppingCart,
       badge: pendingOrdersCount > 0 ? pendingOrdersCount : null,
+      visible: permissions.canManageOrders,
+    },
+    {
+      id: 'closed_orders' as const,
+      label: 'Pedidos Fechados (Caixa)',
+      icon: Archive,
+      badge: closedOrdersCount > 0 ? `${closedOrdersCount}` : null,
       visible: permissions.canManageOrders,
     },
     {
@@ -165,7 +175,7 @@ export const AdminDashboard: React.FC = () => {
 
   const visibleTabs = allTabs.filter((t) => t.visible);
 
-  const [activeTab, setActiveTab] = useState<'finances' | 'products' | 'orders' | 'employees' | 'settings' | 'coupons' | 'reports'>(() => {
+  const [activeTab, setActiveTab] = useState<'finances' | 'products' | 'orders' | 'closed_orders' | 'employees' | 'settings' | 'coupons' | 'reports'>(() => {
     return (visibleTabs[0]?.id as any) || 'orders';
   });
   const [targetEditingOrderId, setTargetEditingOrderId] = useState<string | null>(null);
@@ -390,7 +400,11 @@ export const AdminDashboard: React.FC = () => {
                 initialEditingOrderId={targetEditingOrderId}
                 onClearInitialEditingOrder={() => setTargetEditingOrderId(null)}
                 onReturnToReports={() => setActiveTab('reports')}
+                onNavigateToClosedOrders={() => setActiveTab('closed_orders')}
               />
+            )}
+            {activeTab === 'closed_orders' && permissions.canManageOrders && (
+              <ClosedOrdersTab onReturnToOrders={() => setActiveTab('orders')} />
             )}
             {activeTab === 'products' && permissions.canManageProducts && <ProductManagement />}
             {activeTab === 'reports' && permissions.canManageReports && (

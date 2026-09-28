@@ -1,0 +1,1311 @@
+import React, { useState, useMemo } from 'react';
+import {
+  Archive,
+  Search,
+  Calendar,
+  DollarSign,
+  TrendingUp,
+  FileSpreadsheet,
+  FileText,
+  RotateCcw,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  ChevronDown,
+  Eye,
+  Lock,
+  Unlock,
+  KeyRound,
+  ShieldAlert,
+  ShoppingBag,
+  User,
+  Phone,
+  Package,
+  CreditCard,
+  X,
+  Copy,
+  Check,
+  CalendarClock,
+  ArrowRight,
+  Sparkles,
+  Send,
+  MessageSquare,
+  Printer,
+  ShieldCheck,
+} from 'lucide-react';
+import { useApp } from '../../context/AppContext';
+import { Order, OrderStatus, CashRegisterSession } from '../../types';
+import { PeptideVial } from '../PeptideVial';
+import { exportOrdersListToExcel, exportOrdersListToTxt } from '../../utils/exportUtils';
+
+export interface ClosedOrdersTabProps {
+  onReturnToOrders?: () => void;
+}
+
+export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrders }) => {
+  const {
+    orders,
+    cashRegisterSessions,
+    reopenOrderInActiveSession,
+    reopenEntireCashSession,
+    storeSettings,
+    showToast,
+  } = useApp();
+
+  // Sub-views: 'closed' | 'pending' | 'report'
+  const [subView, setSubView] = useState<'closed' | 'pending' | 'report'>('closed');
+
+  // Active / Selected session filter
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('Todos');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  // Reopen session modal state
+  const [sessionToReopen, setSessionToReopen] = useState<CashRegisterSession | null>(null);
+  const [reopenPassword, setReopenPassword] = useState<string>('');
+  const [reopenError, setReopenError] = useState<string | null>(null);
+  const [isReopeningSession, setIsReopeningSession] = useState<boolean>(false);
+
+  // Reopen single order modal state
+  const [orderToReopen, setOrderToReopen] = useState<Order | null>(null);
+  const [isReopeningOrder, setIsReopeningOrder] = useState<boolean>(false);
+
+  // All closed orders
+  const allClosedOrders = useMemo(() => {
+    return orders.filter((o) => Boolean(o.isClosed || o.closedAt));
+  }, [orders]);
+
+  // Filtered closed orders based on selected session, status, and search
+  const filteredClosedOrders = useMemo(() => {
+    return allClosedOrders.filter((order) => {
+      // Session filter
+      if (selectedSessionId !== 'all') {
+        if (order.closedSessionId !== selectedSessionId) {
+          return false;
+        }
+      }
+
+      // Status filter
+      if (statusFilter === 'Pagos') {
+        if (order.status !== 'Pago' && order.status !== 'Entregue' && order.status !== 'Enviado') {
+          return false;
+        }
+      } else if (statusFilter === 'Pendentes / Parciais') {
+        const isPending =
+          order.status === 'Pendente' ||
+          order.status === 'Pago Parcial' ||
+          (order.remainingAmount !== undefined && order.remainingAmount > 0 && order.status !== 'Pago' && order.status !== 'Cancelado');
+        if (!isPending) return false;
+      } else if (statusFilter === 'Aguardando Baixa') {
+        if (order.clearedManuallyAt || order.status === 'Pago' || order.status === 'Cancelado') {
+          return false;
+        }
+      } else if (statusFilter === 'Cancelados') {
+        if (order.status !== 'Cancelado') return false;
+      }
+
+      // Search filter
+      if (searchTerm.trim()) {
+        const q = searchTerm.toLowerCase().trim();
+        const matchesNumber = (order.orderNumber || '').toLowerCase().includes(q);
+        const matchesName = (order.customer?.name || '').toLowerCase().includes(q);
+        const matchesPhone = (order.customer?.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''));
+        const matchesCpf = (order.customer?.cpf || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''));
+        const matchesItems = (order.items || []).some(
+          (it) =>
+            (it.product?.name || '').toLowerCase().includes(q) ||
+            (it.product?.dosage || '').toLowerCase().includes(q)
+        );
+        if (!matchesNumber && !matchesName && !matchesPhone && !matchesCpf && !matchesItems) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [allClosedOrders, selectedSessionId, statusFilter, searchTerm]);
+
+  // Pending closed orders (orders that were closed but still have outstanding debt or pending clearance)
+  const pendingClosedOrders = useMemo(() => {
+    return allClosedOrders.filter((order) => {
+      const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+      const hasDebt = order.remainingAmount !== undefined ? order.remainingAmount > 0 : !isPaid;
+      return hasDebt && order.status !== 'Cancelado';
+    });
+  }, [allClosedOrders]);
+
+  // Financial Metrics for the current view
+  const metrics = useMemo(() => {
+    let totalRevenue = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+    let paidCount = 0;
+    let partialCount = 0;
+    let pendingCount = 0;
+    let waitingClearanceCount = 0;
+    let cancelCount = 0;
+
+    const paymentMethodsMap: Record<string, { count: number; total: number }> = {};
+
+    filteredClosedOrders.forEach((o) => {
+      const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+      const isCancelled = o.status === 'Cancelado';
+
+      if (!isCancelled) {
+        totalRevenue += Number(o.total || 0);
+        const paid = o.paidAmount !== undefined ? o.paidAmount : (isPaid ? o.total : 0);
+        const pending = o.remainingAmount !== undefined ? o.remainingAmount : (!isPaid ? o.total : 0);
+        totalPaid += Number(paid || 0);
+        totalPending += Number(pending || 0);
+      }
+
+      if (isPaid) paidCount++;
+      else if (o.status === 'Pago Parcial') partialCount++;
+      else if (o.status === 'Cancelado') cancelCount++;
+      else pendingCount++;
+
+      if (!o.clearedManuallyAt && !isPaid && !isCancelled) {
+        waitingClearanceCount++;
+      }
+
+      const method = o.paymentMethod || 'PIX';
+      if (!paymentMethodsMap[method]) {
+        paymentMethodsMap[method] = { count: 0, total: 0 };
+      }
+      paymentMethodsMap[method].count++;
+      if (!isCancelled) {
+        paymentMethodsMap[method].total += Number(o.total || 0);
+      }
+    });
+
+    const averageTicket = filteredClosedOrders.length > 0 ? totalRevenue / Math.max(1, filteredClosedOrders.length - cancelCount) : 0;
+
+    return {
+      totalOrders: filteredClosedOrders.length,
+      totalRevenue,
+      totalPaid,
+      totalPending,
+      averageTicket,
+      paidCount,
+      partialCount,
+      pendingCount,
+      waitingClearanceCount,
+      cancelCount,
+      paymentMethodsMap,
+    };
+  }, [filteredClosedOrders]);
+
+  // Top products sold in closed orders for report
+  const topProductsSold = useMemo(() => {
+    const map = new Map<string, { name: string; dosage: string; quantity: number; revenue: number }>();
+    filteredClosedOrders.forEach((order) => {
+      if (order.status === 'Cancelado') return;
+      (order.items || []).forEach((item) => {
+        const name = (item.product?.name || (item as any).name || 'Peptídeo').trim();
+        const dosage = (item.product?.dosage || (item as any).dosage || '').trim();
+        const key = `${name}__${dosage}`.toLowerCase();
+        const existing = map.get(key) || { name, dosage, quantity: 0, revenue: 0 };
+        existing.quantity += item.quantity || 1;
+        existing.revenue += (item.product?.price || 0) * (item.quantity || 1);
+        map.set(key, existing);
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => b.quantity - a.quantity);
+  }, [filteredClosedOrders]);
+
+  // Selected session details if a specific one is selected
+  const activeSessionDetails = useMemo(() => {
+    if (selectedSessionId === 'all') return null;
+    return cashRegisterSessions.find((s) => s.id === selectedSessionId) || null;
+  }, [cashRegisterSessions, selectedSessionId]);
+
+  // Handle Export to Excel
+  const handleExportExcel = () => {
+    if (filteredClosedOrders.length === 0) {
+      showToast('Nenhum pedido fechado para exportar.');
+      return;
+    }
+    const sessionLabel = activeSessionDetails ? activeSessionDetails.name : 'Todos os Caixas Fechados';
+    const filename = exportOrdersListToExcel(
+      filteredClosedOrders,
+      `Relatório de Pedidos Fechados - ${sessionLabel}`,
+      storeSettings?.storeName || 'Peptide Imports Farma'
+    );
+    showToast(`📊 Planilha Excel baixada com sucesso: ${filename}`);
+  };
+
+  // Handle Export to TXT
+  const handleExportTxt = () => {
+    if (filteredClosedOrders.length === 0) {
+      showToast('Nenhum pedido fechado para exportar.');
+      return;
+    }
+    const sessionLabel = activeSessionDetails ? activeSessionDetails.name : 'Todos os Caixas Fechados';
+    const filename = exportOrdersListToTxt(
+      filteredClosedOrders,
+      `Relatório de Pedidos Fechados - ${sessionLabel}`,
+      storeSettings?.storeName || 'Peptide Imports Farma'
+    );
+    showToast(`📄 Relatório TXT baixado com sucesso: ${filename}`);
+  };
+
+  // Confirm Reopen entire session
+  const handleConfirmReopenSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sessionToReopen) return;
+    if (reopenPassword.trim() !== '8817') {
+      setReopenError('Senha incorreta! Digite a senha 8817.');
+      return;
+    }
+    setIsReopeningSession(true);
+    setReopenError(null);
+    try {
+      const res = await reopenEntireCashSession(sessionToReopen.id, reopenPassword);
+      if (res.success) {
+        setSessionToReopen(null);
+        setReopenPassword('');
+        setSelectedSessionId('all');
+      } else {
+        setReopenError(res.message);
+      }
+    } finally {
+      setIsReopeningSession(false);
+    }
+  };
+
+  // Confirm Reopen single order
+  const handleConfirmReopenOrder = async () => {
+    if (!orderToReopen) return;
+    setIsReopeningOrder(true);
+    try {
+      await reopenOrderInActiveSession(orderToReopen.id);
+      setOrderToReopen(null);
+      if (selectedOrder?.id === orderToReopen.id) {
+        setSelectedOrder(null);
+      }
+    } finally {
+      setIsReopeningOrder(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5 animate-in fade-in duration-200">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-gradient-to-br from-slate-900 via-slate-900/90 to-amber-950/20 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+            <Archive className="w-6 h-6" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-lg sm:text-2xl font-extrabold text-white font-tech tracking-wide">
+                PEDIDOS FECHADOS & HISTÓRICO DE CAIXAS
+              </h2>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold border border-amber-500/30">
+                {allClosedOrders.length} {allClosedOrders.length === 1 ? 'pedido fechado' : 'pedidos fechados'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Consulte os pedidos arquivados no fechamento de caixa, acompanhe pendências e emita relatórios.
+            </p>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onReturnToOrders && (
+            <button
+              onClick={onReturnToOrders}
+              className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20 cursor-pointer min-h-[36px]"
+              title="Voltar para a tela de Pedidos Ativos & Baixas"
+            >
+              <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+              <span>Pedidos Ativos</span>
+            </button>
+          )}
+
+          <button
+            onClick={handleExportExcel}
+            className="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer min-h-[36px]"
+            title="Exportar pedidos fechados para planilha Excel (.xlsx)"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+            <span className="hidden sm:inline">Excel</span>
+          </button>
+
+          <button
+            onClick={handleExportTxt}
+            className="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer min-h-[36px]"
+            title="Exportar relatório em arquivo texto (.txt)"
+          >
+            <FileText className="w-4 h-4 text-cyan-400" />
+            <span className="hidden sm:inline">TXT</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Sub-tabs Navigation */}
+      <div className="flex flex-wrap items-center gap-2 bg-slate-900/90 border border-slate-800 p-2 rounded-2xl shadow-md">
+        <button
+          onClick={() => setSubView('closed')}
+          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer min-h-[36px] ${
+            subView === 'closed'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800 hover:bg-slate-800'
+          }`}
+        >
+          <Archive className="w-4 h-4" />
+          <span>Pedidos Fechados</span>
+          <span className="px-1.5 py-0.2 rounded-full bg-slate-900/60 text-[10px] font-mono">
+            {allClosedOrders.length}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setSubView('pending')}
+          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer min-h-[36px] ${
+            subView === 'pending'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800 hover:bg-slate-800'
+          }`}
+        >
+          <Clock className="w-4 h-4 text-amber-400" />
+          <span>Pendentes & Cobrança</span>
+          {pendingClosedOrders.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
+              {pendingClosedOrders.length}
+            </span>
+          )}
+        </button>
+
+        <button
+          onClick={() => setSubView('report')}
+          className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer min-h-[36px] ${
+            subView === 'report'
+              ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20'
+              : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800 hover:bg-slate-800'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-cyan-400" />
+          <span>Relatório do Caixa</span>
+          {cashRegisterSessions.length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-slate-900/60 text-[10px] font-mono">
+              {cashRegisterSessions.length} {cashRegisterSessions.length === 1 ? 'caixa' : 'caixas'}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Financial Metric Cards for the Closed Orders / Session */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+        {/* Total Faturado */}
+        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 shadow-md flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Faturamento do Caixa
+            </span>
+            <span className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5 block">
+              R$ {metrics.totalRevenue.toFixed(2).replace('.', ',')}
+            </span>
+            <span className="text-[10px] text-slate-500 mt-0.5 block">
+              {metrics.totalOrders} pedidos considerados
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex items-center justify-center shrink-0">
+            <DollarSign className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Total Recebido / Baixado */}
+        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 shadow-md flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Total Recebido (Baixado)
+            </span>
+            <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono mt-0.5 block">
+              R$ {metrics.totalPaid.toFixed(2).replace('.', ',')}
+            </span>
+            <span className="text-[10px] text-emerald-400/80 mt-0.5 block">
+              {metrics.paidCount} pedidos 100% quitados
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Total Pendente / A Receber */}
+        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 shadow-md flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Saldo Pendente (A Receber)
+            </span>
+            <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono mt-0.5 block">
+              R$ {metrics.totalPending.toFixed(2).replace('.', ',')}
+            </span>
+            <span className="text-[10px] text-amber-400/80 mt-0.5 block">
+              {metrics.pendingCount + metrics.partialCount} pedidos com saldo aberto
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Ticket Médio & Sessão */}
+        <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 shadow-md flex items-center justify-between">
+          <div>
+            <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              Ticket Médio
+            </span>
+            <span className="text-xl sm:text-2xl font-black text-white font-mono mt-0.5 block">
+              R$ {metrics.averageTicket.toFixed(2).replace('.', ',')}
+            </span>
+            <span className="text-[10px] text-slate-400 mt-0.5 block truncate max-w-[170px]">
+              {activeSessionDetails ? activeSessionDetails.name : 'Média de todos os caixas'}
+            </span>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* VIEW 1: All Closed Orders */}
+      {subView === 'closed' && (
+        <div className="space-y-4">
+          {/* Session Filter Ribbon & Search Bar */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3.5">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+              {/* Seletor de Sessão de Caixa */}
+              <div className="flex items-center gap-2.5 flex-wrap flex-1">
+                <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5 shrink-0">
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Sessão do Caixa:</span>
+                </span>
+                <div className="relative flex-1 sm:max-w-md">
+                  <select
+                    value={selectedSessionId}
+                    onChange={(e) => setSelectedSessionId(e.target.value)}
+                    className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400 cursor-pointer"
+                  >
+                    <option value="all">📦 Todos os Caixas Fechados ({allClosedOrders.length} pedidos)</option>
+                    {cashRegisterSessions.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        🔒 {s.name} ({s.totalOrders} pedidos • R$ {s.totalRevenue.toFixed(2)})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Botão de Reabrir Caixa se sessão específica estiver selecionada */}
+                {activeSessionDetails && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionToReopen(activeSessionDetails);
+                      setReopenPassword('');
+                      setReopenError(null);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                    title="Reabrir este caixa e retornar todos os pedidos para o painel de pedidos ativos (requer senha 8817)"
+                  >
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span>Reabrir Este Caixa</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Search Input */}
+              <div className="relative w-full lg:w-72">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar cliente, tel, nº ou peptídeo..."
+                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+            </div>
+
+            {/* Quick Status Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-0.5 border-t border-slate-800/80">
+              <span className="text-[11px] font-bold text-slate-400 mr-1.5 shrink-0">Filtrar Status:</span>
+              {[
+                { id: 'Todos', label: `Todos (${allClosedOrders.length})` },
+                { id: 'Pagos', label: `Pagos / Baixados (${metrics.paidCount})` },
+                { id: 'Pendentes / Parciais', label: `Pendentes & Parciais (${metrics.pendingCount + metrics.partialCount})` },
+                { id: 'Aguardando Baixa', label: `Aguardando Baixa (${metrics.waitingClearanceCount})` },
+                { id: 'Cancelados', label: `Cancelados (${metrics.cancelCount})` },
+              ].map((tab) => {
+                const isActive = statusFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setStatusFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                      isActive
+                        ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20'
+                        : 'bg-slate-800/80 hover:bg-slate-700/80 text-slate-300 border border-slate-700/60'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Orders Table Section */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <span className="text-xs font-bold text-slate-300 flex items-center gap-2">
+                <span>Listagem de Pedidos Fechados</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-[10px] font-mono">
+                  {filteredClosedOrders.length} encontrados
+                </span>
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Clique no pedido para visualizar todos os itens e comprovante
+              </span>
+            </div>
+
+            {filteredClosedOrders.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 space-y-3">
+                <Archive className="w-12 h-12 text-slate-600 mx-auto" />
+                <h3 className="text-base font-bold text-white">Nenhum pedido fechado nesta visualização</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Quando você clicar em <strong>"Fechar o Caixa"</strong> na aba de Pedidos (usando a senha 8817),
+                  todos os pedidos abertos daquele período serão transferidos para cá e a tela principal ficará limpa.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                      <th className="py-3 px-4">Pedido / Caixa</th>
+                      <th className="py-3 px-4">Cliente</th>
+                      <th className="py-3 px-4">Itens / Peptídeos</th>
+                      <th className="py-3 px-4">Total</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4">Baixa Financeira</th>
+                      <th className="py-3 px-4 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    {filteredClosedOrders.map((order) => {
+                      const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+                      const remaining = order.remainingAmount ?? (isPaid ? 0 : order.total);
+                      const paid = order.paidAmount ?? (isPaid ? order.total : 0);
+
+                      return (
+                        <tr
+                          key={order.id}
+                          className="hover:bg-slate-800/40 transition-colors group cursor-pointer"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          {/* Pedido & Caixa */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-white font-mono text-sm group-hover:text-cyan-400 transition-colors">
+                                {order.orderNumber}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-amber-400/90 font-mono mt-0.5">
+                              {order.closedSessionName || 'Caixa Fechado'}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              {new Date(order.createdAt).toLocaleDateString('pt-BR')} às{' '}
+                              {new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+
+                          {/* Cliente */}
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-white truncate max-w-[180px]">
+                              {order.customer?.name || 'Cliente'}
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <Phone className="w-3 h-3 text-slate-500" />
+                              <span>{order.customer?.phone || 'Sem telefone'}</span>
+                            </div>
+                            {order.customer?.cpf && (
+                              <div className="text-[10px] text-slate-500 font-mono">
+                                CPF: {order.customer.cpf}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* Itens */}
+                          <td className="py-3 px-4 max-w-[220px]">
+                            <div className="space-y-1">
+                              {(order.items || []).slice(0, 2).map((item, idx) => (
+                                <div key={idx} className="flex items-center gap-1.5 text-[11px] truncate">
+                                  <span className="w-4 h-4 rounded bg-slate-800 text-cyan-400 font-mono text-[10px] flex items-center justify-center font-bold shrink-0">
+                                    {item.quantity}x
+                                  </span>
+                                  <span className="truncate text-slate-200">
+                                    {item.product?.name} ({item.product?.dosage})
+                                  </span>
+                                </div>
+                              ))}
+                              {(order.items || []).length > 2 && (
+                                <span className="text-[10px] text-cyan-400 font-bold">
+                                  +{(order.items || []).length - 2} outro(s) item(ns)...
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Total */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="font-bold text-white font-mono text-sm block">
+                              R$ {(order.total || 0).toFixed(2).replace('.', ',')}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block">
+                              {order.paymentMethod || 'PIX'}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${
+                                isPaid
+                                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                  : order.status === 'Pago Parcial'
+                                  ? 'bg-orange-500/10 text-orange-300 border-orange-500/30'
+                                  : order.status === 'Cancelado'
+                                  ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                                  : 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+                              }`}
+                            >
+                              {order.status}
+                            </span>
+                          </td>
+
+                          {/* Baixa Financeira */}
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <div className="font-mono text-xs">
+                              <span className="text-emerald-400 font-semibold block">
+                                Pago: R$ {paid.toFixed(2).replace('.', ',')}
+                              </span>
+                              {remaining > 0 ? (
+                                <span className="text-amber-400 font-semibold block text-[11px]">
+                                  Resta: R$ {remaining.toFixed(2).replace('.', ',')}
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 text-[10px] block">
+                                  Quitado 100%
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Ações */}
+                          <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrder(order)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
+                              title="Ver detalhes completos do pedido"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setOrderToReopen(order)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 transition-colors cursor-pointer"
+                              title="Reabrir este pedido para o caixa ativo"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 2: Pending & Unpaid Closed Orders */}
+      {subView === 'pending' && (
+        <div className="space-y-4">
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <Clock className="w-6 h-6 text-amber-400 shrink-0" />
+              <div>
+                <h3 className="text-sm font-bold text-white">Pedidos Fechados com Saldos Pendentes</h3>
+                <p className="text-xs text-amber-200/80">
+                  Estes pedidos foram arquivados no fechamento do caixa, mas ainda possuem pagamentos parciais ou pendentes em aberto para cobrança.
+                </p>
+              </div>
+            </div>
+            <div className="px-4 py-2 rounded-xl bg-slate-950/80 border border-amber-500/40 text-right">
+              <span className="text-[10px] text-slate-400 uppercase font-bold block">Total a Cobrar</span>
+              <span className="text-lg font-black text-amber-400 font-mono">
+                R$ {pendingClosedOrders.reduce((sum, o) => {
+                  const rem = o.remainingAmount !== undefined ? o.remainingAmount : (o.status === 'Pago' ? 0 : o.total);
+                  return sum + Number(rem || 0);
+                }, 0).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            {pendingClosedOrders.length === 0 ? (
+              <div className="p-12 text-center text-slate-400 space-y-2">
+                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto" />
+                <h3 className="text-base font-bold text-white">Nenhum pedido pendente em caixas fechados</h3>
+                <p className="text-xs text-slate-500">
+                  Todos os pedidos dos caixas anteriores foram devidamente quitados e baixados.
+                </p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 bg-slate-950/80 text-slate-400 text-[11px] font-semibold uppercase tracking-wider">
+                      <th className="py-3 px-4">Pedido / Caixa</th>
+                      <th className="py-3 px-4">Cliente & Contato</th>
+                      <th className="py-3 px-4">Total</th>
+                      <th className="py-3 px-4">Pago</th>
+                      <th className="py-3 px-4">Saldo Pendente</th>
+                      <th className="py-3 px-4 text-right">Cobrança & Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                    {pendingClosedOrders.map((order) => {
+                      const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+                      const remaining = order.remainingAmount ?? (isPaid ? 0 : order.total);
+                      const paid = order.paidAmount ?? (isPaid ? order.total : 0);
+                      const cleanPhone = (order.customer?.phone || '').replace(/\D/g, '');
+
+                      const chargeMsg = encodeURIComponent(
+                        `Olá, ${order.customer?.name || 'Cliente'}! Tudo bem? Passando para lembrar sobre o saldo pendente de R$ ${remaining.toFixed(2).replace('.', ',')} referente ao seu pedido ${order.orderNumber} na ${storeSettings?.storeName || 'Peptide Imports Farma'}. Qualquer dúvida estamos à disposição!`
+                      );
+
+                      return (
+                        <tr key={order.id} className="hover:bg-slate-800/40 transition-colors">
+                          <td className="py-3 px-4 whitespace-nowrap">
+                            <span className="font-bold text-white font-mono text-sm block">
+                              {order.orderNumber}
+                            </span>
+                            <span className="text-[10px] text-amber-400/90 font-mono block">
+                              {order.closedSessionName || 'Caixa Fechado'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold text-white">{order.customer?.name}</div>
+                            <div className="text-[11px] text-slate-400">{order.customer?.phone}</div>
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-white">
+                            R$ {(order.total || 0).toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap font-mono text-emerald-400">
+                            R$ {paid.toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-3 px-4 whitespace-nowrap font-mono font-bold text-amber-400 text-sm">
+                            R$ {remaining.toFixed(2).replace('.', ',')}
+                          </td>
+                          <td className="py-3 px-4 text-right whitespace-nowrap space-x-2">
+                            {cleanPhone && (
+                              <a
+                                href={`https://wa.me/55${cleanPhone}?text=${chargeMsg}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow-xs"
+                                title="Enviar lembrete de cobrança no WhatsApp"
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                <span>Cobrar WhatsApp</span>
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrder(order)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
+                              title="Ver Detalhes"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOrderToReopen(order)}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 transition-colors cursor-pointer"
+                              title="Reabrir este pedido para o caixa ativo"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW 3: Closure Report & Cashier Sessions History */}
+      {subView === 'report' && (
+        <div className="space-y-6">
+          {/* Report Summary Cards */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white font-tech">RELATÓRIO FINANCEIRO DE CAIXAS</h3>
+                  <p className="text-xs text-slate-400">
+                    Demonstrativo consolidado dos períodos fechados e formas de pagamento
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleExportExcel}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <FileSpreadsheet className="w-4 h-4" />
+                  <span>Baixar Planilha Excel</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Methods Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <CreditCard className="w-4 h-4 text-cyan-400" />
+                  <span>Distribuição por Forma de Pagamento</span>
+                </span>
+                <div className="space-y-2 text-xs">
+                  {Object.entries(metrics.paymentMethodsMap).map(([method, data]) => {
+                    const percent = metrics.totalRevenue > 0 ? (data.total / metrics.totalRevenue) * 100 : 0;
+                    return (
+                      <div key={method} className="space-y-1">
+                        <div className="flex justify-between items-center text-slate-300">
+                          <span className="font-semibold">{method} ({data.count} pedidos)</span>
+                          <span className="font-mono font-bold text-white">
+                            R$ {data.total.toFixed(2).replace('.', ',')}{' '}
+                            <span className="text-slate-500 text-[10px]">({percent.toFixed(1)}%)</span>
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full"
+                            style={{ width: `${Math.min(100, percent)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {Object.keys(metrics.paymentMethodsMap).length === 0 && (
+                    <p className="text-slate-500 text-xs py-2 text-center">Nenhum dado financeiro para exibir.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Top Products in Closed Periods */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-amber-400" />
+                  <span>Top Peptídeos Vendidos nos Caixas Fechados</span>
+                </span>
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1 text-xs">
+                  {topProductsSold.slice(0, 5).map((prod, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800/80">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="w-5 h-5 rounded-md bg-amber-500/20 text-amber-300 font-mono text-[10px] font-bold flex items-center justify-center shrink-0">
+                          #{idx + 1}
+                        </span>
+                        <span className="truncate font-bold text-white text-xs">
+                          {prod.name} <span className="text-slate-400 font-normal">({prod.dosage})</span>
+                        </span>
+                      </div>
+                      <div className="text-right shrink-0 font-mono">
+                        <span className="text-cyan-400 font-bold block">{prod.quantity} un.</span>
+                        <span className="text-[10px] text-slate-500">R$ {prod.revenue.toFixed(2).replace('.', ',')}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {topProductsSold.length === 0 && (
+                    <p className="text-slate-500 text-xs py-2 text-center">Nenhum peptídeo registrado ainda.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* History of All Cash Register Sessions */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white font-tech">HISTÓRICO DE SESSÕES DE CAIXA</h3>
+                  <p className="text-xs text-slate-400">
+                    Registro detalhado de cada fechamento de caixa executado
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {cashRegisterSessions.length === 0 ? (
+              <div className="p-8 text-center text-slate-400 space-y-2">
+                <p className="text-xs text-slate-500">Nenhum fechamento de caixa realizado até o momento.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {cashRegisterSessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className="bg-slate-950/80 border border-slate-800 hover:border-amber-500/40 rounded-2xl p-4 space-y-3 transition-all shadow-md"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2.5">
+                      <span className="font-bold text-white text-xs font-mono truncate">
+                        🔒 {session.name}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
+                        {session.totalOrders} pedidos
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between text-slate-400">
+                        <span>Faturamento:</span>
+                        <span className="font-mono font-bold text-cyan-400">
+                          R$ {session.totalRevenue.toFixed(2).replace('.', ',')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-slate-400">
+                        <span>Quitado:</span>
+                        <span className="font-mono text-emerald-400">
+                          R$ {session.totalPaid.toFixed(2).replace('.', ',')}
+                        </span>
+                      </div>
+                      {session.totalPending > 0 && (
+                        <div className="flex justify-between text-slate-400">
+                          <span>Pendente:</span>
+                          <span className="font-mono text-amber-400 font-bold">
+                            R$ {session.totalPending.toFixed(2).replace('.', ',')}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-slate-500 text-[10px] pt-1">
+                        <span>Fechado por:</span>
+                        <span className="text-slate-400">{session.closedBy}</span>
+                      </div>
+                      <div className="flex justify-between text-slate-500 text-[10px]">
+                        <span>Data:</span>
+                        <span>{new Date(session.closedAt).toLocaleString('pt-BR')}</span>
+                      </div>
+                      {session.notes && (
+                        <p className="text-[11px] text-amber-200/90 bg-slate-900 p-2 rounded-lg border border-slate-800 mt-2 italic">
+                          "{session.notes}"
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="pt-2 flex items-center justify-between gap-2 border-t border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedSessionId(session.id);
+                          setSubView('closed');
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-cyan-400 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Ver Pedidos ({session.totalOrders})
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSessionToReopen(session);
+                          setReopenPassword('');
+                          setReopenError(null);
+                        }}
+                        className="px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                        title="Reabrir este caixa (senha 8817)"
+                      >
+                        <Unlock className="w-3 h-3" />
+                        <span>Reabrir</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Order Details Viewer */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-2xl bg-slate-900 border border-slate-700 rounded-3xl p-6 text-white shadow-2xl space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                  <Archive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <span>Pedido {selectedOrder.orderNumber}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-mono font-bold">
+                      {selectedOrder.closedSessionName || 'Caixa Fechado'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Registrado em {new Date(selectedOrder.createdAt).toLocaleDateString('pt-BR')} às{' '}
+                    {new Date(selectedOrder.createdAt).toLocaleTimeString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Customer & Address Details */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
+                <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px] block flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Dados do Cliente</span>
+                </span>
+                <p className="text-white font-bold">{selectedOrder.customer?.name}</p>
+                <p className="text-slate-400">WhatsApp: <strong className="text-slate-200">{selectedOrder.customer?.phone}</strong></p>
+                {selectedOrder.customer?.email && <p className="text-slate-400">Email: {selectedOrder.customer.email}</p>}
+                {selectedOrder.customer?.cpf && <p className="text-slate-400 font-mono">CPF: {selectedOrder.customer.cpf}</p>}
+              </div>
+
+              <div className="bg-slate-950/70 border border-slate-800 rounded-2xl p-4 space-y-2 text-xs">
+                <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px] block flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Resumo Financeiro</span>
+                </span>
+                <p className="text-slate-400">Método: <strong className="text-white">{selectedOrder.paymentMethod}</strong></p>
+                <p className="text-slate-400">Status: <strong className="text-cyan-400">{selectedOrder.status}</strong></p>
+                <p className="text-slate-400">Valor Pago: <strong className="text-emerald-400 font-mono">R$ {(selectedOrder.paidAmount ?? (selectedOrder.status === 'Pago' ? selectedOrder.total : 0)).toFixed(2).replace('.', ',')}</strong></p>
+                <p className="text-slate-400">Saldo Restante: <strong className="text-amber-400 font-mono">R$ {(selectedOrder.remainingAmount ?? (selectedOrder.status === 'Pago' ? 0 : selectedOrder.total)).toFixed(2).replace('.', ',')}</strong></p>
+              </div>
+            </div>
+
+            {/* Items */}
+            <div className="space-y-2 text-xs">
+              <span className="font-bold text-slate-300 uppercase tracking-wider text-[11px] block flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Itens Comprados</span>
+              </span>
+              <div className="bg-slate-950/60 border border-slate-800 rounded-2xl divide-y divide-slate-800/80">
+                {(selectedOrder.items || []).map((it, idx) => (
+                  <div key={idx} className="p-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
+                        {it.product?.imageUrl ? (
+                          <img src={it.product.imageUrl} alt={it.product.name} className="w-full h-full object-cover rounded-lg" />
+                        ) : (
+                          <PeptideVial capColor={it.product?.capColor || '#0088FF'} size="sm" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-bold text-white text-xs">{it.product?.name} ({it.product?.dosage})</p>
+                        <p className="text-[11px] text-slate-400">{it.quantity} unidade(s) x R$ {(it.product?.price || 0).toFixed(2).replace('.', ',')}</p>
+                      </div>
+                    </div>
+                    <span className="font-bold text-cyan-300 font-mono">
+                      R$ {((it.product?.price || 0) * it.quantity).toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Totals Breakdown */}
+            <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-1.5 text-xs font-mono">
+              <div className="flex justify-between text-slate-400">
+                <span>Subtotal:</span>
+                <span>R$ {(selectedOrder.subtotal || 0).toFixed(2).replace('.', ',')}</span>
+              </div>
+              <div className="flex justify-between text-slate-400">
+                <span>Frete:</span>
+                <span>R$ {(selectedOrder.shipping || 0).toFixed(2).replace('.', ',')}</span>
+              </div>
+              {(selectedOrder.discount || 0) > 0 && (
+                <div className="flex justify-between text-emerald-400">
+                  <span>Desconto:</span>
+                  <span>- R$ {selectedOrder.discount.toFixed(2).replace('.', ',')}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-white font-bold text-sm pt-1 border-t border-slate-800">
+                <span>Total Geral:</span>
+                <span className="text-cyan-400">R$ {(selectedOrder.total || 0).toFixed(2).replace('.', ',')}</span>
+              </div>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => setOrderToReopen(selectedOrder)}
+                className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reabrir Pedido no Caixa Ativo</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedOrder(null)}
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Reopen Single Order Confirmation */}
+      {orderToReopen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <div
+            className="relative w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 text-white shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Reabrir Pedido {orderToReopen.orderNumber}?</h3>
+                <p className="text-xs text-slate-400">Mover de volta para o painel de pedidos ativos</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              O pedido do cliente <strong>{orderToReopen.customer?.name}</strong> no valor de{' '}
+              <strong className="text-cyan-400">R$ {(orderToReopen.total || 0).toFixed(2).replace('.', ',')}</strong>{' '}
+              será desmarcado do caixa fechado e voltará a aparecer imediatamente na tela de <strong>Pedidos Ativos</strong>.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isReopeningOrder}
+                onClick={() => setOrderToReopen(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isReopeningOrder}
+                onClick={handleConfirmReopenOrder}
+                className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/20"
+              >
+                {isReopeningOrder ? 'Reabrindo...' : 'Sim, Reabrir Pedido'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Reopen Entire Cash Register Session (Requires Password 8817) */}
+      {sessionToReopen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-200">
+          <form
+            onSubmit={handleConfirmReopenSession}
+            className="relative w-full max-w-md bg-slate-900 border border-amber-500/40 rounded-3xl p-6 text-white shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center shrink-0">
+                <Unlock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Reabrir Sessão de Caixa</h3>
+                <p className="text-xs text-amber-300/80">{sessionToReopen.name}</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Esta ação desfaz o fechamento deste caixa e traz todos os{' '}
+              <strong>{sessionToReopen.totalOrders} pedidos</strong> (totalizando{' '}
+              <strong className="text-cyan-400">R$ {sessionToReopen.totalRevenue.toFixed(2).replace('.', ',')}</strong>)
+              de volta para o painel de pedidos ativos.
+            </p>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                <span>Digite a senha de segurança (8817):</span>
+              </label>
+              <input
+                type="password"
+                value={reopenPassword}
+                onChange={(e) => {
+                  setReopenPassword(e.target.value);
+                  setReopenError(null);
+                }}
+                placeholder="Digite a senha 8817"
+                autoFocus
+                className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl text-white font-mono text-sm focus:outline-none"
+              />
+              {reopenError && (
+                <p className="text-[11px] text-red-400 font-semibold flex items-center gap-1 mt-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{reopenError}</span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isReopeningSession}
+                onClick={() => setSessionToReopen(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isReopeningSession || !reopenPassword}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
+              >
+                {isReopeningSession ? 'Reabrindo Caixa...' : 'Confirmar & Reabrir Caixa'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+};

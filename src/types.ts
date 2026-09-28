@@ -69,6 +69,23 @@ export interface Order {
   clearedBy?: string;
   notes?: string;
   updatedAt?: string;
+  isClosed?: boolean; // Se o pedido faz parte de um caixa/período fechado
+  closedAt?: string; // Data e hora do fechamento do caixa
+  closedSessionId?: string; // ID da sessão de caixa (ex: caixa-1727500000000)
+  closedSessionName?: string; // Nome legível do caixa fechado (ex: Caixa #1 - 28/09/2026 14:30)
+}
+
+export interface CashRegisterSession {
+  id: string;
+  name: string;
+  closedAt: string;
+  closedBy?: string;
+  totalOrders: number;
+  totalRevenue: number;
+  totalPaid: number;
+  totalPending: number;
+  orderIds: string[];
+  notes?: string;
 }
 
 export interface FinancialTransaction {

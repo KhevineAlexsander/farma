@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon, ProductRequest, SavedDoseProtocol, InjectionRecord, RepurchaseBenefit } from '../types';
+import { Product, CartItem, Order, FinancialTransaction, User, ProductCategory, OrderStatus, Address, Employee, StoreSettings, Coupon, ProductRequest, SavedDoseProtocol, InjectionRecord, RepurchaseBenefit, CashRegisterSession } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_ORDERS, INITIAL_TRANSACTIONS, CURRENT_CLIENT_USER, ADMIN_USER, INITIAL_EMPLOYEES, INITIAL_SETTINGS, INITIAL_COUPONS } from '../data/mockData';
 import {
   getSupabaseClient,
@@ -157,6 +157,10 @@ function mergeOrderHelper(existing: Order, incoming: Order): Order {
     remainingAmount: remainingAmount !== undefined ? remainingAmount : (isPaid ? 0 : undefined),
     trackingCode: incoming.trackingCode || existing.trackingCode,
     notes: incoming.notes || existing.notes,
+    isClosed: incoming.isClosed !== undefined ? incoming.isClosed : existing.isClosed,
+    closedAt: incoming.closedAt || existing.closedAt,
+    closedSessionId: incoming.closedSessionId || existing.closedSessionId,
+    closedSessionName: incoming.closedSessionName || existing.closedSessionName,
   };
 }
 
@@ -235,6 +239,10 @@ interface AppContextType {
   clearAllOrders: () => Promise<void>;
   clearAllFinances: () => Promise<void>;
   refreshSalesData: (silent?: boolean) => Promise<{ success: boolean; count: number }>;
+  cashRegisterSessions: CashRegisterSession[];
+  closeCashRegister: (password: string, notes?: string) => Promise<{ success: boolean; message: string; session?: CashRegisterSession }>;
+  reopenOrderInActiveSession: (orderId: string) => Promise<boolean>;
+  reopenEntireCashSession: (sessionId: string, password: string) => Promise<{ success: boolean; message: string }>;
 
   financialTransactions: FinancialTransaction[];
   addFinancialTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
@@ -981,6 +989,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('peptide_orders', JSON.stringify(orders));
   }, [orders]);
+
+  // --- Cash Register Sessions (Caixas Fechados) State ---
+  const [cashRegisterSessions, setCashRegisterSessions] = useState<CashRegisterSession[]>(() => {
+    const saved = localStorage.getItem('peptide_cash_sessions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      } catch {}
+    }
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('peptide_cash_sessions', JSON.stringify(cashRegisterSessions));
+  }, [cashRegisterSessions]);
 
   // --- Financial State (Real Data connected to Firestore, starting from zero) ---
   const [financialTransactions, setFinancialTransactions] = useState<FinancialTransaction[]>(() => {
@@ -3714,6 +3738,216 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('Histórico financeiro zerado com sucesso.');
   };
 
+  const closeCashRegister = async (
+    password: string,
+    notes?: string
+  ): Promise<{ success: boolean; message: string; session?: CashRegisterSession }> => {
+    if (password.trim() !== '8817') {
+      return { success: false, message: 'Senha incorreta! Digite a senha 8817 para fechar o caixa.' };
+    }
+
+    // Get all orders that are currently in the active period
+    const activeOrders = orders.filter((o) => !o.isClosed && !o.closedAt);
+    if (activeOrders.length === 0) {
+      return {
+        success: false,
+        message: 'Não há pedidos no período atual para fechar o caixa. Todos os pedidos já estão arquivados.',
+      };
+    }
+
+    const now = new Date();
+    const sessionId = `caixa-${now.getTime()}`;
+    const formattedDate = now.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const sessionName = `Caixa #${cashRegisterSessions.length + 1} - ${formattedDate}`;
+
+    let totalRevenue = 0;
+    let totalPaid = 0;
+    let totalPending = 0;
+
+    activeOrders.forEach((o) => {
+      totalRevenue += Number(o.total || 0);
+      const isOrderPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+      const paid = o.paidAmount !== undefined ? o.paidAmount : (isOrderPaid ? o.total : 0);
+      const pending = o.remainingAmount !== undefined ? o.remainingAmount : (!isOrderPaid && o.status !== 'Cancelado' ? o.total : 0);
+      totalPaid += Number(paid || 0);
+      totalPending += Number(pending || 0);
+    });
+
+    const newSession: CashRegisterSession = {
+      id: sessionId,
+      name: sessionName,
+      closedAt: now.toISOString(),
+      closedBy: currentUser?.name || currentUser?.email || 'Administrador',
+      totalOrders: activeOrders.length,
+      totalRevenue,
+      totalPaid,
+      totalPending,
+      orderIds: activeOrders.map((o) => o.id),
+      notes: notes?.trim() || undefined,
+    };
+
+    // 1. Mark orders as closed
+    const activeOrderIds = new Set(activeOrders.map((o) => o.id));
+    const updatedOrders = orders.map((o) => {
+      if (activeOrderIds.has(o.id)) {
+        return {
+          ...o,
+          isClosed: true,
+          closedAt: now.toISOString(),
+          closedSessionId: sessionId,
+          closedSessionName: sessionName,
+        };
+      }
+      return o;
+    });
+
+    setOrders(updatedOrders);
+    localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+
+    // 2. Add session
+    const updatedSessions = [newSession, ...cashRegisterSessions];
+    setCashRegisterSessions(updatedSessions);
+    localStorage.setItem('peptide_cash_sessions', JSON.stringify(updatedSessions));
+
+    // 3. Persist to Supabase
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConfigured()) {
+        const dbOrders = updatedOrders.filter((o) => activeOrderIds.has(o.id)).map(mapOrderToDB);
+        await supabase.from('orders').upsert(dbOrders);
+      }
+    } catch (e) {
+      console.warn('Supabase cash register closure sync note:', e);
+    }
+
+    // 4. Persist to Firestore
+    try {
+      for (const o of activeOrders) {
+        await setDoc(
+          doc(db, 'orders', o.id),
+          {
+            isClosed: true,
+            closedAt: now.toISOString(),
+            closedSessionId: sessionId,
+            closedSessionName: sessionName,
+          },
+          { merge: true }
+        ).catch(() => {});
+      }
+      await setDoc(doc(db, 'settings', 'cash_sessions'), { sessions: updatedSessions }, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore cash register closure note:', e);
+    }
+
+    showToast(`🔒 Caixa fechado com sucesso! ${activeOrders.length} pedidos arquivados na aba Pedidos Fechados. Tela limpa para o novo período!`);
+    return {
+      success: true,
+      message: `Caixa fechado com sucesso! ${activeOrders.length} pedidos arquivados.`,
+      session: newSession,
+    };
+  };
+
+  const reopenOrderInActiveSession = async (orderId: string): Promise<boolean> => {
+    let targetOrder: Order | undefined;
+    const updatedOrders = orders.map((o) => {
+      if (o.id === orderId) {
+        targetOrder = {
+          ...o,
+          isClosed: false,
+          closedAt: undefined,
+          closedSessionId: undefined,
+          closedSessionName: undefined,
+        };
+        return targetOrder;
+      }
+      return o;
+    });
+
+    setOrders(updatedOrders);
+    localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+
+    if (targetOrder) {
+      try {
+        const supabase = getSupabaseClient();
+        if (supabase && isSupabaseConfigured()) {
+          await supabase.from('orders').upsert(mapOrderToDB(targetOrder));
+        }
+        await setDoc(
+          doc(db, 'orders', orderId),
+          { isClosed: false, closedAt: null, closedSessionId: null, closedSessionName: null },
+          { merge: true }
+        ).catch(() => {});
+      } catch (e) {
+        console.warn('Reopen order sync note:', e);
+      }
+    }
+
+    showToast(`Pedido ${targetOrder?.orderNumber || orderId} reaberto e movido para o caixa ativo!`);
+    return true;
+  };
+
+  const reopenEntireCashSession = async (
+    sessionId: string,
+    password: string
+  ): Promise<{ success: boolean; message: string }> => {
+    if (password.trim() !== '8817') {
+      return { success: false, message: 'Senha incorreta! Digite a senha 8817 para reabrir o caixa.' };
+    }
+
+    const session = cashRegisterSessions.find((s) => s.id === sessionId);
+    if (!session) {
+      return { success: false, message: 'Sessão de caixa não encontrada.' };
+    }
+
+    const sessionOrderIds = new Set(session.orderIds || []);
+    const updatedOrders = orders.map((o) => {
+      if (sessionOrderIds.has(o.id) || o.closedSessionId === sessionId) {
+        return {
+          ...o,
+          isClosed: false,
+          closedAt: undefined,
+          closedSessionId: undefined,
+          closedSessionName: undefined,
+        };
+      }
+      return o;
+    });
+
+    setOrders(updatedOrders);
+    localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+
+    const updatedSessions = cashRegisterSessions.filter((s) => s.id !== sessionId);
+    setCashRegisterSessions(updatedSessions);
+    localStorage.setItem('peptide_cash_sessions', JSON.stringify(updatedSessions));
+
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConfigured()) {
+        const dbOrders = updatedOrders.filter((o) => sessionOrderIds.has(o.id)).map(mapOrderToDB);
+        await supabase.from('orders').upsert(dbOrders);
+      }
+      for (const ordId of sessionOrderIds) {
+        await setDoc(
+          doc(db, 'orders', ordId),
+          { isClosed: false, closedAt: null, closedSessionId: null, closedSessionName: null },
+          { merge: true }
+        ).catch(() => {});
+      }
+      await setDoc(doc(db, 'settings', 'cash_sessions'), { sessions: updatedSessions }, { merge: true }).catch(() => {});
+    } catch (e) {
+      console.warn('Reopen session sync note:', e);
+    }
+
+    showToast(`🔓 Caixa ${session.name} reaberto com sucesso! Pedidos retornaram ao painel ativo.`);
+    return { success: true, message: `Caixa ${session.name} reaberto com sucesso!` };
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -3763,6 +3997,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         clearAllOrders,
         clearAllFinances,
         refreshSalesData,
+        cashRegisterSessions,
+        closeCashRegister,
+        reopenOrderInActiveSession,
+        reopenEntireCashSession,
         financialTransactions,
         addFinancialTransaction,
         deleteFinancialTransaction,
