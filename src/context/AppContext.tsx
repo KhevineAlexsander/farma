@@ -663,10 +663,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             await supabase.from('store_settings').upsert(mapSettingsToDB(INITIAL_SETTINGS));
           }
 
-          // Fetch Orders (Supabase PostgreSQL is PRIMARY - merges all existing local/cloud orders safely)
+          // Fetch Orders and Closed Orders from Supabase
           const { data: ordData, error: ordErr } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-          if (!ordErr && ordData) {
-            const mapped = ordData.map(mapDBToOrder).filter((o) => !isBlacklistedOrder(o));
+          const { data: closedOrdData, error: closedOrdErr } = await supabase.from('closed_orders').select('*').order('created_at', { ascending: false });
+          
+          const combinedOrdRaw = [
+            ...(ordData || []),
+            ...(closedOrdData || [])
+          ];
+
+          if (!ordErr || !closedOrdErr) {
+            const mapped = combinedOrdRaw.map(mapDBToOrder).filter((o) => !isBlacklistedOrder(o));
             setOrders((prev) => {
               const orderMap = new Map<string, Order>();
               // 1. Keep all existing orders currently in memory / localStorage
@@ -690,15 +697,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
               localStorage.setItem('peptide_orders', JSON.stringify(merged));
 
-              // 3. Primary sync: if there are any existing orders not yet in Supabase, upload them immediately
-              if (merged.length > mapped.length) {
+              // 3. Primary sync: if there are any existing active orders not yet in Supabase, upload them immediately
+              const activeMapped = ordData || [];
+              if (merged.filter(o => !o.isClosed && !o.closedAt).length > activeMapped.length) {
                 const missingForSupabase = merged
-                  .filter((o) => !mapped.some((so) => (so.id && so.id === o.id) || (so.orderNumber && so.orderNumber === o.orderNumber)))
+                  .filter((o) => !o.isClosed && !o.closedAt && !activeMapped.some((so: any) => (so.id && so.id === o.id) || (so.order_number && so.order_number === o.orderNumber)))
                   .map(mapOrderToDB);
                 if (missingForSupabase.length > 0) {
                   supabase.from('orders').upsert(missingForSupabase).then(({ error: upErr }) => {
                     if (upErr) console.warn('Supabase missing orders replication note:', upErr.message);
-                    else console.log(`Auto-seeded ${missingForSupabase.length} existing orders to Supabase (Primary DB)!`);
+                    else console.log(`Auto-seeded ${missingForSupabase.length} existing active orders to Supabase!`);
                   });
                 }
               }
@@ -3857,12 +3865,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setCashRegisterSessions(updatedSessions);
     localStorage.setItem('peptide_cash_sessions', JSON.stringify(updatedSessions));
 
-    // 3. Persist to Supabase
+    // 3. Persist to Supabase: upsert into closed_orders and delete from active orders table
     try {
       const supabase = getSupabaseClient();
       if (supabase && isSupabaseConfigured()) {
-        const dbOrders = updatedOrders.filter((o) => activeOrderIds.has(o.id)).map(mapOrderToDB);
-        await supabase.from('orders').upsert(dbOrders);
+        const closedDbOrders = updatedOrders.filter((o) => activeOrderIds.has(o.id)).map(mapOrderToDB);
+        await supabase.from('closed_orders').upsert(closedDbOrders);
+        await supabase.from('orders').delete().in('id', Array.from(activeOrderIds));
       }
     } catch (e) {
       console.warn('Supabase cash register closure sync note:', e);
@@ -3887,10 +3896,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Firestore cash register closure note:', e);
     }
 
-    showToast(`🔒 Caixa fechado com sucesso! ${activeOrders.length} pedidos arquivados na aba Pedidos Fechados. Tela limpa para o novo período!`);
+    showToast(`🔒 Caixa fechado com sucesso! ${activeOrders.length} pedidos migrados para a tabela de fechados. Tela limpa para o novo período!`);
     return {
       success: true,
-      message: `Caixa fechado com sucesso! ${activeOrders.length} pedidos arquivados.`,
+      message: `Caixa fechado com sucesso! ${activeOrders.length} pedidos migrados.`,
       session: newSession,
     };
   };
@@ -3919,6 +3928,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const supabase = getSupabaseClient();
         if (supabase && isSupabaseConfigured()) {
           await supabase.from('orders').upsert(mapOrderToDB(targetOrder));
+          await supabase.from('closed_orders').delete().eq('id', orderId);
         }
         await setDoc(
           doc(db, 'orders', orderId),
@@ -3930,7 +3940,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    showToast(`Pedido ${targetOrder?.orderNumber || orderId} reaberto e movido para o caixa ativo!`);
+    showToast(`Pedido ${targetOrder?.orderNumber || orderId} reaberto e retornado para o caixa ativo!`);
     return true;
   };
 
@@ -3971,8 +3981,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const supabase = getSupabaseClient();
       if (supabase && isSupabaseConfigured()) {
-        const dbOrders = updatedOrders.filter((o) => sessionOrderIds.has(o.id)).map(mapOrderToDB);
-        await supabase.from('orders').upsert(dbOrders);
+        const dbOrders = updatedOrders.filter((o) => sessionOrderIds.has(o.id) || o.id === sessionId).map(mapOrderToDB);
+        if (dbOrders.length > 0) {
+          await supabase.from('orders').upsert(dbOrders);
+        }
+        await supabase.from('closed_orders').delete().in('id', Array.from(sessionOrderIds));
       }
       for (const ordId of sessionOrderIds) {
         await setDoc(
