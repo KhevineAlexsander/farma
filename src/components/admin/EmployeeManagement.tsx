@@ -40,6 +40,7 @@ export const EmployeeManagement: React.FC = () => {
   const [permissions, setPermissions] = useState({
     canManageProducts: false,
     canManageOrders: true,
+    canManageClosedOrders: true,
     canManageFinances: false,
     canManageStaff: false,
     canManageSettings: false,
@@ -76,6 +77,7 @@ export const EmployeeManagement: React.FC = () => {
     setPermissions({
       canManageProducts: false,
       canManageOrders: true,
+      canManageClosedOrders: true,
       canManageFinances: false,
       canManageStaff: false,
       canManageSettings: false,
@@ -94,7 +96,16 @@ export const EmployeeManagement: React.FC = () => {
     setShowPassword(false);
     setRole(emp.role);
     setStatus(emp.status);
-    setPermissions({ ...emp.permissions });
+    setPermissions({
+      canManageProducts: emp.permissions?.canManageProducts ?? false,
+      canManageOrders: emp.permissions?.canManageOrders ?? true,
+      canManageClosedOrders: emp.permissions?.canManageClosedOrders ?? emp.permissions?.canManageOrders ?? true,
+      canManageFinances: emp.permissions?.canManageFinances ?? false,
+      canManageStaff: emp.permissions?.canManageStaff ?? false,
+      canManageSettings: emp.permissions?.canManageSettings ?? false,
+      canManageCoupons: emp.permissions?.canManageCoupons ?? false,
+      canManageReports: emp.permissions?.canManageReports ?? false,
+    });
     setIsModalOpen(true);
   };
 
@@ -397,6 +408,11 @@ export const EmployeeManagement: React.FC = () => {
                         Pedidos & Baixas
                       </span>
                     )}
+                    {(emp.permissions.canManageClosedOrders ?? emp.permissions.canManageOrders) && (
+                      <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                        Pedidos Fechados (Caixa)
+                      </span>
+                    )}
                     {emp.permissions.canManageProducts && (
                       <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold border bg-cyan-500/15 text-cyan-300 border-cyan-500/30">
                         Produtos & Catálogo
@@ -693,6 +709,7 @@ export const EmployeeManagement: React.FC = () => {
                       onClick={() =>
                         setPermissions({
                           canManageOrders: true,
+                          canManageClosedOrders: true,
                           canManageProducts: true,
                           canManageFinances: true,
                           canManageStaff: true,
@@ -710,6 +727,7 @@ export const EmployeeManagement: React.FC = () => {
                       onClick={() =>
                         setPermissions({
                           canManageOrders: true,
+                          canManageClosedOrders: true,
                           canManageProducts: false,
                           canManageFinances: false,
                           canManageStaff: false,
@@ -727,6 +745,7 @@ export const EmployeeManagement: React.FC = () => {
                       onClick={() =>
                         setPermissions({
                           canManageOrders: false,
+                          canManageClosedOrders: true,
                           canManageProducts: false,
                           canManageFinances: true,
                           canManageStaff: false,
@@ -744,6 +763,7 @@ export const EmployeeManagement: React.FC = () => {
                       onClick={() =>
                         setPermissions({
                           canManageOrders: false,
+                          canManageClosedOrders: false,
                           canManageProducts: false,
                           canManageFinances: false,
                           canManageStaff: false,
@@ -772,6 +792,21 @@ export const EmployeeManagement: React.FC = () => {
                     <div>
                       <span className="text-slate-200 font-bold block">Pedidos & Baixas</span>
                       <span className="text-[10px] text-slate-500">Visualizar e dar baixa em pedidos do site</span>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 cursor-pointer hover:border-slate-700 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={permissions.canManageClosedOrders ?? false}
+                      onChange={(e) =>
+                        setPermissions({ ...permissions, canManageClosedOrders: e.target.checked })
+                      }
+                      className="accent-amber-500 rounded"
+                    />
+                    <div>
+                      <span className="text-amber-300 font-bold block">Pedidos Fechados (Caixa)</span>
+                      <span className="text-[10px] text-slate-500">Histórico de caixas fechados e relatórios</span>
                     </div>
                   </label>
 

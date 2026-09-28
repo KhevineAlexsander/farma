@@ -159,6 +159,7 @@ export interface User {
   permissions?: {
     canManageProducts: boolean;
     canManageOrders: boolean;
+    canManageClosedOrders?: boolean;
     canManageFinances: boolean;
     canManageStaff: boolean;
     canManageSettings: boolean;
@@ -205,6 +206,7 @@ export interface Employee {
   permissions: {
     canManageProducts: boolean;
     canManageOrders: boolean;
+    canManageClosedOrders?: boolean;
     canManageFinances: boolean;
     canManageStaff: boolean;
     canManageSettings: boolean;

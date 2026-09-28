@@ -97,6 +97,7 @@ export const AdminDashboard: React.FC = () => {
   const permissions = isMasterAdmin
     ? {
         canManageOrders: true,
+        canManageClosedOrders: true,
         canManageProducts: true,
         canManageFinances: true,
         canManageStaff: true,
@@ -106,6 +107,7 @@ export const AdminDashboard: React.FC = () => {
       }
     : (currentUser?.permissions || staffEmployee?.permissions || {
         canManageOrders: true,
+        canManageClosedOrders: false,
         canManageProducts: false,
         canManageFinances: false,
         canManageStaff: false,
@@ -127,7 +129,7 @@ export const AdminDashboard: React.FC = () => {
       label: 'Pedidos Fechados (Caixa)',
       icon: Archive,
       badge: closedOrdersCount > 0 ? `${closedOrdersCount}` : null,
-      visible: permissions.canManageOrders,
+      visible: permissions.canManageClosedOrders ?? permissions.canManageOrders,
     },
     {
       id: 'products' as const,
@@ -403,7 +405,7 @@ export const AdminDashboard: React.FC = () => {
                 onNavigateToClosedOrders={() => setActiveTab('closed_orders')}
               />
             )}
-            {activeTab === 'closed_orders' && permissions.canManageOrders && (
+            {activeTab === 'closed_orders' && (permissions.canManageClosedOrders ?? permissions.canManageOrders) && (
               <ClosedOrdersTab onReturnToOrders={() => setActiveTab('orders')} />
             )}
             {activeTab === 'products' && permissions.canManageProducts && <ProductManagement />}
