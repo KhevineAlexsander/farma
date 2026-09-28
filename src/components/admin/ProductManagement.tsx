@@ -54,6 +54,7 @@ export const ProductManagement: React.FC = () => {
     executeCatalogDeduplication,
     saveAllProductsToCloud, 
     refreshProductsFromDatabase,
+    isSupabaseActive,
     currentUser,
     productRequests,
     approveProductRequest,
@@ -480,7 +481,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
             <span className="text-[11px] font-medium text-slate-300">
-              Banco: <strong className="text-emerald-400">Sincronizado</strong> ({products.length} itens)
+              Banco Principal: <strong className="text-emerald-400">Supabase</strong> ({products.length} produtos ativos)
             </span>
           </div>
         </div>
@@ -496,10 +497,10 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
             }}
             disabled={isSavingProducts}
             className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600/30 to-blue-600/30 hover:from-cyan-600/40 hover:to-blue-600/40 text-cyan-300 hover:text-white border border-cyan-500/50 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-50"
-            title="Gravar todos os produtos ativos diretamente no banco de dados Firestore"
+            title="Gravar todos os produtos ativos diretamente no Supabase (Banco Principal)"
           >
             <UploadCloud className={`w-4 h-4 ${isSavingProducts ? 'animate-bounce text-cyan-400' : 'text-cyan-400'}`} />
-            <span>{isSavingProducts ? 'Gravando no Banco...' : `Salvar no Banco (${products.length})`}</span>
+            <span>{isSavingProducts ? 'Gravando no Supabase...' : `Salvar no Supabase (${products.length})`}</span>
           </button>
 
           <button
@@ -554,11 +555,11 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
             onClick={handleRefreshDatabase}
             disabled={isRefreshingDb}
             className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 hover:text-white border border-cyan-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-all cursor-pointer disabled:opacity-60"
-            title="Sincronizar produtos diretamente com o banco de dados (Supabase & Firebase) em tempo real"
+            title="Sincronizar produtos com o Supabase (Banco Principal) em tempo real"
           >
             <RefreshCw className={`w-4 h-4 text-cyan-400 ${isRefreshingDb ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Sincronizar Banco</span>
-            <span className="sm:hidden">Sincronizar</span>
+            <span className="hidden sm:inline">Sincronizar Supabase</span>
+            <span className="sm:hidden">Supabase</span>
           </button>
 
           <button
@@ -899,7 +900,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               </div>
               <div>
                 <h3 className="text-base font-bold text-white">Excluir Produto</h3>
-                <p className="text-xs text-slate-400">Sincronização imediata com o banco de dados</p>
+                <p className="text-xs text-slate-400">Exclusão no Supabase (Banco Principal)</p>
               </div>
             </div>
 
@@ -923,7 +924,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
 
             <p className="text-xs text-slate-300 leading-relaxed">
               Tem certeza que deseja excluir permanentemente <strong>{productToDelete.name} ({productToDelete.dosage})</strong>? 
-              O produto será excluído do banco de dados (Supabase & Firebase Firestore) e removido do catálogo da loja.
+              O produto será excluído permanentemente do <strong>Supabase PostgreSQL</strong> (Banco Principal) e removido do catálogo da loja.
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">
@@ -944,12 +945,12 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                 {isDeletingProduct ? (
                   <>
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span>Excluindo do Banco...</span>
+                    <span>Excluindo do Supabase...</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span>Excluir Definitivamente</span>
+                    <span>Excluir do Supabase</span>
                   </>
                 )}
               </button>

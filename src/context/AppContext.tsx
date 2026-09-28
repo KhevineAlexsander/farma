@@ -334,10 +334,9 @@ interface AppContextType {
 /**
  * Synchronizes incoming products with the catalog:
  * - Excludes any product whose ID or canonical deduplication key is in deletedIds
- * - If incoming products exist from the database, uses those products and does NOT resurrect deleted items
  * - Guarantees official prices & metadata for items matching official catalog entries
  * - Eliminates duplicate products across IDs, names, and dosages
- * - If no incoming products are provided, returns the official catalog filtered by deletedIds
+ * - Preserves complete official catalog while respecting user deletions and custom products
  */
 export const mergeProductsWithCatalog = (
   incoming?: Product[] | null,
@@ -380,56 +379,72 @@ export const mergeProductsWithCatalog = (
     'prod-tesamorelin-10': 'prod-tesamorelin-10-cat',
   };
 
-  // Case 1: No incoming items provided -> return official catalog minus deleted items
-  if (!Array.isArray(incoming) || incoming.length === 0) {
-    return INITIAL_PRODUCTS.filter((p) => {
-      const k = getProductDeduplicationKey(p.name, p.dosage);
-      return !deletedSet.has(p.id) && !deletedSet.has(k);
-    });
-  }
-
-  // Case 2: Incoming products provided from Database or Storage
-  // Keep incoming items, enrich with official prices, exclude deleted items, and strictly deduplicate
   const result: Product[] = [];
   const processedKeys = new Set<string>();
 
-  incoming.forEach((p) => {
-    if (!p || !p.name) return;
+  // 1. Process incoming products (from Supabase or Storage)
+  if (Array.isArray(incoming) && incoming.length > 0) {
+    incoming.forEach((p) => {
+      if (!p || !p.name) return;
 
-    const targetId = ID_ALIASES[p.id] || p.id;
-    const dedupeKey = getProductDeduplicationKey(p.name, p.dosage);
+      const targetId = ID_ALIASES[p.id] || p.id;
+      const dedupeKey = getProductDeduplicationKey(p.name, p.dosage);
 
-    // If marked as deleted, drop it
-    if (deletedSet.has(p.id) || deletedSet.has(targetId) || deletedSet.has(dedupeKey)) {
-      return;
+      // If marked as deleted, drop it immediately
+      if (deletedSet.has(p.id) || deletedSet.has(targetId) || deletedSet.has(dedupeKey)) {
+        return;
+      }
+
+      if (processedKeys.has(dedupeKey)) {
+        return; // Already processed
+      }
+      processedKeys.add(dedupeKey);
+
+      // Look for matching official catalog product to guarantee updated prices & styling
+      const official =
+        officialById.get(targetId) ||
+        officialByKey.get(dedupeKey) ||
+        findCanonicalCatalogProduct(p, INITIAL_PRODUCTS);
+
+      if (official) {
+        result.push({
+          ...official,
+          id: p.id || official.id,
+          name: p.name || official.name,
+          dosage: p.dosage || official.dosage,
+          price: typeof p.price === 'number' && !isNaN(p.price) ? p.price : official.price,
+          originalPrice: p.originalPrice !== undefined ? p.originalPrice : official.originalPrice,
+          costPrice: typeof p.costPrice === 'number' && !isNaN(p.costPrice) ? p.costPrice : official.costPrice,
+          stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : official.stock,
+          imageUrl: p.imageUrl || official.imageUrl,
+          isPromotion: p.isPromotion !== undefined ? p.isPromotion : official.isPromotion,
+          promotionDiscount: p.promotionDiscount !== undefined ? p.promotionDiscount : official.promotionDiscount,
+          featured: p.featured !== undefined ? p.featured : official.featured,
+          description: p.description || official.description,
+        });
+      } else {
+        // Custom user product
+        result.push(p);
+      }
+    });
+  }
+
+  // 2. Add any official catalog products that have not yet been added AND have not been deleted
+  // This guarantees the complete official catalog is present even if database had a partial count
+  INITIAL_PRODUCTS.forEach((official) => {
+    const targetId = ID_ALIASES[official.id] || official.id;
+    const dedupeKey = getProductDeduplicationKey(official.name, official.dosage);
+
+    if (deletedSet.has(official.id) || deletedSet.has(targetId) || deletedSet.has(dedupeKey)) {
+      return; // Explicitly deleted
     }
 
     if (processedKeys.has(dedupeKey)) {
-      return; // Already processed
+      return; // Already supplied by incoming
     }
+
     processedKeys.add(dedupeKey);
-
-    // Look for matching official catalog product to guarantee updated prices
-    const official =
-      officialById.get(targetId) ||
-      officialByKey.get(dedupeKey) ||
-      findCanonicalCatalogProduct(p, INITIAL_PRODUCTS);
-
-    if (official) {
-      result.push({
-        ...official,
-        id: official.id,
-        stock: typeof p.stock === 'number' && !isNaN(p.stock) ? p.stock : official.stock,
-        imageUrl: p.imageUrl || official.imageUrl,
-        isPromotion: p.isPromotion !== undefined ? p.isPromotion : official.isPromotion,
-        promotionDiscount: p.promotionDiscount !== undefined ? p.promotionDiscount : official.promotionDiscount,
-        featured: p.featured !== undefined ? p.featured : official.featured,
-        description: p.description || official.description,
-      });
-    } else {
-      // Custom user product
-      result.push(p);
-    }
+    result.push(official);
   });
 
   return result;
@@ -449,6 +464,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch {}
     return [];
   });
+
+  const deletedProductIdsRef = useRef<Set<string>>(new Set(deletedProductIds));
+  useEffect(() => {
+    deletedProductIdsRef.current = new Set(deletedProductIds);
+  }, [deletedProductIds]);
+
+  const getLatestDeletedSet = (): Set<string> => {
+    const s = new Set<string>(deletedProductIdsRef.current);
+    try {
+      const saved = localStorage.getItem('peptide_deleted_product_ids');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((id) => s.add(id));
+        }
+      }
+    } catch {}
+    return s;
+  };
 
   // --- Products State ---
   const [products, setProducts] = useState<Product[]>(() => {
@@ -536,24 +570,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsSupabaseActive(true);
       setSupabaseConfigured(true);
 
-      // 1. Initial Fetch from Supabase
+      // 1. Initial Fetch from Supabase (PRIMARY DATABASE FOR PRODUCTS)
       const fetchSupabaseData = async () => {
         try {
-          // Fetch Products
+          const currentDeleted = getLatestDeletedSet();
+
+          // Fetch Products from Supabase (Primary Database)
           const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
           if (!prodErr && prodData) {
             const mapped = prodData.map(mapDBToProduct);
-            if (mapped.length > 0) {
-              const merged = mergeProductsWithCatalog(mapped, deletedProductIds);
-              setProducts(merged);
-              localStorage.setItem('peptide_products', JSON.stringify(merged));
-            } else if (mapped.length === 0 && deletedProductIds.length === 0) {
-              // Only on first run when database is completely empty, populate initial catalog
-              const initialMerged = mergeProductsWithCatalog(INITIAL_PRODUCTS, deletedProductIds);
-              setProducts(initialMerged);
-              localStorage.setItem('peptide_products', JSON.stringify(initialMerged));
-              const dbProds = initialMerged.map(mapProductToDB);
+            const merged = mergeProductsWithCatalog(mapped, currentDeleted);
+            setProducts(merged);
+            localStorage.setItem('peptide_products', JSON.stringify(merged));
+
+            // Auto-populate full catalog in Supabase if database has fewer items than catalog
+            if (prodData.length < merged.length) {
+              const dbProds = merged.map(mapProductToDB);
               await supabase.from('products').upsert(dbProds);
+              console.log(`Auto-seeded ${dbProds.length} products to Supabase PostgreSQL (Primary DB)!`);
+            }
+
+            // Ensure any deleted items are deleted from Supabase
+            if (currentDeleted.size > 0) {
+              const delArray = Array.from(currentDeleted);
+              await supabase.from('products').delete().in('id', delArray);
             }
           }
 
@@ -672,6 +712,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         supabaseChannel = supabase
           .channel('peptide_realtime_channel')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async (payload: any) => {
+            const currentDeleted = getLatestDeletedSet();
             // Immediate optimistic handling if product was deleted on remote
             if (payload?.eventType === 'DELETE' && payload.old?.id) {
               const deletedId = payload.old.id;
@@ -681,7 +722,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const { data } = await supabase.from('products').select('*');
             if (data) {
               const mapped = data.map(mapDBToProduct);
-              const merged = mergeProductsWithCatalog(mapped, deletedProductIds);
+              const merged = mergeProductsWithCatalog(mapped, currentDeleted);
               setProducts(merged);
               localStorage.setItem('peptide_products', JSON.stringify(merged));
             }
@@ -752,7 +793,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // 3. Firestore fallback sync (keeping backup active)
-    let unsubProducts: any;
     let unsubEmployees: any;
     let unsubCoupons: any;
     let unsubSettings: any;
@@ -784,24 +824,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }, () => {});
 
-      unsubProducts = onSnapshot(collection(db, 'products'), async (snapshot) => {
-        if (!snapshot.empty) {
-          const list: Product[] = [];
-          snapshot.forEach((d) => list.push({ ...(d.data() as Product), id: d.id }));
-
-          const mergedList = mergeProductsWithCatalog(list, deletedProductIds);
-          setProducts(mergedList);
-          localStorage.setItem('peptide_products', JSON.stringify(mergedList));
-        } else if (snapshot.empty && deletedProductIds.length === 0) {
-          // If Firestore is empty and no deletions have occurred, auto-populate from INITIAL_PRODUCTS
-          for (const p of INITIAL_PRODUCTS) {
-            setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true }).catch(() => {});
-          }
-          const initialList = mergeProductsWithCatalog(INITIAL_PRODUCTS, deletedProductIds);
-          setProducts(initialList);
-          localStorage.setItem('peptide_products', JSON.stringify(initialList));
-        }
-      }, () => {});
+      // Note: Products are managed primarily by Supabase PostgreSQL to prevent overwriting
+      // catalog state with partial Firestore documents.
 
       unsubEmployees = onSnapshot(collection(db, 'employees'), async (snapshot) => {
         if (!snapshot.empty) {
@@ -917,7 +941,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (supabaseChannel) {
         supabase?.removeChannel(supabaseChannel);
       }
-      unsubProducts?.();
       unsubEmployees?.();
       unsubCoupons?.();
       unsubSettings?.();
@@ -1609,9 +1632,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const targetProduct = products.find((p) => p.id === id);
       const targetKey = targetProduct ? getProductDeduplicationKey(targetProduct.name, targetProduct.dosage) : '';
 
-      // 1. Register in deletedProductIds (both ID and key to prevent resurrection)
+      // 1. Register in deletedProductIds and ref (both ID and key to prevent resurrection)
       const nextDeleted = Array.from(new Set([...deletedProductIds, id, targetKey].filter(Boolean)));
       setDeletedProductIds(nextDeleted);
+      deletedProductIdsRef.current = new Set(nextDeleted);
       localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(nextDeleted));
 
       // 2. Remove immediately from local state
@@ -1628,13 +1652,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         )
       );
 
-      showToast(`Excluindo "${targetProduct?.name || id}" do banco de dados...`);
+      showToast(`Excluindo "${targetProduct?.name || id}" do Supabase (Banco Principal)...`);
 
-      // 4. Delete from Supabase
+      // 4. Delete from Supabase (PRIMARY DATABASE FOR PRODUCTS)
       try {
         const supabase = getSupabaseClient();
         if (supabase) {
+          // Delete direct ID
           await supabase.from('products').delete().eq('id', id);
+
+          // Delete duplicates with same canonical key or same name/dosage
           if (targetKey) {
             const { data: allProds } = await supabase.from('products').select('id, name, dosage');
             if (allProds) {
@@ -1646,25 +1673,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
             }
           }
+          if (targetProduct) {
+            await supabase.from('products').delete().ilike('name', targetProduct.name).ilike('dosage', targetProduct.dosage);
+          }
         }
       } catch (e) {
         console.error('Error deleting product from Supabase:', e);
       }
 
-      // 5. Delete from Firestore
+      // 5. Delete from Firestore (secondary backup)
       try {
-        await deleteDoc(doc(db, 'products', id));
+        await deleteDoc(doc(db, 'products', id)).catch(() => {});
         if (targetKey) {
-          const snap = await getDocs(collection(db, 'products'));
-          for (const d of snap.docs) {
-            const dData = d.data();
-            if (getProductDeduplicationKey(dData.name, dData.dosage) === targetKey) {
-              await deleteDoc(doc(db, 'products', d.id));
+          const snap = await getDocs(collection(db, 'products')).catch(() => null);
+          if (snap) {
+            for (const d of snap.docs) {
+              const dData = d.data();
+              if (getProductDeduplicationKey(dData.name, dData.dosage) === targetKey) {
+                await deleteDoc(doc(db, 'products', d.id)).catch(() => {});
+              }
             }
           }
         }
       } catch (e) {
-        console.error('Error deleting product from Firestore:', e);
+        console.warn('Firestore backup delete note:', e);
       }
 
       // 6. Record tombstone in Firestore settings
@@ -1676,12 +1708,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             updatedAt: new Date().toISOString(),
           },
           { merge: true }
-        );
+        ).catch(() => {});
       } catch (e) {
         console.warn('Error recording deleted products in Firestore settings:', e);
       }
 
-      showToast(`Produto "${targetProduct?.name || id}" excluído com sucesso do banco de dados e da loja!`);
+      showToast(`Produto "${targetProduct?.name || id}" excluído com sucesso do Supabase e da loja!`);
       return true;
     } catch (err) {
       console.error('Erro geral ao excluir produto:', err);
@@ -1811,9 +1843,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshProductsFromDatabase = async (): Promise<{ success: boolean; count: number; message: string }> => {
     try {
-      showToast('Sincronizando catálogo com o banco de dados em tempo real...');
+      showToast('Sincronizando produtos com Supabase (Banco Principal)...');
       let dbProducts: Product[] = [];
       const supabase = getSupabaseClient();
+      const currentDeleted = getLatestDeletedSet();
 
       if (supabase && isSupabaseConfigured()) {
         const { data, error } = await supabase.from('products').select('*');
@@ -1823,27 +1856,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (dbProducts.length === 0) {
-        const snap = await getDocs(collection(db, 'products'));
-        if (!snap.empty) {
-          snap.forEach((d) => {
-            dbProducts.push({ ...(d.data() as Product), id: d.id });
-          });
-        }
-      }
-
-      if (dbProducts.length === 0) {
         dbProducts = products;
       }
 
-      const merged = mergeProductsWithCatalog(dbProducts, deletedProductIds);
+      const merged = mergeProductsWithCatalog(dbProducts, currentDeleted);
       setProducts(merged);
       localStorage.setItem('peptide_products', JSON.stringify(merged));
 
-      const msg = `Catálogo sincronizado com sucesso! ${merged.length} produtos ativos no banco.`;
+      // Auto-seed to Supabase if connected so Supabase always holds the full catalog
+      if (supabase && isSupabaseConfigured()) {
+        const dbProds = merged.map(mapProductToDB);
+        await supabase.from('products').upsert(dbProds);
+        if (currentDeleted.size > 0) {
+          await supabase.from('products').delete().in('id', Array.from(currentDeleted));
+        }
+      }
+
+      const msg = `Catálogo sincronizado com Supabase! ${merged.length} produtos ativos no banco.`;
       showToast(msg);
       return { success: true, count: merged.length, message: msg };
     } catch (err: any) {
-      console.error('Erro ao sincronizar produtos com banco:', err);
+      console.error('Erro ao sincronizar produtos com Supabase:', err);
       showToast('Erro ao sincronizar com banco de dados.');
       return { success: false, count: products.length, message: err?.message || 'Erro' };
     }
@@ -1852,28 +1885,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // --- Bulk Cloud Sync / Push Methods for all Admin Tabs ---
   const saveAllProductsToCloud = async (): Promise<boolean> => {
     try {
-      showToast('Salvando catálogo completo no banco de dados...');
-      const fullList = mergeProductsWithCatalog(products, deletedProductIds);
+      showToast('Salvando catálogo completo no Supabase (Banco Principal)...');
+      const currentDeleted = getLatestDeletedSet();
+      const fullList = mergeProductsWithCatalog(products, currentDeleted);
       const supabase = getSupabaseClient();
       if (supabase) {
         const dbProds = fullList.map(mapProductToDB);
         await supabase.from('products').upsert(dbProds);
-        if (deletedProductIds.length > 0) {
-          await supabase.from('products').delete().in('id', deletedProductIds);
+        if (currentDeleted.size > 0) {
+          await supabase.from('products').delete().in('id', Array.from(currentDeleted));
         }
       }
-      for (const p of fullList) {
-        await setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true });
-      }
-      for (const delId of deletedProductIds) {
-        await deleteDoc(doc(db, 'products', delId)).catch(() => {});
-      }
+      try {
+        for (const p of fullList) {
+          setDoc(doc(db, 'products', p.id), cleanUndefinedForFirestore(p), { merge: true }).catch(() => {});
+        }
+        for (const delId of currentDeleted) {
+          deleteDoc(doc(db, 'products', delId)).catch(() => {});
+        }
+      } catch {}
+
       setProducts(fullList);
       localStorage.setItem('peptide_products', JSON.stringify(fullList));
-      showToast(`Todos os ${fullList.length} produtos foram gravados no banco e atualizados no site!`);
+      showToast(`Todos os ${fullList.length} produtos foram gravados no Supabase e atualizados no site!`);
       return true;
     } catch (err) {
-      console.error('Erro ao salvar produtos:', err);
+      console.error('Erro ao salvar produtos no Supabase:', err);
       showToast('Erro ao salvar produtos no banco de dados.');
       return false;
     }
