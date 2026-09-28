@@ -1,11 +1,35 @@
-import React, { useState } from 'react';
-import { ArrowRight, ShieldCheck, Plane, Lock, Users, Sparkles, BookOpen } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowRight, ShieldCheck, Plane, Lock, Users, Sparkles, BookOpen, DownloadCloud } from 'lucide-react';
 import { PeptideVial } from './PeptideVial';
 import { useApp } from '../context/AppContext';
 
 export const HeroSection: React.FC = () => {
-  const { setSelectedCategory, storeSettings, setCurrentView } = useApp();
+  const { setSelectedCategory, storeSettings, setCurrentView, showToast } = useApp();
   const [activeSlide, setActiveSlide] = useState(0);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setInstallPrompt(null);
+      }
+    } else {
+      showToast('Para instalar o aplicativo no celular:\n• Android: Toque no menu (3 pontinhos) e escolha "Instalar app" ou "Adicionar à tela inicial".\n• iPhone: Toque em Compartilhar e selecione "Adicionar à Tela de Início".');
+    }
+  };
 
   const heroShowcases = [
     {
@@ -102,6 +126,14 @@ export const HeroSection: React.FC = () => {
               >
                 <BookOpen className="w-4 h-4 text-cyan-400" />
                 <span>Guia Científico (E-Book)</span>
+              </button>
+
+              <button
+                onClick={handleInstallClick}
+                className="inline-flex md:hidden items-center justify-center gap-2 px-5 py-3.5 rounded-full bg-gradient-to-r from-cyan-500/20 to-blue-600/20 hover:from-cyan-500/30 hover:to-blue-600/30 text-cyan-300 hover:text-white font-bold text-sm border border-cyan-500/40 transition-all cursor-pointer shadow-lg shadow-cyan-950/40"
+              >
+                <DownloadCloud className="w-4 h-4 text-cyan-400 animate-bounce" />
+                <span>Instalar App no Celular</span>
               </button>
             </div>
           </div>

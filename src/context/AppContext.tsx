@@ -4024,15 +4024,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const supabase = getSupabaseClient();
       if (!supabase || !isSupabaseConfigured()) {
-        showToast('Supabase não está configurado.');
-        return { success: false, message: 'Supabase não configurado.' };
+        showToast('⚠️ Configure a VITE_SUPABASE_ANON_KEY na aba Configurações do Painel Admin!');
+        return { success: false, message: 'Supabase anon key não configurada.' };
       }
-      const closedOrdersToMigrate = orders.filter((o) => o.isClosed || o.closedAt);
+
+      const closedOrderIdsMap = new Map<string, { sessionId: string; sessionName: string; closedAt: string }>();
+      cashRegisterSessions.forEach((session) => {
+        if (session.orderIds && Array.isArray(session.orderIds)) {
+          session.orderIds.forEach((oid) => {
+            closedOrderIdsMap.set(oid, {
+              sessionId: session.id,
+              sessionName: session.name,
+              closedAt: session.closedAt,
+            });
+          });
+        }
+      });
+
+      const closedOrdersToMigrate = orders.filter((o) => {
+        if (o.isClosed || o.closedAt || (o.notes && o.notes.includes('[CAIXA_FECHADO:'))) return true;
+        if (closedOrderIdsMap.has(o.id)) return true;
+        return false;
+      });
+
       if (closedOrdersToMigrate.length === 0) {
         showToast('Nenhum pedido fechado localmente para migrar.');
         return { success: true, message: 'Nenhum pedido para migrar.' };
       }
-      const dbOrders = closedOrdersToMigrate.map(mapOrderToDB);
+
+      const dbOrders = closedOrdersToMigrate.map((o) => {
+        const sessionInfo = closedOrderIdsMap.get(o.id);
+        return mapOrderToDB({
+          ...o,
+          isClosed: true,
+          closedSessionId: o.closedSessionId || sessionInfo?.sessionId,
+          closedSessionName: o.closedSessionName || sessionInfo?.sessionName,
+          closedAt: o.closedAt || sessionInfo?.closedAt || new Date().toISOString(),
+        });
+      });
+
       const { error: upsertErr } = await supabase.from('closed_orders').upsert(dbOrders);
       if (upsertErr) {
         showToast(`Erro ao migrar para closed_orders: ${upsertErr.message}`);

@@ -17,7 +17,7 @@ const getEnvOrStorage = (envKey: string, storageKey: string, fallback = ''): str
   return fallback;
 };
 
-export const SUPABASE_URL = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', '');
+export const SUPABASE_URL = getEnvOrStorage('VITE_SUPABASE_URL', 'peptide_supabase_url', 'https://vxbhsvfyrepmgulcgtak.supabase.co');
 export const SUPABASE_ANON_KEY = getEnvOrStorage('VITE_SUPABASE_ANON_KEY', 'peptide_supabase_anon_key', '');
 
 let clientInstance: SupabaseClient | null = null;
@@ -168,6 +168,10 @@ export const mapOrderToDB = (o: Order) => {
     cleared_manually_at: o.clearedManuallyAt || null,
     cleared_by: o.clearedBy || null,
     notes: finalNotes || null,
+    is_closed: Boolean(o.isClosed),
+    closed_at: o.closedAt || null,
+    closed_session_id: o.closedSessionId || null,
+    closed_session_name: o.closedSessionName || null,
     created_at: o.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
