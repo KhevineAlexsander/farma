@@ -529,15 +529,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // --- Cart State ---
   const [cart, setCart] = useState<CartItem[]>(() => {
-    const saved = localStorage.getItem('peptide_cart');
+    let saved = localStorage.getItem('peptide_cart');
+    if (!saved || saved === '[]') {
+      saved = localStorage.getItem('peptide_cart_backup');
+    }
     if (!saved) return [];
     try {
       const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed)) {
+      if (Array.isArray(parsed) && parsed.length > 0) {
         const valid = parsed.filter(
           (item) => item && item.product && typeof item.product.price === 'number'
         );
-        return sanitizeOrderItems(valid, INITIAL_PRODUCTS);
+        let currentProds = INITIAL_PRODUCTS;
+        try {
+          const savedProds = localStorage.getItem('peptide_products');
+          if (savedProds) {
+            const parsedProds = JSON.parse(savedProds);
+            if (Array.isArray(parsedProds) && parsedProds.length > 0) {
+              currentProds = parsedProds;
+            }
+          }
+        } catch {}
+        return sanitizeOrderItems(valid, currentProds);
       }
       return [];
     } catch {
@@ -548,8 +561,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isCartOpen, setIsCartOpen] = useState(false);
 
   useEffect(() => {
-    localStorage.setItem('peptide_cart', JSON.stringify(cart));
+    try {
+      const cartJson = JSON.stringify(cart);
+      localStorage.setItem('peptide_cart', cartJson);
+      localStorage.setItem('peptide_cart_backup', cartJson);
+    } catch (e) {
+      console.error('Error saving cart to storage:', e);
+    }
   }, [cart]);
+
+  // Sync cart across browser tabs to prevent loss or overwrite
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'peptide_cart' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setCart(sanitizeOrderItems(parsed, products));
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [products]);
 
   // --- User & Auth State ---
   const [currentUser, setCurrentUser] = useState<User | null>(() => {

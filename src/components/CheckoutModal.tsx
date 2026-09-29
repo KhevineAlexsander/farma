@@ -121,6 +121,14 @@ export const CheckoutModal: React.FC = () => {
     }
   };
 
+  // Helper to format phone with DDD
+  const formatPhone = (val: string) => {
+    const numbers = val.replace(/\D/g, '').slice(0, 11);
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+  };
+
   const buildWhatsappMessage = (order: Order) => {
     const itemsList = (order.items || [])
       .map(
@@ -143,7 +151,11 @@ CEP: ${order.address?.zipCode || ''}`;
 
     const customerName = order.customer?.name || 'Cliente';
     const customerPhone = order.customer?.phone || '-';
-    const customerEmail = order.customer?.email || '-';
+
+    const customerDetails = [
+      `• Nome: ${customerName}`,
+      `• WhatsApp: ${customerPhone}`,
+    ].join('\n');
 
     const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}*
 ────────────────────────
@@ -153,9 +165,7 @@ Olá! Acabei de finalizar meu pedido no site.
 🌐 *Loja:* ${siteUrl}
 
 👤 *DADOS DO CLIENTE:*
-• Nome: ${customerName}
-• WhatsApp: ${customerPhone}
-• E-mail: ${customerEmail}
+${customerDetails}
 
 ${addressBlock}
 
@@ -181,17 +191,21 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
       showToast(storeSettings.suspensionMessage || '⚠️ Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!');
       return;
     }
-    if (!customerName || !customerEmail || !street || !number || !city) {
-      alert('Por favor, preencha todos os campos obrigatórios.');
+    if (!customerName.trim() || !customerPhone.trim() || !street || !number || !city) {
+      alert('Por favor, preencha todos os campos obrigatórios (Nome, WhatsApp e Endereço).');
       return;
     }
 
+    const effectivePhone = customerPhone.trim();
+    const effectiveName = customerName.trim();
+    const effectiveEmail = customerEmail.trim() || (currentUser?.email || `${effectivePhone.replace(/\D/g, '') || 'cliente'}@contato.com`);
+
     const order = createOrder({
       customer: {
-        name: customerName,
-        email: customerEmail,
-        phone: customerPhone,
-        cpf: customerCpf,
+        name: effectiveName,
+        email: effectiveEmail,
+        phone: effectivePhone,
+        cpf: customerCpf.trim() || undefined,
       },
       address: {
         street,
@@ -212,9 +226,9 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
     // Save/Update user profile info in Firestore & state
     if (currentUser) {
       updateUserProfile({
-        name: customerName,
-        phone: customerPhone,
-        cpf: customerCpf,
+        name: effectiveName,
+        phone: effectivePhone,
+        cpf: customerCpf.trim() || undefined,
         addresses: [
           {
             street,
@@ -412,7 +426,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               </div>
             )}
 
-            {/* 1. Customer Data */}
+            {/* 1. Customer Personal & Contact Data */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold">1</span>
@@ -421,7 +435,9 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Nome Completo *</label>
+                  <label className="block text-slate-700 font-semibold mb-1.5">
+                    Nome Completo *
+                  </label>
                   <input
                     type="text"
                     required
@@ -429,42 +445,21 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                     placeholder="Ex: Seu Nome Completo"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600"
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium text-sm focus:outline-none focus:border-cyan-600 focus:bg-white transition-colors"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">E-mail para Notificações *</label>
-                  <input
-                    type="email"
-                    required
-                    maxLength={100}
-                    placeholder="seuemail@exemplo.com"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">WhatsApp com DDD *</label>
+                  <label className="block text-slate-700 font-semibold mb-1.5">
+                    WhatsApp com DDD *
+                  </label>
                   <input
                     type="tel"
                     required
-                    maxLength={25}
-                    placeholder="(11) 99999-9999"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-700 font-semibold mb-1">CPF (Opcional p/ Nota Fiscal)</label>
-                  <input
-                    type="text"
                     maxLength={20}
-                    placeholder="000.000.000-00"
-                    value={customerCpf}
-                    onChange={(e) => setCustomerCpf(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600"
+                    placeholder="(11) 98888-0000"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(formatPhone(e.target.value))}
+                    className="w-full px-3.5 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 font-medium text-sm focus:outline-none focus:border-cyan-600 focus:bg-white transition-colors"
                   />
                 </div>
               </div>
