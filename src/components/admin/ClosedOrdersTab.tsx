@@ -202,8 +202,134 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
     return orders.filter((o) => Boolean(o.isClosed || o.closedAt));
   }, [orders]);
 
-  // Filtered closed orders based on selected session, status, and search
+  // Helper function to normalize text (remove accents and casing for accurate search)
+  const normalizeText = (text: string | null | undefined): string => {
+    return (text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  };
+
+  // Orders matching selected session and search query (before status filter is applied)
+  const sessionAndSearchClosedOrders = useMemo(() => {
+    const qRaw = (searchTerm || '').toLowerCase().trim();
+    const qNorm = normalizeText(searchTerm);
+    const digitsOnly = qRaw.replace(/\D/g, '');
+
+    return allClosedOrders.filter((order) => {
+      // 1. Session filter
+      if (selectedSessionId !== 'all') {
+        if (order.closedSessionId !== selectedSessionId) {
+          return false;
+        }
+      }
+
+      // 2. Search filter
+      if (qRaw) {
+        const matchesNumber = (order.orderNumber || '').toLowerCase().includes(qRaw);
+        const matchesName = normalizeText(order.customer?.name).includes(qNorm);
+        const matchesEmail = (order.customer?.email || '').toLowerCase().includes(qRaw);
+        const phoneRaw = (order.customer?.phone || '').toLowerCase();
+        const phoneDigits = (order.customer?.phone || '').replace(/\D/g, '');
+        const matchesPhone = Boolean(
+          phoneRaw.includes(qRaw) ||
+          (digitsOnly.length >= 2 && phoneDigits.includes(digitsOnly))
+        );
+        const cpfDigits = (order.customer?.cpf || '').replace(/\D/g, '');
+        const matchesCpf = Boolean(
+          digitsOnly.length >= 3 && cpfDigits.includes(digitsOnly)
+        );
+        const matchesSessionName = normalizeText(order.closedSessionName).includes(qNorm);
+        const matchesNotes = normalizeText(order.notes).includes(qNorm);
+        const matchesItems = (order.items || []).some((it) => {
+          const pName = normalizeText(it.product?.name || (it as any).name);
+          const pDosage = normalizeText(it.product?.dosage || (it as any).dosage);
+          const combined = `${pName} ${pDosage}`.trim();
+          return pName.includes(qNorm) || pDosage.includes(qNorm) || combined.includes(qNorm);
+        });
+
+        if (
+          !matchesNumber &&
+          !matchesName &&
+          !matchesEmail &&
+          !matchesPhone &&
+          !matchesCpf &&
+          !matchesSessionName &&
+          !matchesNotes &&
+          !matchesItems
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [allClosedOrders, selectedSessionId, searchTerm]);
+
+  // Accurate counts for the Status Filter chips based on the current session and search results
+  const statusCounts = useMemo(() => {
+    let all = sessionAndSearchClosedOrders.length;
+    let paid = 0;
+    let pendingOrPartial = 0;
+    let waitingClearance = 0;
+    let cancelled = 0;
+
+    sessionAndSearchClosedOrders.forEach((o) => {
+      const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+      if (isPaid) {
+        paid++;
+      }
+      if (
+        o.status === 'Pendente' ||
+        o.status === 'Pago Parcial' ||
+        (o.remainingAmount !== undefined && o.remainingAmount > 0 && o.status !== 'Pago' && o.status !== 'Cancelado')
+      ) {
+        pendingOrPartial++;
+      }
+      if (!o.clearedManuallyAt && !isPaid && o.status !== 'Cancelado') {
+        waitingClearance++;
+      }
+      if (o.status === 'Cancelado') {
+        cancelled++;
+      }
+    });
+
+    return { all, paid, pendingOrPartial, waitingClearance, cancelled };
+  }, [sessionAndSearchClosedOrders]);
+
+  // Filtered closed orders based on selected session, search query, AND status filter
   const filteredClosedOrders = useMemo(() => {
+    if (statusFilter === 'Todos') return sessionAndSearchClosedOrders;
+
+    return sessionAndSearchClosedOrders.filter((order) => {
+      if (statusFilter === 'Pagos') {
+        return order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+      }
+      if (statusFilter === 'Pendentes / Parciais') {
+        return (
+          order.status === 'Pendente' ||
+          order.status === 'Pago Parcial' ||
+          (order.remainingAmount !== undefined && order.remainingAmount > 0 && order.status !== 'Pago' && order.status !== 'Cancelado')
+        );
+      }
+      if (statusFilter === 'Aguardando Baixa') {
+        const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+        return !order.clearedManuallyAt && !isPaid && order.status !== 'Cancelado';
+      }
+      if (statusFilter === 'Cancelados') {
+        return order.status === 'Cancelado';
+      }
+      return true;
+    });
+  }, [sessionAndSearchClosedOrders, statusFilter]);
+
+  // Pending closed orders (orders that were closed but still have outstanding debt or pending clearance)
+  const pendingClosedOrders = useMemo(() => {
+    const qRaw = (searchTerm || '').toLowerCase().trim();
+    const qNorm = normalizeText(searchTerm);
+    const digitsOnly = qRaw.replace(/\D/g, '');
+
     return allClosedOrders.filter((order) => {
       // Session filter
       if (selectedSessionId !== 'all') {
@@ -212,54 +338,50 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
         }
       }
 
-      // Status filter
-      if (statusFilter === 'Pagos') {
-        if (order.status !== 'Pago' && order.status !== 'Entregue' && order.status !== 'Enviado') {
-          return false;
-        }
-      } else if (statusFilter === 'Pendentes / Parciais') {
-        const isPending =
-          order.status === 'Pendente' ||
-          order.status === 'Pago Parcial' ||
-          (order.remainingAmount !== undefined && order.remainingAmount > 0 && order.status !== 'Pago' && order.status !== 'Cancelado');
-        if (!isPending) return false;
-      } else if (statusFilter === 'Aguardando Baixa') {
-        if (order.clearedManuallyAt || order.status === 'Pago' || order.status === 'Cancelado') {
-          return false;
-        }
-      } else if (statusFilter === 'Cancelados') {
-        if (order.status !== 'Cancelado') return false;
-      }
+      const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+      const hasDebt = order.remainingAmount !== undefined ? order.remainingAmount > 0 : !isPaid;
+      if (!hasDebt || order.status === 'Cancelado') return false;
 
-      // Search filter
-      if (searchTerm.trim()) {
-        const q = searchTerm.toLowerCase().trim();
-        const matchesNumber = (order.orderNumber || '').toLowerCase().includes(q);
-        const matchesName = (order.customer?.name || '').toLowerCase().includes(q);
-        const matchesPhone = (order.customer?.phone || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''));
-        const matchesCpf = (order.customer?.cpf || '').replace(/\D/g, '').includes(q.replace(/\D/g, ''));
-        const matchesItems = (order.items || []).some(
-          (it) =>
-            (it.product?.name || '').toLowerCase().includes(q) ||
-            (it.product?.dosage || '').toLowerCase().includes(q)
+      if (qRaw) {
+        const matchesNumber = (order.orderNumber || '').toLowerCase().includes(qRaw);
+        const matchesName = normalizeText(order.customer?.name).includes(qNorm);
+        const matchesEmail = (order.customer?.email || '').toLowerCase().includes(qRaw);
+        const phoneRaw = (order.customer?.phone || '').toLowerCase();
+        const phoneDigits = (order.customer?.phone || '').replace(/\D/g, '');
+        const matchesPhone = Boolean(
+          phoneRaw.includes(qRaw) ||
+          (digitsOnly.length >= 2 && phoneDigits.includes(digitsOnly))
         );
-        if (!matchesNumber && !matchesName && !matchesPhone && !matchesCpf && !matchesItems) {
+        const cpfDigits = (order.customer?.cpf || '').replace(/\D/g, '');
+        const matchesCpf = Boolean(
+          digitsOnly.length >= 3 && cpfDigits.includes(digitsOnly)
+        );
+        const matchesSessionName = normalizeText(order.closedSessionName).includes(qNorm);
+        const matchesNotes = normalizeText(order.notes).includes(qNorm);
+        const matchesItems = (order.items || []).some((it) => {
+          const pName = normalizeText(it.product?.name || (it as any).name);
+          const pDosage = normalizeText(it.product?.dosage || (it as any).dosage);
+          const combined = `${pName} ${pDosage}`.trim();
+          return pName.includes(qNorm) || pDosage.includes(qNorm) || combined.includes(qNorm);
+        });
+
+        if (
+          !matchesNumber &&
+          !matchesName &&
+          !matchesEmail &&
+          !matchesPhone &&
+          !matchesCpf &&
+          !matchesSessionName &&
+          !matchesNotes &&
+          !matchesItems
+        ) {
           return false;
         }
       }
 
       return true;
     });
-  }, [allClosedOrders, selectedSessionId, statusFilter, searchTerm]);
-
-  // Pending closed orders (orders that were closed but still have outstanding debt or pending clearance)
-  const pendingClosedOrders = useMemo(() => {
-    return allClosedOrders.filter((order) => {
-      const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
-      const hasDebt = order.remainingAmount !== undefined ? order.remainingAmount > 0 : !isPaid;
-      return hasDebt && order.status !== 'Cancelado';
-    });
-  }, [allClosedOrders]);
+  }, [allClosedOrders, selectedSessionId, searchTerm]);
 
   // Financial Metrics for the current view
   const metrics = useMemo(() => {
@@ -661,15 +783,25 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
               </div>
 
               {/* Search Input */}
-              <div className="relative w-full lg:w-72">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <div className="relative w-full lg:w-80">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Buscar cliente, tel, nº ou peptídeo..."
-                  className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  className="w-full pl-9 pr-8 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors"
                 />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-full cursor-pointer"
+                    title="Limpar pesquisa"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -677,11 +809,11 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
             <div className="flex items-center gap-1.5 overflow-x-auto pt-1 pb-0.5 border-t border-slate-800/80">
               <span className="text-[11px] font-bold text-slate-400 mr-1.5 shrink-0">Filtrar Status:</span>
               {[
-                { id: 'Todos', label: `Todos (${allClosedOrders.length})` },
-                { id: 'Pagos', label: `Pagos / Baixados (${metrics.paidCount})` },
-                { id: 'Pendentes / Parciais', label: `Pendentes & Parciais (${metrics.pendingCount + metrics.partialCount})` },
-                { id: 'Aguardando Baixa', label: `Aguardando Baixa (${metrics.waitingClearanceCount})` },
-                { id: 'Cancelados', label: `Cancelados (${metrics.cancelCount})` },
+                { id: 'Todos', label: `Todos (${statusCounts.all})` },
+                { id: 'Pagos', label: `Pagos / Baixados (${statusCounts.paid})` },
+                { id: 'Pendentes / Parciais', label: `Pendentes & Parciais (${statusCounts.pendingOrPartial})` },
+                { id: 'Aguardando Baixa', label: `Aguardando Baixa (${statusCounts.waitingClearance})` },
+                { id: 'Cancelados', label: `Cancelados (${statusCounts.cancelled})` },
               ].map((tab) => {
                 const isActive = statusFilter === tab.id;
                 return (
