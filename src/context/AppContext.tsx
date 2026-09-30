@@ -244,6 +244,22 @@ interface AppContextType {
   reopenOrderInActiveSession: (orderId: string) => Promise<boolean>;
   reopenEntireCashSession: (sessionId: string, password: string) => Promise<{ success: boolean; message: string }>;
   migrateClosedOrdersToSupabase: () => Promise<{ success: boolean; message: string }>;
+  clearClosedOrderManually: (
+    orderId: string,
+    params: {
+      status?: OrderStatus;
+      paidAmount?: number;
+      remainingAmount?: number;
+      dueDate?: string;
+      notes?: string;
+      clearedBy?: string;
+    }
+  ) => Promise<{ success: boolean; message: string }>;
+  moveOrderToClosedSession: (
+    orderId: string,
+    sessionId: string,
+    customSessionName?: string
+  ) => Promise<{ success: boolean; message: string }>;
 
   financialTransactions: FinancialTransaction[];
   addFinancialTransaction: (tx: Omit<FinancialTransaction, 'id'>) => void;
@@ -3958,8 +3974,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const reopenOrderInActiveSession = async (orderId: string): Promise<boolean> => {
     let targetOrder: Order | undefined;
+    let prevSessionId: string | undefined;
+
     const updatedOrders = orders.map((o) => {
       if (o.id === orderId) {
+        prevSessionId = o.closedSessionId;
         targetOrder = {
           ...o,
           isClosed: false,
@@ -3974,6 +3993,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setOrders(updatedOrders);
     localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+
+    // If order was in a session, update that session's metrics
+    if (prevSessionId && targetOrder) {
+      const isOrderPaid = targetOrder.status === 'Pago' || targetOrder.status === 'Entregue' || targetOrder.status === 'Enviado';
+      const orderPaid = targetOrder.paidAmount !== undefined ? targetOrder.paidAmount : (isOrderPaid ? targetOrder.total : 0);
+      const orderPending = targetOrder.remainingAmount !== undefined ? targetOrder.remainingAmount : (!isOrderPaid && targetOrder.status !== 'Cancelado' ? targetOrder.total : 0);
+
+      const updatedSessions = cashRegisterSessions.map((session) => {
+        if (session.id === prevSessionId) {
+          const filteredIds = (session.orderIds || []).filter((id) => id !== orderId);
+          return {
+            ...session,
+            totalOrders: Math.max(0, (session.totalOrders || 1) - 1),
+            totalRevenue: Math.max(0, Number(((session.totalRevenue || 0) - targetOrder!.total).toFixed(2))),
+            totalPaid: Math.max(0, Number(((session.totalPaid || 0) - orderPaid).toFixed(2))),
+            totalPending: Math.max(0, Number(((session.totalPending || 0) - orderPending).toFixed(2))),
+            orderIds: filteredIds,
+          };
+        }
+        return session;
+      });
+      setCashRegisterSessions(updatedSessions);
+      try {
+        localStorage.setItem('peptide_cash_sessions', JSON.stringify(updatedSessions));
+        setDoc(doc(db, 'settings', 'cash_sessions'), { sessions: updatedSessions }, { merge: true }).catch(() => {});
+      } catch {}
+    }
 
     if (targetOrder) {
       try {
@@ -3994,6 +4040,229 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     showToast(`Pedido ${targetOrder?.orderNumber || orderId} reaberto e retornado para o caixa ativo!`);
     return true;
+  };
+
+  const clearClosedOrderManually = async (
+    orderId: string,
+    params: {
+      status?: OrderStatus;
+      paidAmount?: number;
+      remainingAmount?: number;
+      dueDate?: string;
+      notes?: string;
+      clearedBy?: string;
+    }
+  ): Promise<{ success: boolean; message: string }> => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    if (!targetOrder) {
+      return { success: false, message: 'Pedido não encontrado.' };
+    }
+
+    const isoTimestamp = new Date().toISOString();
+    const timestampFormatted = new Date().toLocaleString('pt-BR');
+    const operator = params.clearedBy || currentUser?.name || 'Administrador';
+
+    const previousPaid = targetOrder.paidAmount !== undefined
+      ? targetOrder.paidAmount
+      : ((targetOrder.status === 'Pago' || targetOrder.status === 'Entregue' || targetOrder.status === 'Enviado') ? targetOrder.total : 0);
+
+    const total = targetOrder.total || 0;
+    const newPaidAmount = params.paidAmount !== undefined ? Number(params.paidAmount) : total;
+    const newRemainingAmount = params.remainingAmount !== undefined
+      ? Number(params.remainingAmount)
+      : Math.max(0, Number((total - newPaidAmount).toFixed(2)));
+
+    const newStatus: OrderStatus = params.status || (newRemainingAmount <= 0 ? 'Pago' : 'Pago Parcial');
+    const deltaPaid = newPaidAmount - previousPaid;
+
+    const updatedOrderObj: Order = {
+      ...targetOrder,
+      isClosed: true,
+      status: newStatus,
+      paidAmount: newPaidAmount,
+      remainingAmount: newRemainingAmount,
+      dueDate: params.dueDate !== undefined ? params.dueDate : targetOrder.dueDate,
+      notes: params.notes !== undefined ? params.notes : targetOrder.notes,
+      clearedManuallyAt: timestampFormatted,
+      clearedBy: operator,
+      updatedAt: isoTimestamp,
+    };
+
+    // 1. Update orders in state and localStorage
+    const updatedOrders = orders.map((o) => (o.id === orderId ? updatedOrderObj : o));
+    setOrders(updatedOrders);
+    try {
+      localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+    } catch {}
+
+    // 2. Update cash register session totals (without touching open cashier)
+    if (targetOrder.closedSessionId) {
+      const sessionId = targetOrder.closedSessionId;
+      const updatedSessions = cashRegisterSessions.map((session) => {
+        if (session.id === sessionId) {
+          const updatedPaid = Math.max(0, Number(((session.totalPaid || 0) + deltaPaid).toFixed(2)));
+          const updatedPending = Math.max(0, Number(((session.totalPending || 0) - deltaPaid).toFixed(2)));
+          return {
+            ...session,
+            totalPaid: updatedPaid,
+            totalPending: updatedPending,
+          };
+        }
+        return session;
+      });
+      setCashRegisterSessions(updatedSessions);
+      try {
+        localStorage.setItem('peptide_cash_sessions', JSON.stringify(updatedSessions));
+        await setDoc(doc(db, 'settings', 'cash_sessions'), { sessions: updatedSessions }, { merge: true }).catch(() => {});
+      } catch {}
+    }
+
+    // 3. Persist to Firestore and Supabase (closed_orders table)
+    try {
+      await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(updatedOrderObj), { merge: true });
+    } catch (e) {
+      console.warn('Firestore closed order clear note:', e);
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConfigured()) {
+        await supabase.from('closed_orders').upsert(mapOrderToDB(updatedOrderObj));
+      }
+    } catch (e) {
+      console.warn('Supabase closed order clear note:', e);
+    }
+
+    showToast(`✅ Baixa realizada no pedido ${targetOrder.orderNumber} (Exclusivo Caixa Fechado)!`);
+    return { success: true, message: `Baixa realizada com sucesso no pedido ${targetOrder.orderNumber}` };
+  };
+
+  const moveOrderToClosedSession = async (
+    orderId: string,
+    sessionId: string,
+    customSessionName?: string
+  ): Promise<{ success: boolean; message: string }> => {
+    const targetOrder = orders.find((o) => o.id === orderId);
+    if (!targetOrder) {
+      return { success: false, message: 'Pedido não encontrado.' };
+    }
+
+    const now = new Date();
+    const isoTimestamp = now.toISOString();
+
+    let targetSession = cashRegisterSessions.find((s) => s.id === sessionId);
+    let isBrandNewSession = false;
+
+    if (!targetSession || sessionId === 'new' || sessionId === 'new_session') {
+      const generatedId = `caixa-${now.getTime()}`;
+      const formattedDate = now.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      const name = customSessionName?.trim() || `Caixa #${cashRegisterSessions.length + 1} - ${formattedDate}`;
+      targetSession = {
+        id: generatedId,
+        name,
+        closedAt: isoTimestamp,
+        closedBy: currentUser?.name || 'Administrador',
+        totalOrders: 0,
+        totalRevenue: 0,
+        totalPaid: 0,
+        totalPending: 0,
+        orderIds: [],
+      };
+      isBrandNewSession = true;
+    }
+
+    const isOrderPaid = targetOrder.status === 'Pago' || targetOrder.status === 'Entregue' || targetOrder.status === 'Enviado';
+    const orderPaidAmount = targetOrder.paidAmount !== undefined ? targetOrder.paidAmount : (isOrderPaid ? targetOrder.total : 0);
+    const orderPendingAmount = targetOrder.remainingAmount !== undefined
+      ? targetOrder.remainingAmount
+      : (!isOrderPaid && targetOrder.status !== 'Cancelado' ? targetOrder.total : 0);
+
+    // 1. Mark order as closed and attach to session
+    const updatedOrderObj: Order = {
+      ...targetOrder,
+      isClosed: true,
+      closedAt: targetSession.closedAt || isoTimestamp,
+      closedSessionId: targetSession.id,
+      closedSessionName: targetSession.name,
+      updatedAt: isoTimestamp,
+    };
+
+    const updatedOrders = orders.map((o) => (o.id === orderId ? updatedOrderObj : o));
+    setOrders(updatedOrders);
+    try {
+      localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
+    } catch {}
+
+    // 2. Add order to session and increment session totals
+    const existingOrderIds = new Set(targetSession.orderIds || []);
+    const alreadyInSession = existingOrderIds.has(orderId);
+    const newOrderIds = alreadyInSession ? (targetSession.orderIds || []) : [...(targetSession.orderIds || []), orderId];
+
+    let updatedSessions: CashRegisterSession[] = [];
+    if (isBrandNewSession) {
+      const finalizedNewSession: CashRegisterSession = {
+        ...targetSession,
+        totalOrders: 1,
+        totalRevenue: Number(targetOrder.total.toFixed(2)),
+        totalPaid: Number(orderPaidAmount.toFixed(2)),
+        totalPending: Number(orderPendingAmount.toFixed(2)),
+        orderIds: [orderId],
+      };
+      updatedSessions = [finalizedNewSession, ...cashRegisterSessions];
+    } else {
+      updatedSessions = cashRegisterSessions.map((session) => {
+        if (session.id === targetSession.id) {
+          return {
+            ...session,
+            totalOrders: newOrderIds.length,
+            totalRevenue: Number(((session.totalRevenue || 0) + (alreadyInSession ? 0 : targetOrder.total)).toFixed(2)),
+            totalPaid: Number(((session.totalPaid || 0) + (alreadyInSession ? 0 : orderPaidAmount)).toFixed(2)),
+            totalPending: Number(((session.totalPending || 0) + (alreadyInSession ? 0 : orderPendingAmount)).toFixed(2)),
+            orderIds: newOrderIds,
+          };
+        }
+        return session;
+      });
+    }
+
+    setCashRegisterSessions(updatedSessions);
+    try {
+      localStorage.setItem('peptide_cash_sessions', JSON.stringify(updatedSessions));
+      await setDoc(doc(db, 'settings', 'cash_sessions'), { sessions: updatedSessions }, { merge: true }).catch(() => {});
+    } catch {}
+
+    // 3. Persist to Firestore and Supabase
+    try {
+      await setDoc(
+        doc(db, 'orders', orderId),
+        cleanUndefinedForFirestore(updatedOrderObj),
+        { merge: true }
+      ).catch(() => {});
+    } catch (e) {
+      console.warn('Firestore move order to closed session note:', e);
+    }
+
+    try {
+      const supabase = getSupabaseClient();
+      if (supabase && isSupabaseConfigured()) {
+        await supabase.from('closed_orders').upsert(mapOrderToDB(updatedOrderObj));
+        await supabase.from('orders').delete().eq('id', orderId);
+      }
+    } catch (e) {
+      console.warn('Supabase move order to closed session note:', e);
+    }
+
+    showToast(`📦 Pedido ${targetOrder.orderNumber} movido para o ${targetSession.name} com sucesso!`);
+    return {
+      success: true,
+      message: `Pedido ${targetOrder.orderNumber} transferido para ${targetSession.name}.`,
+    };
   };
 
   const reopenEntireCashSession = async (
@@ -4168,6 +4437,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reopenOrderInActiveSession,
         reopenEntireCashSession,
         migrateClosedOrdersToSupabase,
+        clearClosedOrderManually,
+        moveOrderToClosedSession,
         financialTransactions,
         addFinancialTransaction,
         deleteFinancialTransaction,

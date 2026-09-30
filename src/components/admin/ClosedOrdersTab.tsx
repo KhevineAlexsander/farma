@@ -9,6 +9,7 @@ import {
   FileText,
   RotateCcw,
   CheckCircle2,
+  Edit3,
   Clock,
   AlertTriangle,
   ChevronDown,
@@ -49,6 +50,8 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
     reopenOrderInActiveSession,
     reopenEntireCashSession,
     migrateClosedOrdersToSupabase,
+    clearClosedOrderManually,
+    currentUser,
     storeSettings,
     isSupabaseActive,
     showToast,
@@ -63,6 +66,16 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
+  // Clearance & values editing in closed order modal state
+  const [clearingOrder, setClearingOrder] = useState<Order | null>(null);
+  const [clearPaidAmount, setClearPaidAmount] = useState<string>('');
+  const [clearRemainingAmount, setClearRemainingAmount] = useState<string>('');
+  const [clearStatus, setClearStatus] = useState<OrderStatus>('Pago');
+  const [clearDueDate, setClearDueDate] = useState<string>('');
+  const [clearNotes, setClearNotes] = useState<string>('');
+  const [clearOperator, setClearOperator] = useState<string>('');
+  const [isClearingOrder, setIsClearingOrder] = useState<boolean>(false);
+
   // Reopen session modal state
   const [sessionToReopen, setSessionToReopen] = useState<CashRegisterSession | null>(null);
   const [reopenPassword, setReopenPassword] = useState<string>('');
@@ -72,6 +85,117 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
   // Reopen single order modal state
   const [orderToReopen, setOrderToReopen] = useState<Order | null>(null);
   const [isReopeningOrder, setIsReopeningOrder] = useState<boolean>(false);
+
+  const handleOpenClearModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const total = order.total || 0;
+    const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+    const currentPaid = order.paidAmount !== undefined ? order.paidAmount : (isPaid ? total : 0);
+    const currentRemaining = order.remainingAmount !== undefined ? order.remainingAmount : (isPaid ? 0 : total);
+
+    setClearingOrder(order);
+    setClearPaidAmount(String(currentPaid));
+    setClearRemainingAmount(String(currentRemaining));
+    setClearStatus(order.status || (currentRemaining <= 0 ? 'Pago' : (currentPaid > 0 ? 'Pago Parcial' : 'Pendente')));
+    setClearDueDate(order.dueDate || '');
+    setClearNotes(order.notes || '');
+    setClearOperator(currentUser?.name || currentUser?.email || 'Administrador');
+  };
+
+  const handlePaidChange = (val: string) => {
+    setClearPaidAmount(val);
+    const numPaid = parseFloat(val);
+    if (!isNaN(numPaid) && clearingOrder) {
+      const total = clearingOrder.total || 0;
+      const rem = Math.max(0, Number((total - numPaid).toFixed(2)));
+      setClearRemainingAmount(String(rem));
+      if (rem <= 0) {
+        setClearStatus('Pago');
+      } else if (numPaid > 0) {
+        setClearStatus('Pago Parcial');
+      } else {
+        setClearStatus('Pendente');
+      }
+    }
+  };
+
+  const handleRemainingChange = (val: string) => {
+    setClearRemainingAmount(val);
+    const numRem = parseFloat(val);
+    if (!isNaN(numRem) && clearingOrder) {
+      const total = clearingOrder.total || 0;
+      const paid = Math.max(0, Number((total - numRem).toFixed(2)));
+      setClearPaidAmount(String(paid));
+      if (numRem <= 0) {
+        setClearStatus('Pago');
+      } else if (paid > 0) {
+        setClearStatus('Pago Parcial');
+      } else {
+        setClearStatus('Pendente');
+      }
+    }
+  };
+
+  const handleSetPreset = (type: 'full' | 'half' | 'none') => {
+    if (!clearingOrder) return;
+    const total = clearingOrder.total || 0;
+    if (type === 'full') {
+      setClearPaidAmount(String(total));
+      setClearRemainingAmount('0');
+      setClearStatus('Pago');
+    } else if (type === 'half') {
+      const half = Number((total / 2).toFixed(2));
+      setClearPaidAmount(String(half));
+      setClearRemainingAmount(String(Number((total - half).toFixed(2))));
+      setClearStatus('Pago Parcial');
+    } else if (type === 'none') {
+      setClearPaidAmount('0');
+      setClearRemainingAmount(String(total));
+      setClearStatus('Pendente');
+    }
+  };
+
+  const handleConfirmClearClosedOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!clearingOrder) return;
+    setIsClearingOrder(true);
+    try {
+      const parsedPaid = clearPaidAmount !== '' && !isNaN(Number(clearPaidAmount)) ? Number(clearPaidAmount) : 0;
+      const parsedRemaining = clearRemainingAmount !== '' && !isNaN(Number(clearRemainingAmount))
+        ? Number(clearRemainingAmount)
+        : Math.max(0, Number(((clearingOrder.total || 0) - parsedPaid).toFixed(2)));
+
+      const res = await clearClosedOrderManually(clearingOrder.id, {
+        status: clearStatus,
+        paidAmount: parsedPaid,
+        remainingAmount: parsedRemaining,
+        dueDate: clearDueDate.trim() || undefined,
+        notes: clearNotes.trim() || undefined,
+        clearedBy: clearOperator.trim() || undefined,
+      });
+
+      if (res.success) {
+        if (selectedOrder && selectedOrder.id === clearingOrder.id) {
+          setSelectedOrder({
+            ...selectedOrder,
+            status: clearStatus,
+            paidAmount: parsedPaid,
+            remainingAmount: parsedRemaining,
+            dueDate: clearDueDate.trim() || undefined,
+            clearedManuallyAt: new Date().toLocaleString('pt-BR'),
+            clearedBy: clearOperator.trim() || 'Administrador',
+            notes: clearNotes.trim() || selectedOrder.notes,
+          });
+        }
+        setClearingOrder(null);
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao atualizar valores do pedido fechado.');
+    } finally {
+      setIsClearingOrder(false);
+    }
+  };
 
   // All closed orders
   const allClosedOrders = useMemo(() => {
@@ -728,6 +852,19 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                           <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
+                              onClick={(e) => handleOpenClearModal(order, e)}
+                              className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
+                                order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || order.status === 'Pendente'
+                                  ? 'bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border-amber-500/40 shadow-xs'
+                                  : 'bg-emerald-950/60 hover:bg-emerald-600 text-emerald-400 hover:text-white border-emerald-500/30'
+                              }`}
+                              title="Editar pagamento, saldo pendente e valor que falta pagar"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={() => setSelectedOrder(order)}
                               className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors cursor-pointer"
                               title="Ver detalhes completos do pedido"
@@ -836,15 +973,25 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                             R$ {remaining.toFixed(2).replace('.', ',')}
                           </td>
                           <td className="py-3 px-4 text-right whitespace-nowrap space-x-2">
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenClearModal(order, e)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs transition-colors shadow-xs cursor-pointer"
+                              title="Editar valor pago e o que falta pagar (pendente / parcial)"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                              <span>Editar / Baixa</span>
+                            </button>
+
                             {cleanPhone && (
                               <a
                                 href={`https://wa.me/55${cleanPhone}?text=${chargeMsg}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow-xs"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors shadow-xs"
                                 title="Enviar lembrete de cobrança no WhatsApp"
                               >
-                                <Send className="w-3.5 h-3.5" />
+                                <Send className="w-3.5 h-3.5 text-emerald-400" />
                                 <span>Cobrar WhatsApp</span>
                               </a>
                             )}
@@ -1189,15 +1336,27 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
             </div>
 
             {/* Footer Buttons */}
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => setOrderToReopen(selectedOrder)}
-                className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reabrir Pedido no Caixa Ativo</span>
-              </button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleOpenClearModal(selectedOrder)}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-amber-500/30 flex items-center gap-1.5 cursor-pointer"
+                  title="Editar valor pago e o que falta pagar"
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span>Editar Pagamento / Falta Pagar</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOrderToReopen(selectedOrder)}
+                  className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Reabrir Pedido no Caixa Ativo</span>
+                </button>
+              </div>
 
               <button
                 type="button"
@@ -1323,6 +1482,217 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal: Edit Payment & Values in Closed Order (Editar Valores Pagos e Saldo que Falta Pagar) */}
+      {clearingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-white shadow-2xl max-h-[92vh] overflow-y-auto">
+            <button
+              onClick={() => setClearingOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4 pr-10">
+              <div className="p-2.5 bg-amber-500/20 text-amber-400 rounded-xl sm:rounded-2xl border border-amber-500/30 shrink-0">
+                <Edit3 className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] sm:text-xs text-amber-400 font-bold uppercase tracking-wider block">
+                  Caixa Fechado • Edição Financeira
+                </span>
+                <h3 className="text-base sm:text-xl font-extrabold font-tech text-white">
+                  Editar Valores: {clearingOrder.orderNumber}
+                </h3>
+              </div>
+            </div>
+
+            {/* Information Banner: Safe and isolated from open register */}
+            <div className="p-3 bg-emerald-950/40 border border-emerald-500/30 rounded-xl flex items-start gap-2.5 text-emerald-200 text-xs mb-4">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold text-white block">Movimentação Exclusiva deste Caixa Fechado</span>
+                <span>Qualquer alteração em valores pagos ou pendentes atualiza apenas este caixa fechado. <strong>Não interfere no caixa aberto atual</strong> nem altera o relatório de vendas ativo.</span>
+              </div>
+            </div>
+
+            <form onSubmit={handleConfirmClearClosedOrder} className="space-y-4 sm:space-y-5 text-xs">
+              {/* Summary Box */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3.5 bg-slate-950 rounded-xl sm:rounded-2xl border border-slate-800">
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">CLIENTE</span>
+                  <p className="font-bold text-white text-xs sm:text-sm mt-0.5 truncate">{clearingOrder.customer?.name || 'Cliente'}</p>
+                  <p className="text-slate-400 text-[11px]">{clearingOrder.customer?.phone || '-'}</p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">CAIXA FECHADO</span>
+                  <p className="font-bold text-cyan-400 text-xs sm:text-sm mt-0.5 truncate">
+                    {clearingOrder.closedSessionName || 'Sessão Arquivada'}
+                  </p>
+                  <p className="text-slate-400 text-[11px]">
+                    {clearingOrder.closedAt ? new Date(clearingOrder.closedAt).toLocaleDateString('pt-BR') : '-'}
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">VALOR TOTAL DO PEDIDO</span>
+                  <p className="font-mono font-bold text-cyan-400 text-sm sm:text-base mt-0.5">
+                    R$ {(clearingOrder.total || 0).toFixed(2).replace('.', ',')}
+                  </p>
+                  <span className="text-[11px] text-slate-400">
+                    Status Atual: <strong className="text-white">{clearingOrder.status}</strong>
+                  </span>
+                </div>
+              </div>
+
+              {/* Fast Presets Bar */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-semibold text-slate-400 block">Atalhos de Ajuste Rápido:</span>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSetPreset('full')}
+                    className="py-1.5 px-2 rounded-xl bg-emerald-950/60 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/30 text-xs font-bold transition-all text-center cursor-pointer"
+                  >
+                    ⚡ Quitar 100% (Falta R$ 0)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPreset('half')}
+                    className="py-1.5 px-2 rounded-xl bg-amber-950/60 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30 text-xs font-bold transition-all text-center cursor-pointer"
+                  >
+                    ⚡ Metade (50% / 50%)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSetPreset('none')}
+                    className="py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold transition-all text-center cursor-pointer"
+                  >
+                    ⚡ 100% Pendente
+                  </button>
+                </div>
+              </div>
+
+              {/* Form Inputs: Two synchronized fields for paid and remaining */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-950/70 border border-slate-800 rounded-2xl">
+                <div>
+                  <label className="block text-emerald-400 font-bold mb-1 flex items-center justify-between">
+                    <span>Quanto o Cliente Já Pagou (R$)</span>
+                    <span className="text-[10px] font-normal text-slate-400">Entrada</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={clearingOrder.total || 999999}
+                    required
+                    value={clearPaidAmount}
+                    onChange={(e) => handlePaidChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-emerald-500/40 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-emerald-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Valor computado como recebido neste caixa.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-amber-400 font-bold mb-1 flex items-center justify-between">
+                    <span>Quanto Falta Pagar / Pendente (R$)</span>
+                    <span className="text-[10px] font-normal text-slate-400">Saldo Devedor</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={clearingOrder.total || 999999}
+                    required
+                    value={clearRemainingAmount}
+                    onChange={(e) => handleRemainingChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-amber-500/40 rounded-xl text-white font-mono font-bold text-sm focus:outline-none focus:border-amber-400"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Saldo que restará a ser cobrado do cliente.
+                  </p>
+                </div>
+              </div>
+
+              {/* Status and details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Status Financeiro *
+                  </label>
+                  <select
+                    value={clearStatus}
+                    onChange={(e) => setClearStatus(e.target.value as OrderStatus)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white font-semibold focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="Pago">Pago (Totalmente Quitado - R$ 0 a Pagar)</option>
+                    <option value="Pago Parcial">Pago Parcial (Existe Saldo a Pagar)</option>
+                    <option value="Pendente">Pendente (Nenhum Pagamento Feito)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Vencimento / Previsão do Saldo (Opcional)
+                  </label>
+                  <input
+                    type="date"
+                    value={clearDueDate}
+                    onChange={(e) => setClearDueDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Operador / Atendente
+                  </label>
+                  <input
+                    type="text"
+                    value={clearOperator}
+                    onChange={(e) => setClearOperator(e.target.value)}
+                    placeholder="Nome do operador"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">
+                    Observações do Saldo / Pagamento (Opcional)
+                  </label>
+                  <input
+                    type="text"
+                    value={clearNotes}
+                    onChange={(e) => setClearNotes(e.target.value)}
+                    placeholder="Ex: Prometeu pagar o saldo dia 10"
+                    className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setClearingOrder(null)}
+                  className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isClearingOrder}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold transition-all flex items-center gap-2 cursor-pointer shadow-lg shadow-amber-500/20"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isClearingOrder ? 'Salvando...' : 'Salvar Valores no Caixa Fechado'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

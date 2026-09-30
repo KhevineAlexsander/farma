@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
+  Archive,
   Search,
   Eye,
   Truck,
@@ -44,6 +45,8 @@ import {
   CalendarClock,
   Database,
   Archive,
+  ChevronDown,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
@@ -82,6 +85,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     refreshSalesData,
     closeCashRegister,
     cashRegisterSessions,
+    moveOrderToClosedSession,
     isSupabaseActive,
     showToast,
   } = useApp();
@@ -101,6 +105,60 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isSavingOrders, setIsSavingOrders] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+
+  // Move Order to Closed Session Modal State
+  const [movingOrder, setMovingOrder] = useState<Order | null>(null);
+  const [targetSessionId, setTargetSessionId] = useState<string>('');
+  const [newSessionNameInput, setNewSessionNameInput] = useState<string>('');
+  const [isMovingOrder, setIsMovingOrder] = useState<boolean>(false);
+
+  // Expanded actions row state
+  const [expandedActionOrderId, setExpandedActionOrderId] = useState<string | null>(null);
+
+  const handleOpenMoveToClosedModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const now = new Date();
+    const formattedDate = now.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const defaultName = `Caixa #${cashRegisterSessions.length + 1} - ${formattedDate}`;
+    
+    setMovingOrder(order);
+    if (cashRegisterSessions && cashRegisterSessions.length > 0) {
+      setTargetSessionId(cashRegisterSessions[0].id);
+    } else {
+      setTargetSessionId('new_session');
+    }
+    setNewSessionNameInput(defaultName);
+  };
+
+  const handleConfirmMoveOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!movingOrder || !targetSessionId) return;
+    setIsMovingOrder(true);
+    try {
+      const res = await moveOrderToClosedSession(
+        movingOrder.id,
+        targetSessionId,
+        targetSessionId === 'new_session' ? newSessionNameInput : undefined
+      );
+      if (res.success) {
+        if (selectedOrder && selectedOrder.id === movingOrder.id) {
+          setSelectedOrder(null);
+        }
+        setMovingOrder(null);
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao mover pedido para o caixa fechado.');
+    } finally {
+      setIsMovingOrder(false);
+    }
+  };
 
   // Close Cash Register Modal State (Password 8817)
   const [isCloseCashModalOpen, setIsCloseCashModalOpen] = useState(false);
@@ -2172,6 +2230,15 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       <span>Excluir</span>
                     </button>
                   </div>
+
+                  <button
+                    onClick={(e) => handleOpenMoveToClosedModal(order, e)}
+                    className="w-full py-2 px-3 rounded-xl bg-purple-600/20 hover:bg-purple-600 hover:text-white text-purple-300 text-xs font-bold flex items-center justify-center gap-1.5 transition-all border border-purple-500/40 cursor-pointer shadow-sm mt-1"
+                    title="Mover este pedido para um caixa fechado"
+                  >
+                    <Archive className="w-4 h-4 shrink-0 text-purple-400" />
+                    <span>Mover para Caixa Fechado</span>
+                  </button>
                 </div>
               </div>
             );
@@ -2346,61 +2413,99 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       </td>
 
                       {/* Sticky Actions Column - NEVER gets hidden */}
-                      <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors">
-                        <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-                          <button
-                            onClick={(e) => handleOpenClearModal(order, e)}
-                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                            title="Dar baixa manual neste pedido"
-                          >
-                            <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                            <span>Baixa</span>
-                          </button>
-                          <button
-                            onClick={(e) => handleOpenChargeModal(order, e)}
-                            className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px] ${
-                              order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
-                                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold shadow-amber-500/20'
-                                : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30'
-                            }`}
-                            title="Alerta de Cobrança WhatsApp & Vencimento"
-                          >
-                            <BellRing className="w-3.5 h-3.5 shrink-0" />
-                            <span>Cobrar</span>
-                          </button>
-                          <button
-                            onClick={() => handleOpenDetail(order)}
-                            className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-800 cursor-pointer shrink-0 min-h-[34px]"
-                            title="Ver detalhes do pedido"
-                          >
-                            <Eye className="w-3.5 h-3.5 shrink-0" />
-                            <span>Ver</span>
-                          </button>
-                          <button
-                            onClick={(e) => handleOpenEditModal(order, e)}
-                            className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition-all border border-cyan-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                            title="Editar dados deste pedido"
-                          >
-                            <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                            <span>Editar</span>
-                          </button>
-                          <button
-                            onClick={(e) => handleOpenOrderSummaryModal(order, e)}
-                            className="px-2.5 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-xs font-semibold flex items-center gap-1 transition-all border border-teal-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                            title="Gerar e enviar resumo do pedido para o WhatsApp"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                            <span>Relatório</span>
-                          </button>
-                          <button
-                            onClick={(e) => handleOpenDeleteModal(order, e)}
-                            className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all border border-red-500/20 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                            title="Excluir pedido (Requer senha 8817)"
-                          >
-                            <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                            <span>Excluir</span>
-                          </button>
-                        </div>
+                      <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                        {expandedActionOrderId === order.id ? (
+                          <div className="flex items-center justify-end gap-1.5 flex-nowrap animate-in fade-in duration-150">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedActionOrderId(null);
+                              }}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1 transition-all border border-slate-700 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                              title="Recolher opções"
+                            >
+                              <X className="w-3.5 h-3.5 text-slate-400" />
+                              <span>Recolher</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleOpenClearModal(order, e)}
+                              className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                              title="Dar baixa manual neste pedido"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+                              <span>Baixa</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleOpenChargeModal(order, e)}
+                              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px] ${
+                                order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
+                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold shadow-amber-500/20'
+                                  : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30'
+                              }`}
+                              title="Alerta de Cobrança WhatsApp & Vencimento"
+                            >
+                              <BellRing className="w-3.5 h-3.5 shrink-0" />
+                              <span>Cobrar</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenDetail(order)}
+                              className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-800 cursor-pointer shrink-0 min-h-[34px]"
+                              title="Ver detalhes do pedido"
+                            >
+                              <Eye className="w-3.5 h-3.5 shrink-0" />
+                              <span>Ver</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleOpenEditModal(order, e)}
+                              className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition-all border border-cyan-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                              title="Editar dados deste pedido"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                              <span>Editar</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleOpenMoveToClosedModal(order, e)}
+                              className="px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 hover:text-white text-purple-300 text-xs font-bold flex items-center gap-1 transition-all border border-purple-500/40 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                              title="Mover este pedido para um caixa fechado"
+                            >
+                              <Archive className="w-3.5 h-3.5 shrink-0 text-purple-400" />
+                              <span>Mover Caixa</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                              className="px-2.5 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-xs font-semibold flex items-center gap-1 transition-all border border-teal-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                              title="Gerar e enviar resumo do pedido para o WhatsApp"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                              <span>Relatório</span>
+                            </button>
+                            <button
+                              onClick={(e) => handleOpenDeleteModal(order, e)}
+                              className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all border border-red-500/20 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
+                              title="Excluir pedido (Requer senha 8817)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                              <span>Excluir</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-end">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedActionOrderId(order.id);
+                              }}
+                              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 text-xs font-extrabold flex items-center gap-1.5 transition-all border border-slate-700 hover:border-cyan-400 cursor-pointer shadow-sm min-h-[34px] group/btn"
+                              title="Clique para abrir as opções deste pedido"
+                            >
+                              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400 group-hover/btn:text-slate-950 transition-colors" />
+                              <span>Opções</span>
+                              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/btn:text-slate-950 transition-colors" />
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -2833,6 +2938,14 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 >
                   <CheckCircle className="w-3.5 h-3.5" />
                   <span>Dar Baixa</span>
+                </button>
+                <button
+                  onClick={() => handleOpenMoveToClosedModal(selectedOrder)}
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white text-xs font-bold flex items-center gap-1.5 border border-purple-500/40 shadow-md cursor-pointer transition-colors"
+                  title="Mover este pedido para um caixa fechado"
+                >
+                  <Archive className="w-3.5 h-3.5 text-purple-400" />
+                  <span>Mover Caixa Fechado</span>
                 </button>
                 <span className={`px-3 py-1 rounded-full text-xs font-extrabold border ${getStatusBadge(selectedOrder.status).bg}`}>
                   {selectedOrder.status}
@@ -5234,6 +5347,129 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                     <span>Confirmar & Fechar o Caixa</span>
                   </>
                 )}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Modal: Move Order to Closed Cash Register Session */}
+      {movingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <form
+            onSubmit={handleConfirmMoveOrder}
+            className="relative w-full max-w-lg bg-slate-900 border border-purple-500/40 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setMovingOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 pr-10">
+              <div className="p-2.5 bg-purple-500/20 text-purple-400 rounded-2xl border border-purple-500/30 shrink-0">
+                <Archive className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">
+                  Transferência de Caixa
+                </span>
+                <h3 className="text-base sm:text-lg font-extrabold text-white">
+                  Mover Pedido {movingOrder.orderNumber} para Caixa Fechado
+                </h3>
+              </div>
+            </div>
+
+            {/* Explanation Banner */}
+            <div className="p-3.5 bg-purple-950/40 border border-purple-500/30 rounded-xl text-xs text-purple-200 space-y-1">
+              <p className="font-bold text-white flex items-center gap-1.5">
+                <span>📦 Como funciona a transferência:</span>
+              </p>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Este pedido será transferido do período aberto para a sessão de caixa fechado escolhida.
+                O valor dele (<strong className="text-cyan-400">R$ {(movingOrder.total || 0).toFixed(2).replace('.', ',')}</strong>) será <strong>somado ao faturamento do caixa fechado</strong> e <strong>retirado automaticamente do relatório de vendas dos pedidos abertos</strong>.
+              </p>
+            </div>
+
+            {/* Order Overview */}
+            <div className="grid grid-cols-2 gap-2.5 p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Cliente</span>
+                <p className="font-bold text-white truncate mt-0.5">{movingOrder.customer?.name || 'Cliente'}</p>
+                <p className="text-slate-400 text-[11px]">{movingOrder.customer?.phone || '-'}</p>
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 uppercase font-semibold block">Valor / Status</span>
+                <p className="font-mono font-bold text-emerald-400 mt-0.5">
+                  R$ {(movingOrder.total || 0).toFixed(2).replace('.', ',')}
+                </p>
+                <span className="text-[11px] text-slate-300">Status atual: {movingOrder.status}</span>
+              </div>
+            </div>
+
+            {/* Destination Cashier Session Selection */}
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-200">
+                Selecione o Caixa Fechado de Destino: *
+              </label>
+
+              {cashRegisterSessions.length > 0 && (
+                <select
+                  value={targetSessionId}
+                  onChange={(e) => setTargetSessionId(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-purple-500 font-medium"
+                >
+                  {cashRegisterSessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.name} — {new Date(session.closedAt).toLocaleDateString('pt-BR')} (Total: R$ {session.totalRevenue.toFixed(2).replace('.', ',')} | {session.totalOrders} pedidos)
+                    </option>
+                  ))}
+                  <option value="new_session">+ Criar Novo Caixa Fechado com este pedido</option>
+                </select>
+              )}
+
+              {/* Show session name input if new session is selected or if no sessions exist */}
+              {(targetSessionId === 'new_session' || cashRegisterSessions.length === 0) && (
+                <div className="p-3 bg-purple-950/30 border border-purple-500/30 rounded-xl space-y-1.5 animate-in fade-in duration-150">
+                  <label className="block text-[11px] font-semibold text-purple-300">
+                    Nome do Novo Caixa Fechado: *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newSessionNameInput}
+                    onChange={(e) => setNewSessionNameInput(e.target.value)}
+                    placeholder="Ex: Caixa Fechado #1 - 30/09/2026"
+                    className="w-full px-3 py-2 bg-slate-950 border border-purple-500/50 rounded-xl text-xs text-white focus:outline-none focus:border-purple-400 font-medium"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    Uma nova sessão de caixa fechado será criada com este pedido arquivado.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                disabled={isMovingOrder}
+                onClick={() => setMovingOrder(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isMovingOrder || (!targetSessionId && cashRegisterSessions.length === 0)}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-2 cursor-pointer transition-all shadow-md shadow-purple-600/30 disabled:opacity-50"
+              >
+                <Archive className="w-4 h-4" />
+                <span>{isMovingOrder ? 'Movendo Pedido...' : 'Confirmar & Mover para Caixa Fechado'}</span>
               </button>
             </div>
           </form>
