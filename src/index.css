@@ -248,21 +248,21 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ==========================================================================
-   MENU RADIAL DE AÇÕES (ANIMAÇÃO EM CÍRCULO / SPRING ORBIT)
+   MENU RADIAL DE AÇÕES (ULTRA-LEVE & ACELERADO POR GPU)
    ========================================================================== */
 
 :root {
-  --radial-R: 92px;
+  --radial-R: 90px;
 }
 
 .radial-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 5, 14, 0.65);
-  backdrop-filter: blur(2.5px);
+  background: rgba(3, 7, 18, 0.68);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.18s ease-out;
+  will-change: opacity;
   z-index: 9998;
 }
 
@@ -277,6 +277,8 @@ input:focus, select:focus, textarea:focus {
   height: 0;
   z-index: 9999;
   pointer-events: none;
+  contain: layout style;
+  transform: translateZ(0);
 }
 
 .radial-wrapper.on {
@@ -291,15 +293,17 @@ input:focus, select:focus, textarea:focus {
   left: calc(var(--radial-R) * -1);
   top: calc(var(--radial-R) * -1);
   border-radius: 50%;
-  border: 1px dashed #2f3d63;
+  border: 1px dashed rgba(56, 189, 248, 0.25);
   opacity: 0;
-  transform: scale(0.3);
-  transition: transform 0.35s ease, opacity 0.25s ease;
+  transform: translate3d(0, 0, 0) scale(0.4);
+  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.18s ease-out;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 
 .radial-wrapper.on::before {
-  opacity: 0.75;
-  transform: scale(1);
+  opacity: 0.8;
+  transform: translate3d(0, 0, 0) scale(1);
 }
 
 .radial-item {
@@ -314,46 +318,51 @@ input:focus, select:focus, textarea:focus {
   cursor: pointer;
   padding: 0;
   color: var(--c);
-  border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
-  background: color-mix(in srgb, var(--c) 16%, #0a1226);
-  transform: translate(0, 0) scale(0.2);
+  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+  background: color-mix(in srgb, var(--c) 14%, #070e20);
+  transform: translate3d(0, 0, 0) scale(0.2);
   opacity: 0;
-  transition: transform 0.2s ease, opacity 0.15s, background 0.15s;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  backface-visibility: hidden;
+  will-change: transform, opacity;
+  transition: transform 0.18s ease-out, opacity 0.15s ease-out;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
 .radial-item svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
 }
 
 .radial-wrapper.on .radial-item {
-  transform: translate(var(--x), var(--y)) scale(1);
+  transform: translate3d(var(--x), var(--y), 0) scale(1);
   opacity: 1;
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s, background 0.15s;
-  transition-delay: calc(var(--i) * 28ms);
+  transition: transform 0.28s cubic-bezier(0.34, 1.45, 0.64, 1), opacity 0.18s ease-out;
+  transition-delay: calc(var(--i) * 16ms);
 }
 
 .radial-item:hover,
 .radial-item:focus-visible {
-  background: color-mix(in srgb, var(--c) 30%, #0a1226);
+  background: color-mix(in srgb, var(--c) 28%, #070e20);
   outline: none;
-  transform: translate(var(--x), var(--y)) scale(1.12);
+  transform: translate3d(var(--x), var(--y), 0) scale(1.1);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+  transition-delay: 0ms !important;
 }
 
 .radial-item.center {
-  left: -26px;
-  top: -26px;
-  width: 52px;
-  height: 52px;
+  left: -25px;
+  top: -25px;
+  width: 50px;
+  height: 50px;
   --c: #9aa6c0;
-  border: 1px solid #2f3d63;
-  background: #111a30;
+  border: 1px solid #283553;
+  background: #0d1527;
   color: #cbd5e1;
 }
 
 .radial-item.center:hover {
-  background: #1a2747;
+  background: #17233d;
   color: #ffffff;
 }
 
@@ -364,21 +373,21 @@ input:focus, select:focus, textarea:focus {
 .radial-item::after {
   content: attr(data-label);
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 5px);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate3d(-50%, 0, 0);
   white-space: nowrap;
   font-size: 11px;
   font-weight: 600;
-  color: #fff;
-  background: rgba(0, 0, 0, 0.88);
+  color: #ffffff;
+  background: rgba(10, 15, 29, 0.94);
   padding: 3px 8px;
   border-radius: 6px;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.12s ease-out;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   z-index: 10;
 }
 

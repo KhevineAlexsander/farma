@@ -122,8 +122,8 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const handleOpenRadialMenu = (order: Order, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     const btn = e.currentTarget;
-    const R = 92;
-    const m = R + 40;
+    const R = 90;
+    const m = R + 35;
     const r = btn.getBoundingClientRect();
     const cx = Math.min(Math.max(r.left + r.width / 2, m), window.innerWidth - m);
     const cy = Math.min(Math.max(r.top + r.height / 2, m), window.innerHeight - m);
@@ -131,9 +131,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     setRadialMenu({ order, x: cx, y: cy });
     setIsRadialActive(false);
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setIsRadialActive(true);
-      });
+      setIsRadialActive(true);
     });
   };
 
@@ -141,10 +139,10 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsRadialActive(false);
     setTimeout(() => {
       setRadialMenu(null);
-    }, 220);
+    }, 180);
   };
 
-  // Close radial menu on Escape, window resize, or scroll
+  // Close radial menu on Escape, window resize, or scroll (with passive listeners for 0 jank)
   useEffect(() => {
     if (!radialMenu) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -153,8 +151,8 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     const handleCloseOnEvent = () => handleCloseRadialMenu();
 
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('resize', handleCloseOnEvent);
-    window.addEventListener('scroll', handleCloseOnEvent, true);
+    window.addEventListener('resize', handleCloseOnEvent, { passive: true });
+    window.addEventListener('scroll', handleCloseOnEvent, { passive: true, capture: true });
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('resize', handleCloseOnEvent);
@@ -5522,7 +5520,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             ].map((action, i, arr) => {
               const n = arr.length;
               const angle = (-90 + (i * 360) / n) * (Math.PI / 180);
-              const R = 92;
+              const R = 90;
               const x = (Math.cos(angle) * R).toFixed(1);
               const y = (Math.sin(angle) * R).toFixed(1);
               const Icon = action.icon;
