@@ -4308,9 +4308,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         await supabase.from('closed_orders').delete().in('id', Array.from(sessionOrderIds));
       }
-      for (const ordId of sessionOrderIds) {
+      for (const ordId of Array.from(sessionOrderIds)) {
         await setDoc(
-          doc(db, 'orders', ordId),
+          doc(db, 'orders', String(ordId)),
           { isClosed: false, closedAt: null, closedSessionId: null, closedSessionName: null },
           { merge: true }
         ).catch(() => {});

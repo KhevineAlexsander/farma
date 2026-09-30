@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Archive,
   Search,
@@ -44,7 +44,6 @@ import {
   Calendar,
   CalendarClock,
   Database,
-  Archive,
   ChevronDown,
   SlidersHorizontal,
 } from 'lucide-react';
@@ -112,8 +111,56 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [newSessionNameInput, setNewSessionNameInput] = useState<string>('');
   const [isMovingOrder, setIsMovingOrder] = useState<boolean>(false);
 
-  // Expanded actions row state
-  const [expandedActionOrderId, setExpandedActionOrderId] = useState<string | null>(null);
+  // Radial Menu State (Circular Animated Options)
+  const [radialMenu, setRadialMenu] = useState<{
+    order: Order;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [isRadialActive, setIsRadialActive] = useState<boolean>(false);
+
+  const handleOpenRadialMenu = (order: Order, e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const R = 92;
+    const m = R + 40;
+    const r = btn.getBoundingClientRect();
+    const cx = Math.min(Math.max(r.left + r.width / 2, m), window.innerWidth - m);
+    const cy = Math.min(Math.max(r.top + r.height / 2, m), window.innerHeight - m);
+
+    setRadialMenu({ order, x: cx, y: cy });
+    setIsRadialActive(false);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setIsRadialActive(true);
+      });
+    });
+  };
+
+  const handleCloseRadialMenu = () => {
+    setIsRadialActive(false);
+    setTimeout(() => {
+      setRadialMenu(null);
+    }, 220);
+  };
+
+  // Close radial menu on Escape, window resize, or scroll
+  useEffect(() => {
+    if (!radialMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleCloseRadialMenu();
+    };
+    const handleCloseOnEvent = () => handleCloseRadialMenu();
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('resize', handleCloseOnEvent);
+    window.addEventListener('scroll', handleCloseOnEvent, true);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('resize', handleCloseOnEvent);
+      window.removeEventListener('scroll', handleCloseOnEvent, true);
+    };
+  }, [radialMenu]);
 
   const handleOpenMoveToClosedModal = (order: Order, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -2412,100 +2459,24 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                         </div>
                       </td>
 
-                      {/* Sticky Actions Column - NEVER gets hidden */}
+                      {/* Sticky Actions Column - Radial Menu Trigger */}
                       <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors" onClick={(e) => e.stopPropagation()}>
-                        {expandedActionOrderId === order.id ? (
-                          <div className="flex items-center justify-end gap-1.5 flex-nowrap animate-in fade-in duration-150">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedActionOrderId(null);
-                              }}
-                              className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center gap-1 transition-all border border-slate-700 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                              title="Recolher opções"
-                            >
-                              <X className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Recolher</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleOpenClearModal(order, e)}
-                              className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                              title="Dar baixa manual neste pedido"
-                            >
-                              <CheckCircle className="w-3.5 h-3.5 shrink-0" />
-                              <span>Baixa</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleOpenChargeModal(order, e)}
-                              className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm shrink-0 min-h-[34px] ${
-                                order.status === 'Pago Parcial' || (order.remainingAmount && order.remainingAmount > 0)
-                                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold shadow-amber-500/20'
-                                  : 'bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 border border-amber-500/30'
-                              }`}
-                              title="Alerta de Cobrança WhatsApp & Vencimento"
-                            >
-                              <BellRing className="w-3.5 h-3.5 shrink-0" />
-                              <span>Cobrar</span>
-                            </button>
-                            <button
-                              onClick={() => handleOpenDetail(order)}
-                              className="px-2.5 py-1.5 rounded-xl bg-slate-950 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors border border-slate-800 cursor-pointer shrink-0 min-h-[34px]"
-                              title="Ver detalhes do pedido"
-                            >
-                              <Eye className="w-3.5 h-3.5 shrink-0" />
-                              <span>Ver</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleOpenEditModal(order, e)}
-                              className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500 hover:text-slate-950 text-cyan-300 text-xs font-semibold flex items-center gap-1 transition-all border border-cyan-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                              title="Editar dados deste pedido"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Editar</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleOpenMoveToClosedModal(order, e)}
-                              className="px-2.5 py-1.5 rounded-xl bg-purple-600/20 hover:bg-purple-600 hover:text-white text-purple-300 text-xs font-bold flex items-center gap-1 transition-all border border-purple-500/40 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                              title="Mover este pedido para um caixa fechado"
-                            >
-                              <Archive className="w-3.5 h-3.5 shrink-0 text-purple-400" />
-                              <span>Mover Caixa</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleOpenOrderSummaryModal(order, e)}
-                              className="px-2.5 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500 hover:text-slate-950 text-teal-300 text-xs font-semibold flex items-center gap-1 transition-all border border-teal-500/30 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                              title="Gerar e enviar resumo do pedido para o WhatsApp"
-                            >
-                              <MessageSquare className="w-3.5 h-3.5 shrink-0" />
-                              <span>Relatório</span>
-                            </button>
-                            <button
-                              onClick={(e) => handleOpenDeleteModal(order, e)}
-                              className="px-2.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-600 text-red-400 hover:text-white text-xs font-semibold flex items-center gap-1 transition-all border border-red-500/20 cursor-pointer shadow-sm shrink-0 min-h-[34px]"
-                              title="Excluir pedido (Requer senha 8817)"
-                            >
-                              <Trash2 className="w-3.5 h-3.5 shrink-0" />
-                              <span>Excluir</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-end">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedActionOrderId(order.id);
-                              }}
-                              className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-200 text-xs font-extrabold flex items-center gap-1.5 transition-all border border-slate-700 hover:border-cyan-400 cursor-pointer shadow-sm min-h-[34px] group/btn"
-                              title="Clique para abrir as opções deste pedido"
-                            >
-                              <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400 group-hover/btn:text-slate-950 transition-colors" />
-                              <span>Opções</span>
-                              <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/btn:text-slate-950 transition-colors" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={(e) => handleOpenRadialMenu(order, e)}
+                            className={`px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-white text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700/80 cursor-pointer shadow-sm min-h-[34px] group/btn ${
+                              radialMenu?.order.id === order.id ? 'opacity-0 pointer-events-none' : ''
+                            }`}
+                            title="Clique para abrir as opções deste pedido"
+                            aria-haspopup="menu"
+                            aria-expanded={radialMenu?.order.id === order.id}
+                          >
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400 group-hover/btn:text-sky-300 transition-colors" />
+                            <span>Opções</span>
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/btn:text-slate-300 transition-colors" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -5481,6 +5452,132 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
       />
+
+      {/* Radial Actions Menu with Animated Orbit & Backdrop */}
+      {radialMenu && (
+        <>
+          <div
+            className={`radial-backdrop ${isRadialActive ? 'on' : ''}`}
+            onClick={handleCloseRadialMenu}
+          />
+          <div
+            className={`radial-wrapper ${isRadialActive ? 'on' : ''}`}
+            style={{
+              left: `${radialMenu.x}px`,
+              top: `${radialMenu.y}px`,
+            }}
+            role="menu"
+            aria-label="Opções do Pedido"
+          >
+            {[
+              {
+                id: 'baixa',
+                label: 'Baixa',
+                color: '#10b981',
+                icon: CheckCircle,
+                onClick: (o: Order) => handleOpenClearModal(o),
+              },
+              {
+                id: 'cobrar',
+                label: 'Cobrar',
+                color: '#f5b301',
+                icon: BellRing,
+                onClick: (o: Order) => handleOpenChargeModal(o),
+              },
+              {
+                id: 'ver',
+                label: 'Ver',
+                color: '#cbd5e1',
+                icon: Eye,
+                onClick: (o: Order) => handleOpenDetail(o),
+              },
+              {
+                id: 'editar',
+                label: 'Editar',
+                color: '#38bdf8',
+                icon: Edit3,
+                onClick: (o: Order) => handleOpenEditModal(o),
+              },
+              {
+                id: 'mover',
+                label: 'Mover Caixa',
+                color: '#a855f7',
+                icon: Archive,
+                onClick: (o: Order) => handleOpenMoveToClosedModal(o),
+              },
+              {
+                id: 'rel',
+                label: 'Relatório',
+                color: '#14b8a6',
+                icon: MessageSquare,
+                onClick: (o: Order) => handleOpenOrderSummaryModal(o),
+              },
+              {
+                id: 'excluir',
+                label: 'Excluir',
+                color: '#f43f5e',
+                icon: Trash2,
+                onClick: (o: Order) => handleOpenDeleteModal(o),
+              },
+            ].map((action, i, arr) => {
+              const n = arr.length;
+              const angle = (-90 + (i * 360) / n) * (Math.PI / 180);
+              const R = 92;
+              const x = (Math.cos(angle) * R).toFixed(1);
+              const y = (Math.sin(angle) * R).toFixed(1);
+              const Icon = action.icon;
+
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  role="menuitem"
+                  data-label={action.label}
+                  aria-label={action.label}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const targetOrder = radialMenu.order;
+                    handleCloseRadialMenu();
+                    action.onClick(targetOrder);
+                  }}
+                  className="radial-item"
+                  style={
+                    {
+                      '--c': action.color,
+                      '--i': i,
+                      '--x': `${x}px`,
+                      '--y': `${y}px`,
+                    } as React.CSSProperties
+                  }
+                >
+                  <Icon className="w-5 h-5" />
+                </button>
+              );
+            })}
+
+            {/* Central X button to close / recolher */}
+            <button
+              type="button"
+              data-label="Recolher"
+              aria-label="Recolher"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseRadialMenu();
+              }}
+              className="radial-item center"
+              style={
+                {
+                  '--x': '0px',
+                  '--y': '0px',
+                  '--i': 0,
+                } as React.CSSProperties
+              }
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 };

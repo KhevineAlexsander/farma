@@ -1192,7 +1192,7 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                   <span>Distribuição por Forma de Pagamento</span>
                 </span>
                 <div className="space-y-2 text-xs">
-                  {Object.entries(metrics.paymentMethodsMap).map(([method, data]) => {
+                  {Object.entries(metrics.paymentMethodsMap).map(([method, data]: [string, { count: number; total: number }]) => {
                     const percent = metrics.totalRevenue > 0 ? (data.total / metrics.totalRevenue) * 100 : 0;
                     return (
                       <div key={method} className="space-y-1">
