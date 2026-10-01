@@ -111,44 +111,42 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [newSessionNameInput, setNewSessionNameInput] = useState<string>('');
   const [isMovingOrder, setIsMovingOrder] = useState<boolean>(false);
 
-  // Radial Menu State (Circular Animated Options)
-  const [radialMenu, setRadialMenu] = useState<{
-    order: Order;
-    x: number;
-    y: number;
-  } | null>(null);
-  const [isRadialActive, setIsRadialActive] = useState<boolean>(false);
+  // Simple Floating Dropdown Menu State for Order Actions
+  const [activeMenuOrder, setActiveMenuOrder] = useState<Order | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; right: number; showAbove: boolean } | null>(null);
 
-  const handleOpenRadialMenu = (order: Order, e: React.MouseEvent<HTMLButtonElement>) => {
+  const handleToggleMenu = (order: Order, e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
-    const btn = e.currentTarget;
-    const R = 90;
-    const m = R + 35;
-    const r = btn.getBoundingClientRect();
-    const cx = Math.min(Math.max(r.left + r.width / 2, m), window.innerWidth - m);
-    const cy = Math.min(Math.max(r.top + r.height / 2, m), window.innerHeight - m);
+    if (activeMenuOrder?.id === order.id) {
+      setActiveMenuOrder(null);
+      setMenuPosition(null);
+      return;
+    }
 
-    setRadialMenu({ order, x: cx, y: cy });
-    setIsRadialActive(false);
-    requestAnimationFrame(() => {
-      setIsRadialActive(true);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuHeight = 310;
+    const showAbove = rect.bottom + menuHeight > window.innerHeight && rect.top > menuHeight;
+
+    setActiveMenuOrder(order);
+    setMenuPosition({
+      top: showAbove ? rect.top - 6 : rect.bottom + 6,
+      right: Math.max(12, window.innerWidth - rect.right),
+      showAbove,
     });
   };
 
-  const handleCloseRadialMenu = () => {
-    setIsRadialActive(false);
-    setTimeout(() => {
-      setRadialMenu(null);
-    }, 180);
+  const handleCloseMenu = () => {
+    setActiveMenuOrder(null);
+    setMenuPosition(null);
   };
 
-  // Close radial menu on Escape, window resize, or scroll (with passive listeners for 0 jank)
+  // Close menu on Escape, window resize, or scroll
   useEffect(() => {
-    if (!radialMenu) return;
+    if (!activeMenuOrder) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleCloseRadialMenu();
+      if (e.key === 'Escape') handleCloseMenu();
     };
-    const handleCloseOnEvent = () => handleCloseRadialMenu();
+    const handleCloseOnEvent = () => handleCloseMenu();
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('resize', handleCloseOnEvent, { passive: true });
@@ -158,7 +156,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
       window.removeEventListener('resize', handleCloseOnEvent);
       window.removeEventListener('scroll', handleCloseOnEvent, true);
     };
-  }, [radialMenu]);
+  }, [activeMenuOrder]);
 
   const handleOpenMoveToClosedModal = (order: Order, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -2457,22 +2455,24 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                         </div>
                       </td>
 
-                      {/* Sticky Actions Column - Radial Menu Trigger */}
+                      {/* Sticky Actions Column */}
                       <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end">
                           <button
                             type="button"
-                            onClick={(e) => handleOpenRadialMenu(order, e)}
-                            className={`px-3.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 text-white text-xs font-semibold flex items-center gap-2 transition-all border border-slate-700/80 cursor-pointer shadow-sm min-h-[34px] group/btn ${
-                              radialMenu?.order.id === order.id ? 'opacity-0 pointer-events-none' : ''
+                            onClick={(e) => handleToggleMenu(order, e)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer border min-h-[34px] ${
+                              activeMenuOrder?.id === order.id
+                                ? 'bg-cyan-500 text-slate-950 border-cyan-400 font-bold shadow-xs'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
                             }`}
-                            title="Clique para abrir as opções deste pedido"
+                            title="Abrir opções deste pedido"
                             aria-haspopup="menu"
-                            aria-expanded={radialMenu?.order.id === order.id}
+                            aria-expanded={activeMenuOrder?.id === order.id}
                           >
-                            <SlidersHorizontal className="w-3.5 h-3.5 text-sky-400 group-hover/btn:text-sky-300 transition-colors" />
+                            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
                             <span>Opções</span>
-                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover/btn:text-slate-300 transition-colors" />
+                            <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${activeMenuOrder?.id === order.id ? 'rotate-180 text-slate-950' : ''}`} />
                           </button>
                         </div>
                       </td>
@@ -5451,128 +5451,175 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
         onClose={() => setIsBackupModalOpen(false)}
       />
 
-      {/* Radial Actions Menu with Animated Orbit & Backdrop */}
-      {radialMenu && (
+      {/* Simple Floating Dropdown Menu for Order Options */}
+      {activeMenuOrder && menuPosition && (
         <>
+          {/* Transparent Backdrop to close on outside click */}
           <div
-            className={`radial-backdrop ${isRadialActive ? 'on' : ''}`}
-            onClick={handleCloseRadialMenu}
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[1px]"
+            onClick={handleCloseMenu}
           />
+
+          {/* Floating Dropdown Card */}
           <div
-            className={`radial-wrapper ${isRadialActive ? 'on' : ''}`}
-            style={{
-              left: `${radialMenu.x}px`,
-              top: `${radialMenu.y}px`,
-            }}
+            className="fixed z-50 w-64 bg-slate-900/98 border border-slate-700 rounded-2xl shadow-2xl py-1.5 text-xs text-slate-200 animate-in fade-in zoom-in-95 duration-100"
+            style={
+              menuPosition.showAbove
+                ? { bottom: `${window.innerHeight - menuPosition.top}px`, right: `${menuPosition.right}px` }
+                : { top: `${menuPosition.top}px`, right: `${menuPosition.right}px` }
+            }
+            onClick={(e) => e.stopPropagation()}
             role="menu"
-            aria-label="Opções do Pedido"
+            aria-label={`Opções do Pedido ${activeMenuOrder.orderNumber}`}
           >
-            {[
-              {
-                id: 'baixa',
-                label: 'Baixa',
-                color: '#10b981',
-                icon: CheckCircle,
-                onClick: (o: Order) => handleOpenClearModal(o),
-              },
-              {
-                id: 'cobrar',
-                label: 'Cobrar',
-                color: '#f5b301',
-                icon: BellRing,
-                onClick: (o: Order) => handleOpenChargeModal(o),
-              },
-              {
-                id: 'ver',
-                label: 'Ver',
-                color: '#cbd5e1',
-                icon: Eye,
-                onClick: (o: Order) => handleOpenDetail(o),
-              },
-              {
-                id: 'editar',
-                label: 'Editar',
-                color: '#38bdf8',
-                icon: Edit3,
-                onClick: (o: Order) => handleOpenEditModal(o),
-              },
-              {
-                id: 'mover',
-                label: 'Mover Caixa',
-                color: '#a855f7',
-                icon: Archive,
-                onClick: (o: Order) => handleOpenMoveToClosedModal(o),
-              },
-              {
-                id: 'rel',
-                label: 'Relatório',
-                color: '#14b8a6',
-                icon: MessageSquare,
-                onClick: (o: Order) => handleOpenOrderSummaryModal(o),
-              },
-              {
-                id: 'excluir',
-                label: 'Excluir',
-                color: '#f43f5e',
-                icon: Trash2,
-                onClick: (o: Order) => handleOpenDeleteModal(o),
-              },
-            ].map((action, i, arr) => {
-              const n = arr.length;
-              const angle = (-90 + (i * 360) / n) * (Math.PI / 180);
-              const R = 90;
-              const x = (Math.cos(angle) * R).toFixed(1);
-              const y = (Math.sin(angle) * R).toFixed(1);
-              const Icon = action.icon;
+            {/* Header with Order Number & Total */}
+            <div className="px-3.5 py-2 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 rounded-t-xl">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider text-slate-500 font-bold block">Ações do Pedido</span>
+                <span className="font-mono font-bold text-white text-xs">{activeMenuOrder.orderNumber}</span>
+              </div>
+              <span className="font-mono font-bold text-cyan-400 text-xs">
+                R$ {(activeMenuOrder.total || 0).toFixed(2).replace('.', ',')}
+              </span>
+            </div>
 
-              return (
-                <button
-                  key={action.id}
-                  type="button"
-                  role="menuitem"
-                  data-label={action.label}
-                  aria-label={action.label}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const targetOrder = radialMenu.order;
-                    handleCloseRadialMenu();
-                    action.onClick(targetOrder);
-                  }}
-                  className="radial-item"
-                  style={
-                    {
-                      '--c': action.color,
-                      '--i': i,
-                      '--x': `${x}px`,
-                      '--y': `${y}px`,
-                    } as React.CSSProperties
-                  }
-                >
-                  <Icon className="w-5 h-5" />
-                </button>
-              );
-            })}
+            {/* Actions List */}
+            <div className="py-1">
+              {/* Dar Baixa */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenClearModal(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-emerald-950/50 hover:text-emerald-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-emerald-500/15 text-emerald-400 group-hover:bg-emerald-500/25 shrink-0 transition-colors">
+                  <CheckCircle className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-emerald-300">Dar Baixa</span>
+                  <span className="text-[10px] text-slate-500 block">Registrar quitação / recebimento</span>
+                </div>
+              </button>
 
-            {/* Central X button to close / recolher */}
-            <button
-              type="button"
-              data-label="Recolher"
-              aria-label="Recolher"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleCloseRadialMenu();
-              }}
-              className="radial-item center"
-              style={
-                {
-                  '--x': '0px',
-                  '--y': '0px',
-                  '--i': 0,
-                } as React.CSSProperties
-              }
-            >
-              <X className="w-5 h-5" />
-            </button>
+              {/* Cobrança WhatsApp */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenChargeModal(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-amber-950/50 hover:text-amber-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-amber-500/15 text-amber-400 group-hover:bg-amber-500/25 shrink-0 transition-colors">
+                  <BellRing className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-amber-300">Cobrar (WhatsApp)</span>
+                  <span className="text-[10px] text-slate-500 block">Enviar lembrete e vencimento</span>
+                </div>
+              </button>
+
+              {/* Ver Detalhes */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenDetail(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-slate-800 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-slate-800 text-slate-400 group-hover:text-white shrink-0 transition-colors">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-white">Ver Detalhes</span>
+                  <span className="text-[10px] text-slate-500 block">Itens, cliente e comprovante</span>
+                </div>
+              </button>
+
+              {/* Editar Pedido */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenEditModal(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-cyan-950/50 hover:text-cyan-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-cyan-500/15 text-cyan-400 group-hover:bg-cyan-500/25 shrink-0 transition-colors">
+                  <Edit3 className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-cyan-300">Editar Pedido</span>
+                  <span className="text-[10px] text-slate-500 block">Alterar itens, frete ou dados</span>
+                </div>
+              </button>
+
+              {/* Mover para Caixa Fechado */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenMoveToClosedModal(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-purple-950/50 hover:text-purple-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-purple-500/15 text-purple-400 group-hover:bg-purple-500/25 shrink-0 transition-colors">
+                  <Archive className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-purple-300">Mover Caixa</span>
+                  <span className="text-[10px] text-slate-500 block">Transferir para caixa fechado</span>
+                </div>
+              </button>
+
+              {/* Relatório WhatsApp */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenOrderSummaryModal(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-teal-950/50 hover:text-teal-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-teal-500/15 text-teal-400 group-hover:bg-teal-500/25 shrink-0 transition-colors">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-teal-300">Relatório WhatsApp</span>
+                  <span className="text-[10px] text-slate-500 block">Resumo formatado em texto</span>
+                </div>
+              </button>
+            </div>
+
+            {/* Excluir Pedido */}
+            <div className="pt-1 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  handleOpenDeleteModal(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-red-950/40 text-red-400 hover:text-red-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-red-500/15 text-red-400 group-hover:bg-red-500/25 shrink-0 transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block">Excluir Pedido</span>
+                  <span className="text-[10px] text-red-400/60 block">Requer senha de segurança (8817)</span>
+                </div>
+              </button>
+            </div>
           </div>
         </>
       )}
