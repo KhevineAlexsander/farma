@@ -60,8 +60,8 @@ export interface SalesReportsTabProps {
 export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrder }) => {
   const { orders, products, storeSettings, saveAllOrdersToCloud, refreshSalesData, showToast, updateOrderStatus } = useApp();
 
-  // Period and Status filters
-  const [timeFilter, setTimeFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all'>('month');
+  // Period and Status filters (Padrão: Caixa Aberto / Pós-Fechamento)
+  const [timeFilter, setTimeFilter] = useState<'caixa_aberto' | 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all'>('caixa_aberto');
   const [statusFilterMode, setStatusFilterMode] = useState<'confirmed_paid' | 'all_active' | 'fully_paid' | 'pending'>('confirmed_paid');
   
   // Product Search & Category Filter
@@ -174,6 +174,10 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
 
     const timeMatched = activeOrders.filter((order) => {
       if (order.status === 'Cancelado') return false;
+      if (timeFilter === 'caixa_aberto') {
+        // Puxa exatamente todas as vendas feitas após fechar o último caixa (período ativo)
+        return true;
+      }
       if (timeFilter !== 'all') {
         const orderTime = new Date(order.createdAt || Date.now()).getTime();
         if (timeFilter === 'today') {
@@ -669,7 +673,9 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   const generateSalesSummaryText = () => {
     const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
     const periodLabel =
-      timeFilter === 'today'
+      timeFilter === 'caixa_aberto'
+        ? 'Caixa Aberto (Sessão Atual / Pós-Fechamento)'
+        : timeFilter === 'today'
         ? 'Hoje'
         : timeFilter === 'yesterday'
         ? 'Ontem'
@@ -820,7 +826,9 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
   };
 
   const activePeriodLabel = useMemo(() => {
-    return timeFilter === 'today'
+    return timeFilter === 'caixa_aberto'
+      ? 'Caixa Aberto (Sessão Atual / Pós-Fechamento)'
+      : timeFilter === 'today'
       ? 'Hoje'
       : timeFilter === 'yesterday'
       ? 'Ontem'
@@ -1072,8 +1080,9 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
           {/* Controls: Periods & Actions */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 w-full 2xl:w-auto justify-start 2xl:justify-end">
             {/* Period Selector */}
-            <div className="grid grid-cols-3 xs:grid-cols-6 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full sm:w-auto">
+            <div className="grid grid-cols-2 xs:grid-cols-4 sm:flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 w-full sm:w-auto">
               {[
+                { id: 'caixa_aberto', label: 'Caixa Aberto (Ativo)', isSpecial: true },
                 { id: 'today', label: 'Hoje' },
                 { id: 'yesterday', label: 'Ontem' },
                 { id: 'week', label: '7 Dias' },
@@ -1084,13 +1093,20 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                 <button
                   key={t.id}
                   onClick={() => setTimeFilter(t.id as any)}
-                  className={`py-1.5 px-2 sm:px-3 rounded-lg text-xs font-bold text-center transition-all cursor-pointer min-h-[36px] sm:min-h-0 flex items-center justify-center flex-1 sm:flex-initial ${
+                  className={`py-1.5 px-2 sm:px-3 rounded-lg text-xs font-bold text-center transition-all cursor-pointer min-h-[36px] sm:min-h-0 flex items-center justify-center gap-1.5 flex-1 sm:flex-initial ${
                     timeFilter === t.id
-                      ? 'bg-cyan-500 text-slate-950 shadow-md font-black'
-                      : 'text-slate-400 hover:text-white active:bg-slate-800'
+                      ? t.id === 'caixa_aberto'
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-md font-black'
+                        : 'bg-cyan-500 text-slate-950 shadow-md font-black'
+                      : t.id === 'caixa_aberto'
+                        ? 'text-emerald-400 hover:text-white bg-emerald-500/10 border border-emerald-500/20'
+                        : 'text-slate-400 hover:text-white active:bg-slate-800'
                   }`}
                 >
-                  {t.label}
+                  {t.id === 'caixa_aberto' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                  )}
+                  <span>{t.label}</span>
                 </button>
               ))}
             </div>
@@ -2539,24 +2555,26 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
                       {activeOrders.length} pedidos ativos no período
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                     {[
-                      { id: 'all', label: `Geral (Todos)` },
-                      { id: 'month', label: 'Mês Atual' },
-                      { id: 'week', label: '7 Dias' },
+                      { id: 'caixa_aberto', label: 'Caixa Aberto (Ativo)' },
                       { id: 'today', label: 'Hoje' },
+                      { id: 'week', label: '7 Dias' },
+                      { id: 'month', label: 'Mês Atual' },
+                      { id: 'all', label: `Geral (Todos)` },
                     ].map((p) => (
                       <button
                         key={p.id}
                         type="button"
                         onClick={() => setTimeFilter(p.id as any)}
-                        className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center ${
+                        className={`p-2 rounded-lg text-xs font-bold transition-all cursor-pointer text-center flex items-center justify-center gap-1 ${
                           timeFilter === p.id
                             ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
                             : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
                         }`}
                       >
-                        {p.label}
+                        {p.id === 'caixa_aberto' && <span className="w-1.5 h-1.5 rounded-full bg-emerald-950 animate-pulse"></span>}
+                        <span>{p.label}</span>
                       </button>
                     ))}
                   </div>

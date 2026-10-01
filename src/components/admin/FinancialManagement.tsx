@@ -49,8 +49,8 @@ export const FinancialManagement: React.FC = () => {
     refreshSalesData,
   } = useApp();
 
-  // Period Filter State
-  const [timeFilter, setTimeFilter] = useState<'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'year' | 'all' | 'custom'>('month');
+  // Period Filter State (Padrão: Caixa Aberto / Pós-Fechamento)
+  const [timeFilter, setTimeFilter] = useState<'caixa_aberto' | 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'year' | 'all' | 'custom'>('caixa_aberto');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
 
@@ -162,6 +162,9 @@ export const FinancialManagement: React.FC = () => {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
 
+    if (timeFilter === 'caixa_aberto') {
+      return { start: new Date(0), end: new Date(2100, 0, 1), label: 'Caixa Aberto (Sessão Atual)' };
+    }
     if (timeFilter === 'today') {
       return { start: startOfToday, end: endOfToday, label: 'Hoje' };
     }
@@ -685,6 +688,7 @@ export const FinancialManagement: React.FC = () => {
               Período:
             </span>
             {[
+              { id: 'caixa_aberto', label: 'Caixa Aberto (Ativo)', isSpecial: true },
               { id: 'today', label: 'Hoje' },
               { id: 'yesterday', label: 'Ontem' },
               { id: 'week', label: '7 Dias' },
@@ -698,14 +702,26 @@ export const FinancialManagement: React.FC = () => {
               return (
                 <button
                   key={p.id}
-                  onClick={() => setTimeFilter(p.id as any)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  onClick={() => {
+                    setTimeFilter(p.id as any);
+                    if (p.id === 'caixa_aberto') {
+                      setCashRegisterScope('open_only');
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-1.5 ${
                     isActive
-                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
-                      : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700 hover:text-white'
+                      ? p.id === 'caixa_aberto'
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-black shadow-md'
+                        : 'bg-cyan-500 text-slate-950 font-bold shadow-md shadow-cyan-500/20'
+                      : p.id === 'caixa_aberto'
+                        ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20'
+                        : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700 hover:text-white'
                   }`}
                 >
-                  {p.label}
+                  {p.id === 'caixa_aberto' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  )}
+                  <span>{p.label}</span>
                 </button>
               );
             })}
