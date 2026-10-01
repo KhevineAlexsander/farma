@@ -121,9 +121,24 @@
         "createdAt": { "type": "string" }
       },
       "required": ["name", "category", "price", "costPrice", "status"]
+    },
+    "userCarts": {
+      "title": "User Shopping Carts",
+      "description": "Persistent shopping cart state associated with logged-in user accounts",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "updatedAt"]
     }
   },
   "firestore": {
+    "/userCarts/{cartId}": {
+      "schema": "userCarts",
+      "description": "User persistent shopping cart records"
+    },
     "/productRequests/{requestId}": {
       "schema": "productRequests",
       "description": "Product registration requests from owner"

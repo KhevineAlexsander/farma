@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, QrCode, CreditCard, ShieldCheck, Truck, MessageSquare, ExternalLink, Store, Tag, ShoppingBag, Lock, AlertTriangle, User, Mail } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, QrCode, CreditCard, ShieldCheck, Truck, MessageSquare, ExternalLink, Store, Tag, ShoppingBag, Lock, AlertTriangle, User, Mail, Info, CheckCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { PeptideVial } from './PeptideVial';
 import { Order } from '../types';
@@ -137,11 +137,20 @@ export const CheckoutModal: React.FC = () => {
       )
       .join('\n');
 
-    const addressBlock = `📍 *ENDEREÇO DE ENTREGA:*
-${order.address?.street || ''}, ${order.address?.number || ''}${order.address?.complement ? ` (${order.address.complement})` : ''}
-Bairro: ${order.address?.neighborhood || ''}
+    const hasAddress = Boolean(
+      order.address?.street &&
+      order.address?.street !== 'A combinar no WhatsApp' &&
+      order.address?.street !== 'Não informado'
+    );
+
+    const addressBlock = hasAddress
+      ? `📍 *ENDEREÇO DE ENTREGA:*
+${order.address?.street || ''}, ${order.address?.number || 'S/N'}${order.address?.complement ? ` (${order.address.complement})` : ''}
+Bairro: ${order.address?.neighborhood || '-'}
 Cidade/UF: ${order.address?.city || ''}/${order.address?.state || ''}
-CEP: ${order.address?.zipCode || ''}`;
+CEP: ${order.address?.zipCode || ''}`
+      : `📍 *ENDEREÇO DE ENTREGA:*
+• A combinar diretamente aqui no WhatsApp (Endereço Opcional)`;
 
     const couponLine = appliedCoupon && currentCouponDiscount > 0
       ? `🏷️ *Cupom (${appliedCoupon.code}):* -R$ ${(currentCouponDiscount || 0).toFixed(2).replace('.', ',')}\n`
@@ -191,14 +200,27 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
       showToast(storeSettings.suspensionMessage || '⚠️ Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!');
       return;
     }
-    if (!customerName.trim() || !customerPhone.trim() || !street || !number || !city) {
-      alert('Por favor, preencha todos os campos obrigatórios (Nome, WhatsApp e Endereço).');
+
+    // Apenas Nome e Telefone / WhatsApp são obrigatórios
+    if (!customerName.trim() || !customerPhone.trim()) {
+      showToast('⚠️ Por favor, informe seu Nome Completo e WhatsApp para finalizar.');
       return;
     }
 
     const effectivePhone = customerPhone.trim();
     const effectiveName = customerName.trim();
     const effectiveEmail = customerEmail.trim() || (currentUser?.email || `${effectivePhone.replace(/\D/g, '') || 'cliente'}@contato.com`);
+
+    const hasProvidedAddress = Boolean(street.trim() || city.trim() || zipCode.trim());
+    const effectiveAddress = {
+      street: street.trim() || (hasProvidedAddress ? '' : 'A combinar no WhatsApp'),
+      number: number.trim() || (hasProvidedAddress ? 'S/N' : '-'),
+      complement: complement.trim() || undefined,
+      neighborhood: neighborhood.trim() || (hasProvidedAddress ? '' : 'A combinar'),
+      city: city.trim() || (hasProvidedAddress ? '' : 'A combinar'),
+      state: state.trim() || (hasProvidedAddress ? '' : 'SP'),
+      zipCode: zipCode.trim() || (hasProvidedAddress ? '' : '00000-000'),
+    };
 
     const order = createOrder({
       customer: {
@@ -207,20 +229,12 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
         phone: effectivePhone,
         cpf: customerCpf.trim() || undefined,
       },
-      address: {
-        street,
-        number,
-        complement,
-        neighborhood,
-        city,
-        state,
-        zipCode,
-      },
+      address: effectiveAddress,
       paymentMethod: 'WhatsApp / A Combinar',
       shipping: effectiveShipping,
       discount: totalDiscount,
       couponCode: appliedCoupon?.code,
-      notes,
+      notes: notes.trim() || undefined,
     });
 
     // Save/Update user profile info in Firestore & state
@@ -229,17 +243,11 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
         name: effectiveName,
         phone: effectivePhone,
         cpf: customerCpf.trim() || undefined,
-        addresses: [
-          {
-            street,
-            number,
-            complement,
-            neighborhood,
-            city,
-            state,
-            zipCode,
-          },
-        ],
+        ...(hasProvidedAddress
+          ? {
+              addresses: [effectiveAddress],
+            }
+          : {}),
       });
     }
 
@@ -352,7 +360,9 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
             <div className="flex justify-between items-center text-sm">
               <span className="text-slate-500">Endereço de Envio:</span>
               <span className="font-medium text-slate-700 truncate max-w-[280px]">
-                {completedOrder.address?.street || ''}, {completedOrder.address?.number || ''} - {completedOrder.address?.city || ''}/{completedOrder.address?.state || ''}
+                {completedOrder.address?.street && completedOrder.address?.street !== 'A combinar no WhatsApp' && completedOrder.address?.street !== 'Não informado'
+                  ? `${completedOrder.address.street}, ${completedOrder.address.number || 'S/N'} - ${completedOrder.address.city || ''}/${completedOrder.address.state || ''}`
+                  : 'A combinar no WhatsApp (Opcional)'}
               </span>
             </div>
             <div className="flex justify-between items-center text-base font-bold border-t border-slate-200 pt-2 text-slate-900">
@@ -428,15 +438,20 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
 
             {/* 1. Customer Personal & Contact Data */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold">1</span>
-                Dados Pessoais
-              </h3>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold">1</span>
+                  Dados Pessoais
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-cyan-50 text-cyan-800 border border-cyan-200">
+                  Obrigatórios para o Pedido
+                </span>
+              </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1.5">
-                    Nome Completo *
+                    Nome Completo <span className="text-rose-600 font-bold">*</span>
                   </label>
                   <input
                     type="text"
@@ -450,7 +465,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                 </div>
                 <div>
                   <label className="block text-slate-700 font-semibold mb-1.5">
-                    WhatsApp com DDD *
+                    WhatsApp com DDD <span className="text-rose-600 font-bold">*</span>
                   </label>
                   <input
                     type="tel"
@@ -465,21 +480,41 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               </div>
             </div>
 
-            {/* 2. Address */}
+            {/* 2. Address - 100% OPCIONAL */}
             <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-xs space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <span className="w-6 h-6 rounded-full bg-slate-900 text-white text-xs flex items-center justify-center font-bold">2</span>
                   Endereço de Entrega
                 </h3>
+                <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5 shadow-xs">
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>100% OPCIONAL</span>
+                </span>
+              </div>
+
+              {/* Informative Banner: Address is Optional */}
+              <div className="p-4 bg-gradient-to-r from-sky-50 via-cyan-50 to-emerald-50 border border-sky-200 rounded-2xl flex items-start gap-3.5 text-sky-950 shadow-xs">
+                <div className="p-2 bg-sky-600 text-white rounded-xl shrink-0 mt-0.5 shadow-xs">
+                  <Info className="w-4 h-4" />
+                </div>
+                <div className="text-xs leading-relaxed">
+                  <h4 className="font-extrabold text-sky-950 text-sm">
+                    O preenchimento do endereço é opcional!
+                  </h4>
+                  <p className="text-sky-900 mt-1 font-medium">
+                    Você pode finalizar seu pedido preenchendo <strong>somente o Nome e WhatsApp</strong>. Caso prefira não digitar o endereço agora, poderá combinar os detalhes de entrega diretamente com nosso atendente no WhatsApp.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">CEP *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    CEP <span className="text-slate-400 font-normal">(Opcional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     maxLength={12}
                     placeholder="00000-000"
                     value={zipCode}
@@ -488,10 +523,11 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-slate-700 font-semibold mb-1">Logradouro / Rua *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    Logradouro / Rua <span className="text-slate-400 font-normal">(Opcional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     maxLength={120}
                     placeholder="Ex: Av. Paulista ou Rua das Flores"
                     value={street}
@@ -500,22 +536,24 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Número *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    Número <span className="text-slate-400 font-normal">(Opcional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     maxLength={20}
-                    placeholder="123"
+                    placeholder="Ex: 123 ou S/N"
                     value={number}
                     onChange={(e) => setNumber(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-cyan-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Bairro *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    Bairro <span className="text-slate-400 font-normal">(Opcional)</span>
+                  </label>
                   <input
                     type="text"
-                    required
                     maxLength={60}
                     placeholder="Ex: Bela Vista"
                     value={neighborhood}
@@ -524,11 +562,12 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 font-semibold mb-1">Cidade / UF *</label>
+                  <label className="block text-slate-700 font-semibold mb-1">
+                    Cidade / UF <span className="text-slate-400 font-normal">(Opcional)</span>
+                  </label>
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      required
                       maxLength={60}
                       value={city}
                       onChange={(e) => setCity(e.target.value)}
@@ -537,7 +576,6 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                     />
                     <input
                       type="text"
-                      required
                       value={state}
                       maxLength={2}
                       placeholder="UF"
@@ -549,13 +587,15 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
               </div>
 
               <div>
-                <label className="block text-slate-700 font-semibold mb-1">Instruções ou Observações para a Entrega</label>
+                <label className="block text-slate-700 font-semibold mb-1">
+                  Instruções ou Observações para a Entrega <span className="text-slate-400 font-normal">(Opcional)</span>
+                </label>
                 <input
                   type="text"
                   maxLength={300}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ex: Deixar na portaria, entregar em horário comercial, etc."
+                  placeholder="Ex: Combinar entrega no WhatsApp, deixar na portaria, etc."
                   className="w-full px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 text-xs focus:outline-none focus:border-cyan-600"
                 />
               </div>
@@ -723,13 +763,19 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
                   </p>
                 </div>
               ) : (
-                <button
-                  type="submit"
-                  className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-sm tracking-wide shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
-                >
-                  <MessageSquare className="w-5 h-5" />
-                  <span>FINALIZAR E ENVIAR NO WHATSAPP</span>
-                </button>
+                <div className="space-y-2">
+                  <button
+                    type="submit"
+                    className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-extrabold text-sm tracking-wide shadow-lg hover:shadow-xl transition-all cursor-pointer flex items-center justify-center gap-2"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                    <span>FINALIZAR E ENVIAR NO WHATSAPP</span>
+                  </button>
+                  <div className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-xl bg-emerald-50 text-emerald-800 text-[11px] font-semibold text-center border border-emerald-200">
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>Obrigatório apenas Nome e WhatsApp • Endereço 100% opcional</span>
+                  </div>
+                </div>
               )}
 
               <p className="text-[11px] text-slate-500 text-center">

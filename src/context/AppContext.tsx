@@ -117,50 +117,63 @@ export function isBlacklistedTx(t: { id?: string; orderId?: string; description?
 /**
  * Robust order merging helper that prevents remote null/undefined values
  * from erasing local manual clearance or updated status fields.
+ * FIREBASE / PROCESSED STATUS IS ALWAYS PRESERVED TO PREVENT ACCIDENTAL REVERSIONS TO 'Pendente'.
  */
 function mergeOrderHelper(existing: Order, incoming: Order): Order {
-  const hasExistingClearance = Boolean(existing.clearedManuallyAt || existing.clearedBy);
-  const hasIncomingClearance = Boolean(incoming.clearedManuallyAt || incoming.clearedBy);
+  const existingUpdatedTime = new Date(existing.updatedAt || existing.clearedManuallyAt || existing.createdAt || 0).getTime();
+  const incomingUpdatedTime = new Date(incoming.updatedAt || incoming.clearedManuallyAt || incoming.createdAt || 0).getTime();
 
-  const clearedManuallyAt = incoming.clearedManuallyAt || existing.clearedManuallyAt;
-  const clearedBy = incoming.clearedBy || existing.clearedBy;
+  // Status resolution logic:
+  // If existing is already processed (e.g. 'Pago', 'Pago Parcial', 'Aguardando Baixa', 'Em Separação', 'Enviado', 'Entregue', 'Cancelado')
+  // and incoming is 'Pendente', NEVER revert to 'Pendente'!
+  let resolvedStatus = existing.status;
+  if (!existing.status || existing.status === 'Pendente') {
+    resolvedStatus = incoming.status || 'Pendente';
+  } else if (incoming.status && incoming.status !== 'Pendente') {
+    // Both are non-pending: pick the newer one by timestamp
+    if (incomingUpdatedTime >= existingUpdatedTime) {
+      resolvedStatus = incoming.status;
+    } else {
+      resolvedStatus = existing.status;
+    }
+  } else if (incoming.status === 'Pendente') {
+    // Incoming is 'Pendente' but existing is already Pago/Cancelado/etc.
+    // KEEP the existing status! Do NOT let stale/default records revert it.
+    resolvedStatus = existing.status;
+  }
+
+  const isPaid = resolvedStatus === 'Pago' || resolvedStatus === 'Entregue' || resolvedStatus === 'Enviado';
+  const clearedManuallyAt = incoming.clearedManuallyAt || existing.clearedManuallyAt || (isPaid ? existing.clearedManuallyAt || new Date().toLocaleString('pt-BR') : undefined);
+  const clearedBy = incoming.clearedBy || existing.clearedBy || (isPaid ? existing.clearedBy || 'Administrador' : undefined);
   const dueDate = incoming.dueDate || existing.dueDate;
   
   const paidAmount = incoming.paidAmount !== undefined 
     ? incoming.paidAmount 
-    : existing.paidAmount;
+    : (existing.paidAmount !== undefined ? existing.paidAmount : (isPaid ? (incoming.total || existing.total) : undefined));
     
   const remainingAmount = incoming.remainingAmount !== undefined 
     ? incoming.remainingAmount 
-    : existing.remainingAmount;
-
-  let status = incoming.status;
-  if (hasExistingClearance && !hasIncomingClearance && incoming.status === 'Pendente') {
-    status = existing.status;
-  }
-
-  const isPaid = status === 'Pago' || status === 'Entregue' || status === 'Enviado';
-  const resolvedClearedManuallyAt = clearedManuallyAt || (isPaid ? existing.clearedManuallyAt || new Date().toLocaleString('pt-BR') : undefined);
-  const resolvedClearedBy = clearedBy || (isPaid ? existing.clearedBy || 'Administrador' : undefined);
+    : (existing.remainingAmount !== undefined ? existing.remainingAmount : (isPaid ? 0 : undefined));
 
   return {
     ...existing,
     ...incoming,
-    status,
+    status: resolvedStatus,
     customer: { ...existing.customer, ...(incoming.customer || {}) },
     address: { ...existing.address, ...(incoming.address || {}) },
     items: incoming.items && incoming.items.length > 0 ? incoming.items : existing.items,
-    clearedManuallyAt: resolvedClearedManuallyAt,
-    clearedBy: resolvedClearedBy,
+    clearedManuallyAt,
+    clearedBy,
     dueDate,
-    paidAmount: paidAmount !== undefined ? paidAmount : (isPaid ? (incoming.total || existing.total) : undefined),
-    remainingAmount: remainingAmount !== undefined ? remainingAmount : (isPaid ? 0 : undefined),
+    paidAmount,
+    remainingAmount,
     trackingCode: incoming.trackingCode || existing.trackingCode,
     notes: incoming.notes || existing.notes,
     isClosed: incoming.isClosed !== undefined ? incoming.isClosed : existing.isClosed,
     closedAt: incoming.closedAt || existing.closedAt,
     closedSessionId: incoming.closedSessionId || existing.closedSessionId,
     closedSessionName: incoming.closedSessionName || existing.closedSessionName,
+    updatedAt: incoming.updatedAt || existing.updatedAt || new Date().toISOString(),
   };
 }
 
@@ -543,9 +556,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('peptide_products', JSON.stringify(products));
   }, [products]);
 
+  // Helper to extract a unique storage & Firestore key for a user
+  const getUserKey = (user: User | null | undefined): string | null => {
+    if (!user) return null;
+    if (user.id) return user.id;
+    if (user.email) return user.email.toLowerCase().trim().replace(/[^a-z0-9]/g, '_');
+    return null;
+  };
+
   // --- Cart State ---
   const [cart, setCart] = useState<CartItem[]>(() => {
     let saved = localStorage.getItem('peptide_cart');
+
+    // If a logged-in user is already cached in localStorage, check their user-specific cart first
+    try {
+      const savedUserStr = localStorage.getItem('peptide_user');
+      if (savedUserStr) {
+        const parsedUser = JSON.parse(savedUserStr);
+        const uKey = parsedUser?.id || (parsedUser?.email ? parsedUser.email.toLowerCase().trim().replace(/[^a-z0-9]/g, '_') : null);
+        if (uKey) {
+          const userSavedCart = localStorage.getItem(`peptide_cart_${uKey}`);
+          if (userSavedCart && userSavedCart !== '[]') {
+            saved = userSavedCart;
+          } else if (Array.isArray(parsedUser?.savedCart) && parsedUser.savedCart.length > 0) {
+            saved = JSON.stringify(parsedUser.savedCart);
+          }
+        }
+      }
+    } catch {}
+
     if (!saved || saved === '[]') {
       saved = localStorage.getItem('peptide_cart_backup');
     }
@@ -575,32 +614,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const [isCartOpen, setIsCartOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      const cartJson = JSON.stringify(cart);
-      localStorage.setItem('peptide_cart', cartJson);
-      localStorage.setItem('peptide_cart_backup', cartJson);
-    } catch (e) {
-      console.error('Error saving cart to storage:', e);
-    }
-  }, [cart]);
-
-  // Sync cart across browser tabs to prevent loss or overwrite
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'peptide_cart' && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed)) {
-            setCart(sanitizeOrderItems(parsed, products));
-          }
-        } catch {}
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, [products]);
 
   // --- User & Auth State ---
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -632,6 +645,171 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('peptide_user');
     }
   }, [currentUser]);
+
+  // Persist cart to localStorage and continuously save to logged-in user's account in Firestore
+  useEffect(() => {
+    try {
+      const cartJson = JSON.stringify(cart);
+      localStorage.setItem('peptide_cart', cartJson);
+      localStorage.setItem('peptide_cart_backup', cartJson);
+
+      const userKey = getUserKey(currentUser);
+      if (userKey) {
+        localStorage.setItem(`peptide_cart_${userKey}`, cartJson);
+
+        // Debounced sync to Firestore cloud storage so it's permanently stored on their account
+        const timer = setTimeout(async () => {
+          try {
+            await setDoc(
+              doc(db, 'userCarts', userKey),
+              cleanUndefinedForFirestore({
+                userId: currentUser?.id || userKey,
+                userEmail: currentUser?.email || '',
+                items: cart,
+                updatedAt: new Date().toISOString(),
+              }),
+              { merge: true }
+            );
+
+            if (currentUser?.id) {
+              await setDoc(
+                doc(db, 'users', currentUser.id),
+                cleanUndefinedForFirestore({
+                  savedCart: cart,
+                  cartUpdatedAt: new Date().toISOString(),
+                }),
+                { merge: true }
+              );
+            }
+          } catch (cloudErr) {
+            console.warn('Note: Could not sync cart to cloud Firestore:', cloudErr);
+          }
+        }, 500);
+
+        return () => clearTimeout(timer);
+      }
+    } catch (e) {
+      console.error('Error saving cart to storage:', e);
+    }
+  }, [cart, currentUser]);
+
+  // Track previous user to detect when a user logs in or switches account, and recover their saved cart
+  const prevUserKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentKey = getUserKey(currentUser);
+    const prevKey = prevUserKeyRef.current;
+    prevUserKeyRef.current = currentKey;
+
+    // Trigger only when user actually logs in or switches user
+    if (currentKey && currentKey !== prevKey) {
+      const syncUserCartOnLogin = async () => {
+        try {
+          let userCloudItems: CartItem[] = [];
+
+          // 1. Check if user already had a savedCart in currentUser object
+          if (Array.isArray(currentUser?.savedCart) && currentUser.savedCart.length > 0) {
+            userCloudItems = currentUser.savedCart;
+          }
+
+          // 2. Check localStorage for this user
+          const localUserCart = localStorage.getItem(`peptide_cart_${currentKey}`);
+          if (localUserCart) {
+            try {
+              const parsed = JSON.parse(localUserCart);
+              if (Array.isArray(parsed) && parsed.length > 0 && userCloudItems.length === 0) {
+                userCloudItems = parsed;
+              }
+            } catch {}
+          }
+
+          // 3. Fetch from Firestore userCarts collection or users collection
+          try {
+            const cartDocSnap = await getDoc(doc(db, 'userCarts', currentKey));
+            if (cartDocSnap.exists()) {
+              const data = cartDocSnap.data();
+              if (Array.isArray(data?.items) && data.items.length > 0) {
+                userCloudItems = data.items;
+              }
+            } else if (currentUser?.id) {
+              const userSnap = await getDoc(doc(db, 'users', currentUser.id));
+              if (userSnap.exists()) {
+                const uData = userSnap.data();
+                if (Array.isArray(uData?.savedCart) && uData.savedCart.length > 0) {
+                  userCloudItems = uData.savedCart;
+                }
+              }
+            }
+          } catch (cloudErr) {
+            console.warn('Could not fetch cloud cart for user:', cloudErr);
+          }
+
+          // 4. Smart Merge: Keep any items added while browsing, merge with cloud items
+          setCart((currentLocalCart) => {
+            if (userCloudItems.length === 0) {
+              // User had no cloud cart yet: save their current guest items to their account!
+              if (currentLocalCart.length > 0) {
+                localStorage.setItem(`peptide_cart_${currentKey}`, JSON.stringify(currentLocalCart));
+              }
+              return currentLocalCart;
+            }
+
+            const map = new Map<string, CartItem>();
+
+            // Account saved items first
+            userCloudItems.forEach((item) => {
+              if (item && item.product && typeof item.product.price === 'number') {
+                const key = getProductDeduplicationKey(item.product.name, item.product.dosage) || item.product.id;
+                map.set(key, { ...item });
+              }
+            });
+
+            // Merge items already in bag before logging in
+            currentLocalCart.forEach((item) => {
+              if (item && item.product && typeof item.product.price === 'number') {
+                const key = getProductDeduplicationKey(item.product.name, item.product.dosage) || item.product.id;
+                const existing = map.get(key);
+                if (existing) {
+                  map.set(key, {
+                    ...existing,
+                    quantity: Math.max(existing.quantity, item.quantity),
+                  });
+                } else {
+                  map.set(key, { ...item });
+                }
+              }
+            });
+
+            const merged = sanitizeOrderItems(Array.from(map.values()), products);
+            if (merged.length > 0) {
+              showToast(`🛒 Seu carrinho com ${merged.length} ${merged.length === 1 ? 'item' : 'itens'} foi recuperado e sincronizado com a sua conta!`);
+            }
+            return merged;
+          });
+        } catch (err) {
+          console.error('Error syncing cart on login:', err);
+        }
+      };
+
+      syncUserCartOnLogin();
+    }
+  }, [currentUser, products]);
+
+  // Sync cart across browser tabs to prevent loss or overwrite
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'peptide_cart' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed)) {
+            setCart(sanitizeOrderItems(parsed, products));
+          }
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [products]);
 
   // --- Supabase & Database Config State ---
   const [supabaseConfigured, setSupabaseConfigured] = useState<boolean>(() => isSupabaseConfigured());
@@ -1007,33 +1185,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         
         list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
-        if (isSupabaseConfigured()) {
-          // When Supabase is primary, merge any Firestore backup records into state without overwriting Supabase updates
-          setOrders((prev) => {
-            const orderMap = new Map<string, Order>();
-            prev.forEach((o) => {
-              if (!isBlacklistedOrder(o)) {
-                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-                if (k) orderMap.set(k, o);
-              }
-            });
-            list.forEach((o) => {
-              if (!isBlacklistedOrder(o)) {
-                const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-                if (k && !orderMap.has(k)) {
-                  orderMap.set(k, o);
+        // FIRESTORE IS THE GUARANTEED AUTHORITY FOR ORDER STATUS:
+        setOrders((prev) => {
+          const orderMap = new Map<string, Order>();
+          // 1. Seed current orders in memory
+          prev.forEach((o) => {
+            if (!isBlacklistedOrder(o)) {
+              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
+              if (k) orderMap.set(k, o);
+            }
+          });
+
+          // 2. Apply Firestore updates: merge directly into existing orders so status changes from Firebase ALWAYS take effect!
+          list.forEach((firestoreOrder) => {
+            if (!isBlacklistedOrder(firestoreOrder)) {
+              const k = firestoreOrder.id || `${firestoreOrder.orderNumber}_${firestoreOrder.createdAt || ''}`;
+              if (k) {
+                const existing = orderMap.get(k);
+                if (existing) {
+                  // Merge with Firestore order taking precedence on status and clearance
+                  orderMap.set(k, mergeOrderHelper(existing, firestoreOrder));
+                } else {
+                  orderMap.set(k, firestoreOrder);
                 }
               }
-            });
-            const merged = Array.from(orderMap.values()).filter((o) => !isBlacklistedOrder(o));
-            merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-            localStorage.setItem('peptide_orders', JSON.stringify(merged));
-            return merged;
+            }
           });
-        } else {
-          setOrders(list);
-          localStorage.setItem('peptide_orders', JSON.stringify(list));
-        }
+
+          const merged = Array.from(orderMap.values()).filter((o) => !isBlacklistedOrder(o));
+          merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          localStorage.setItem('peptide_orders', JSON.stringify(merged));
+          return merged;
+        });
 
         // If Supabase is active, ensure sync
         const supabaseClient = getSupabaseClient();
@@ -2164,23 +2347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const orderMap = new Map<string, Order>();
       let fetchedProducts: Product[] = [];
 
-      // 1. Fetch from Firestore
-      try {
-        const snap = await getDocs(collection(db, 'orders'));
-        if (!snap.empty) {
-          snap.forEach((d) => {
-            const o = { ...(d.data() as Order), id: d.id };
-            if (!isBlacklistedOrder(o)) {
-              const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
-              if (k) orderMap.set(k, o);
-            }
-          });
-        }
-      } catch (fireErr) {
-        console.log('Firestore fetchSalesData notice:', fireErr);
-      }
-
-      // 2. Fetch from Supabase (if configured) and merge
+      // 1. Fetch from Supabase (if configured) first
       const supabase = getSupabaseClient();
       if (supabase && isSupabaseConfigured()) {
         try {
@@ -2194,8 +2361,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (!isBlacklistedOrder(o)) {
                 const k = o.id || `${o.orderNumber}_${o.createdAt || ''}`;
                 if (k) {
-                  const existing = orderMap.get(k);
-                  orderMap.set(k, existing ? { ...existing, ...o } : o);
+                  orderMap.set(k, o);
                 }
               }
             });
@@ -2208,6 +2374,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (supErr) {
           console.log('Supabase fetchSalesData notice:', supErr);
         }
+      }
+
+      // 2. Fetch from Firestore SECOND - Firestore is the authoritative source of truth for status!
+      try {
+        const snap = await getDocs(collection(db, 'orders'));
+        if (!snap.empty) {
+          snap.forEach((d) => {
+            const firestoreOrder = { ...(d.data() as Order), id: d.id };
+            if (!isBlacklistedOrder(firestoreOrder)) {
+              const k = firestoreOrder.id || `${firestoreOrder.orderNumber}_${firestoreOrder.createdAt || ''}`;
+              if (k) {
+                const existing = orderMap.get(k);
+                // Merge with Firestore order taking precedence on status and clearance!
+                orderMap.set(k, existing ? mergeOrderHelper(existing, firestoreOrder) : firestoreOrder);
+              }
+            }
+          });
+        }
+      } catch (fireErr) {
+        console.log('Firestore fetchSalesData notice:', fireErr);
       }
 
       // 3. Final combined orders list
@@ -2662,6 +2848,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const clearCart = () => {
     setCart([]);
+    localStorage.removeItem('peptide_cart');
+    localStorage.removeItem('peptide_cart_backup');
+    const userKey = getUserKey(currentUser);
+    if (userKey) {
+      localStorage.removeItem(`peptide_cart_${userKey}`);
+      try {
+        setDoc(
+          doc(db, 'userCarts', userKey),
+          cleanUndefinedForFirestore({
+            items: [],
+            userId: currentUser?.id || userKey,
+            userEmail: currentUser?.email || '',
+            updatedAt: new Date().toISOString(),
+          }),
+          { merge: true }
+        ).catch(() => {});
+
+        if (currentUser?.id) {
+          setDoc(
+            doc(db, 'users', currentUser.id),
+            cleanUndefinedForFirestore({
+              savedCart: [],
+              cartUpdatedAt: new Date().toISOString(),
+            }),
+            { merge: true }
+          ).catch(() => {});
+        }
+      } catch (e) {
+        console.warn('Note: Could not clear cloud cart:', e);
+      }
+    }
   };
 
   const cartCount = (cart || []).reduce((acc, item) => acc + (item.quantity || 1), 0);
@@ -2846,6 +3063,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Clean sensitive cached administrative data from local storage
     localStorage.removeItem('peptide_employees');
     localStorage.removeItem('peptide_finances');
+
+    // Save current user cart to local storage under user key before clearing general cart
+    const userKey = getUserKey(currentUser);
+    if (userKey && cart.length > 0) {
+      localStorage.setItem(`peptide_cart_${userKey}`, JSON.stringify(cart));
+      try {
+        setDoc(
+          doc(db, 'userCarts', userKey),
+          cleanUndefinedForFirestore({
+            items: cart,
+            userId: currentUser?.id || userKey,
+            userEmail: currentUser?.email || '',
+            updatedAt: new Date().toISOString(),
+          }),
+          { merge: true }
+        ).catch(() => {});
+      } catch {}
+    }
+
+    setCart([]);
+    localStorage.removeItem('peptide_cart');
+    localStorage.removeItem('peptide_cart_backup');
+
     setCurrentUser(null);
     setCurrentView('store');
     showToast('Você saiu da sua conta.');
@@ -3648,19 +3888,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const targetOrder = updatedList.find((o) => o.id === orderId);
 
+    // 1. PRIMARY CLOUD PERSISTENCE: Save directly to Firestore first so status changes are guaranteed
+    try {
+      if (targetOrder) {
+        await setDoc(
+          doc(db, 'orders', orderId),
+          cleanUndefinedForFirestore({
+            ...targetOrder,
+            status,
+            updatedAt: isoTimestamp,
+            statusUpdatedAt: isoTimestamp,
+            statusUpdatedBy: operator,
+          }),
+          { merge: true }
+        );
+        console.log(`[Firebase] Status do pedido ${targetOrder.orderNumber} salvo no Firestore como: ${status}`);
+      }
+    } catch (e) {
+      console.error('Error updating order status in Firestore:', e);
+    }
+
     const supabase = getSupabaseClient();
     if (supabase && targetOrder) {
       supabase.from('orders').upsert(mapOrderToDB(targetOrder)).then((res) => {
         if (res.error) console.log('Supabase status update info:', res.error.message);
       });
-    }
-
-    try {
-      if (targetOrder) {
-        await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(targetOrder), { merge: true });
+      if (targetOrder.isClosed || targetOrder.closedAt) {
+        supabase.from('closed_orders').upsert(mapOrderToDB(targetOrder)).then();
       }
-    } catch (e) {
-      console.log('Error updating order status in Firestore:', e);
     }
     showToast(`Status do pedido atualizado para: ${status}`);
   };
@@ -3710,17 +3965,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetOrder = updatedList.find((o) => o.id === orderId);
     if (!targetOrder) return;
 
+    // 1. PRIMARY CLOUD PERSISTENCE: Save directly to Firestore first so manual clearance & status are guaranteed
+    try {
+      await setDoc(
+        doc(db, 'orders', orderId),
+        cleanUndefinedForFirestore({
+          ...targetOrder,
+          status,
+          updatedAt: isoTimestamp,
+          statusUpdatedAt: isoTimestamp,
+          statusUpdatedBy: operator,
+        }),
+        { merge: true }
+      );
+      console.log(`[Firebase] Baixa do pedido ${targetOrder.orderNumber} salva no Firestore com sucesso: ${status}`);
+    } catch (e) {
+      console.error('Error saving manual clearance in Firestore:', e);
+    }
+
     const supabase = getSupabaseClient();
     if (supabase) {
       supabase.from('orders').upsert(mapOrderToDB(targetOrder)).then((res) => {
         if (res.error) console.log('Supabase clear order info:', res.error.message);
       });
-    }
-
-    try {
-      await setDoc(doc(db, 'orders', orderId), cleanUndefinedForFirestore(targetOrder), { merge: true });
-    } catch (e) {
-      console.log('Error saving manual clearance in Firestore:', e);
+      if (targetOrder.isClosed || targetOrder.closedAt) {
+        supabase.from('closed_orders').upsert(mapOrderToDB(targetOrder)).then();
+      }
     }
     showToast(`Baixa manual concluída e salva com sucesso! Status: ${status}`);
   };

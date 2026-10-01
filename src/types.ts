@@ -166,6 +166,7 @@ export interface User {
     canManageCoupons: boolean;
     canManageReports: boolean;
   };
+  savedCart?: CartItem[];
   savedDoseProtocols?: SavedDoseProtocol[];
   dietProfile?: {
     gender: 'male' | 'female';

@@ -39,6 +39,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Persistent user shopping carts
+    match /userCarts/{cartId} {
+      allow read, write: if true;
+    }
+
     // Customer orders
     match /orders/{orderId} {
       allow read, write: if true;
