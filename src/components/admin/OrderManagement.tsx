@@ -818,6 +818,30 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // Helper to calculate due date status and overdue duration
   const getDueDateInfo = (order: Order) => {
+    // Pedidos dados como Pago, Entregue, Cancelado ou com saldo quitado (restante <= 0) NUNCA ficam em alerta/vencidos
+    const total = Number(order.total || 0);
+    const paid = order.paidAmount !== undefined ? Number(order.paidAmount) : (['Pago', 'Entregue'].includes(order.status) ? total : 0);
+    const remaining = order.remainingAmount !== undefined ? Number(order.remainingAmount) : Math.max(0, total - paid);
+
+    const isFullyPaidOrCleared =
+      order.status === 'Pago' ||
+      order.status === 'Entregue' ||
+      order.status === 'Cancelado' ||
+      (paid >= total && total > 0) ||
+      remaining <= 0;
+
+    if (isFullyPaidOrCleared) {
+      return {
+        status: 'paid' as const,
+        label: 'Quitado / Pago',
+        text: 'Quitado',
+        badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold',
+        badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold',
+        daysDiff: 0,
+        dueDateFormatted: order.dueDate ? (order.dueDate.includes('-') ? order.dueDate.split('-').reverse().join('/') : order.dueDate) : 'Quitado',
+      };
+    }
+
     if (!order.dueDate) {
       return {
         status: 'none' as const,
@@ -1034,12 +1058,21 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
 
   // Partial orders & Debt Metrics
   const partialOrders = useMemo(() => {
-    return activeOrders.filter(
-      (o) =>
-        (o.status === 'Pago Parcial' || (o.remainingAmount !== undefined && o.remainingAmount > 0)) &&
-        o.status !== 'Cancelado' &&
-        o.status !== 'Pago'
-    );
+    return activeOrders.filter((o) => {
+      // Pedidos quitados, entregues ou cancelados NÃO entram em cobrança / alertas
+      if (['Pago', 'Cancelado', 'Entregue'].includes(o.status)) return false;
+      const total = Number(o.total || 0);
+      const paid = o.paidAmount !== undefined ? Number(o.paidAmount) : 0;
+      if (paid >= total && total > 0) return false;
+      const remaining = o.remainingAmount !== undefined ? Number(o.remainingAmount) : Math.max(0, total - paid);
+      if (remaining <= 0) return false;
+
+      return (
+        o.status === 'Pago Parcial' ||
+        (o.status === 'Pendente' && o.dueDate) ||
+        remaining > 0
+      );
+    });
   }, [activeOrders]);
 
   const overduePartialOrders = useMemo(() => {
@@ -1099,10 +1132,21 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
       } else if (statusFilter === 'Pago Parcial') {
         matchesStatus = order.status === 'Pago Parcial';
       } else if (statusFilter === 'Cobrança / Vencidos') {
-        const info = getDueDateInfo(order);
-        matchesStatus =
-          (order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || order.status === 'Pendente') &&
-          (info.status === 'overdue' || info.status === 'today');
+        if (['Pago', 'Cancelado', 'Entregue'].includes(order.status)) {
+          matchesStatus = false;
+        } else {
+          const total = Number(order.total || 0);
+          const paid = order.paidAmount !== undefined ? Number(order.paidAmount) : 0;
+          const remaining = order.remainingAmount !== undefined ? Number(order.remainingAmount) : Math.max(0, total - paid);
+          if (paid >= total && total > 0) {
+            matchesStatus = false;
+          } else if (remaining <= 0) {
+            matchesStatus = false;
+          } else {
+            const info = getDueDateInfo(order);
+            matchesStatus = info.status === 'overdue' || info.status === 'today';
+          }
+        }
       } else if (statusFilter !== 'Todos') {
         matchesStatus = order.status === statusFilter;
       }
@@ -2566,10 +2610,11 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                           </div>
 
                           {/* Due Date Badge for Partial / Debt */}
-                          {(order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || order.dueDate) && (
+                          {order.status !== 'Pago' && order.status !== 'Entregue' && order.status !== 'Cancelado' && (order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || (order.dueDate && order.status === 'Pendente')) && (
                             <div>
                               {(() => {
                                 const dueInfo = getDueDateInfo(order);
+                                if (dueInfo.status === 'paid') return null;
                                 return (
                                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] border ${dueInfo.badgeColor}`}>
                                     <CalendarClock className="w-3 h-3 shrink-0" />
