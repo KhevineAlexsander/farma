@@ -239,6 +239,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   // Financials for Manual Order
   const [manualShipping, setManualShipping] = useState<number>(0);
   const [manualDiscount, setManualDiscount] = useState<number>(0);
+  const [manualAdditionalAmount, setManualAdditionalAmount] = useState<number>(0);
   const [manualPaidAmount, setManualPaidAmount] = useState<string | number>('');
   const [manualDueDate, setManualDueDate] = useState<string>('');
   const [manualPaymentMethod, setManualPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
@@ -354,7 +355,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   );
   const manualTotal = Math.max(
     0,
-    manualSubtotal + (Number(manualShipping) || 0) - (Number(manualDiscount) || 0)
+    Number((manualSubtotal + (Number(manualShipping) || 0) + (Number(manualAdditionalAmount) || 0) - (Number(manualDiscount) || 0)).toFixed(2))
   );
 
   const handleResetManualOrderForm = () => {
@@ -380,6 +381,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     setIsProdSearchOpen(false);
     setManualShipping(0);
     setManualDiscount(0);
+    setManualAdditionalAmount(0);
     setManualPaidAmount('');
     setManualDueDate('');
     setManualPaymentMethod('PIX');
@@ -446,6 +448,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         subtotal: manualSubtotal,
         shipping: Number(manualShipping) || 0,
         discount: Number(manualDiscount) || 0,
+        additionalAmount: Number(manualAdditionalAmount) || 0,
         paymentMethod: manualPaymentMethod,
         status: manualStatus,
         paidAmount: parsedPaid,
@@ -501,6 +504,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [isEditProdSearchOpen, setIsEditProdSearchOpen] = useState<boolean>(false);
   const [editShipping, setEditShipping] = useState<number>(0);
   const [editDiscount, setEditDiscount] = useState<number>(0);
+  const [editAdditionalAmount, setEditAdditionalAmount] = useState<number>(0);
   const [editPaidAmount, setEditPaidAmount] = useState<string | number>('');
   const [editDueDate, setEditDueDate] = useState<string>('');
   const [editPaymentMethod, setEditPaymentMethod] = useState<'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar'>('PIX');
@@ -561,6 +565,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
     setEditShipping(order.shipping || 0);
     setEditDiscount(order.discount || 0);
+    setEditAdditionalAmount(order.additionalAmount || 0);
 
     const initialPaid = order.paidAmount !== undefined 
       ? order.paidAmount 
@@ -664,7 +669,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   );
   const editTotal = Math.max(
     0,
-    editSubtotal + (Number(editShipping) || 0) - (Number(editDiscount) || 0)
+    Number((editSubtotal + (Number(editShipping) || 0) + (Number(editAdditionalAmount) || 0) - (Number(editDiscount) || 0)).toFixed(2))
   );
 
   const handleSaveEditedOrder = async (e: React.FormEvent) => {
@@ -724,6 +729,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
         subtotal: editSubtotal,
         shipping: Number(editShipping) || 0,
         discount: Number(editDiscount) || 0,
+        additionalAmount: Number(editAdditionalAmount) || 0,
         total: editTotal,
         paidAmount: parsedPaidAmount,
         remainingAmount: computedRemaining,
@@ -1001,13 +1007,16 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
     return orders.filter((o) => Boolean(o.isClosed || o.closedAt)).length;
   }, [orders]);
 
-  // Active revenue metrics for current open period
+  // Active revenue metrics for current open period (Caixa Aberto / Ativo)
   const activeOrdersRevenue = useMemo(() => {
-    return activeOrders.reduce((sum, o) => sum + Number(o.total || 0), 0);
+    return activeOrders
+      .filter((o) => o.status !== 'Cancelado')
+      .reduce((sum, o) => sum + Number(o.total || 0), 0);
   }, [activeOrders]);
 
   const activeOrdersPaid = useMemo(() => {
     return activeOrders.reduce((sum, o) => {
+      if (o.status === 'Cancelado') return sum;
       const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
       const paid = o.paidAmount !== undefined ? o.paidAmount : (isPaid ? o.total : 0);
       return sum + Number(paid || 0);
@@ -1016,8 +1025,9 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
 
   const activeOrdersPending = useMemo(() => {
     return activeOrders.reduce((sum, o) => {
+      if (o.status === 'Cancelado') return sum;
       const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
-      const pending = o.remainingAmount !== undefined ? o.remainingAmount : (!isPaid && o.status !== 'Cancelado' ? o.total : 0);
+      const pending = o.remainingAmount !== undefined ? o.remainingAmount : (!isPaid ? o.total : 0);
       return sum + Number(pending || 0);
     }, 0);
   }, [activeOrders]);
@@ -1164,6 +1174,30 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
       return matchesStatus && matchesSearch && matchesProductFilter && matchesDate;
     });
   }, [activeOrders, statusFilter, searchTerm, productSearchFilter, dateFilterPreset, customStartDate, customEndDate]);
+
+  const filteredRevenue = useMemo(() => {
+    return filteredOrders
+      .filter((o) => o.status !== 'Cancelado')
+      .reduce((sum, o) => sum + Number(o.total || 0), 0);
+  }, [filteredOrders]);
+
+  const filteredPaid = useMemo(() => {
+    return filteredOrders.reduce((sum, o) => {
+      if (o.status === 'Cancelado') return sum;
+      const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+      const paid = o.paidAmount !== undefined ? o.paidAmount : (isPaid ? o.total : 0);
+      return sum + Number(paid || 0);
+    }, 0);
+  }, [filteredOrders]);
+
+  const filteredPending = useMemo(() => {
+    return filteredOrders.reduce((sum, o) => {
+      if (o.status === 'Cancelado') return sum;
+      const isPaid = o.status === 'Pago' || o.status === 'Entregue' || o.status === 'Enviado';
+      const pending = o.remainingAmount !== undefined ? o.remainingAmount : (!isPaid ? o.total : 0);
+      return sum + Number(pending || 0);
+    }, 0);
+  }, [filteredOrders]);
 
   const partialCount = partialOrders.length;
   const isSavingDueDate = isSavingChargeDate;
@@ -1651,6 +1685,123 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             </button>
           )}
         </div>
+      </div>
+
+      {/* Resumo Financeiro em Tempo Real: Caixa Aberto (Período Ativo) */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950/40 border border-cyan-500/30 p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-xl space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="relative">
+              <div className="p-2.5 bg-emerald-500/15 text-emerald-400 rounded-xl border border-emerald-500/30 shrink-0">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+              </div>
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900 animate-ping"></span>
+              <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-500 rounded-full border-2 border-slate-900"></span>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm sm:text-base font-extrabold text-white tracking-tight flex items-center gap-1.5">
+                  <span>Caixa Aberto (Período Ativo)</span>
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-mono font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span>Sessão em Andamento</span>
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Soma em tempo real de todos os pedidos ativos do caixa aberto aguardando fechamento de período.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0 flex-wrap">
+            <button
+              onClick={() => {
+                setCloseCashPassword('');
+                setCloseCashNotes('');
+                setCloseCashError(null);
+                setIsCloseCashModalOpen(true);
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 cursor-pointer min-h-[36px]"
+              title="Fechar o caixa atual e transferir pedidos para Pedidos Fechados"
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span>Fechar o Caixa</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Grid de Métricas do Caixa Aberto */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+          <div className="bg-slate-950/85 p-3 rounded-xl border border-cyan-500/30 hover:border-cyan-500/50 transition-colors">
+            <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block">
+              FATURAMENTO DO CAIXA
+            </span>
+            <p className="text-base sm:text-xl font-extrabold text-cyan-400 font-mono mt-1">
+              R$ {activeOrdersRevenue.toFixed(2).replace('.', ',')}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Total bruto dos {activeOrders.length} pedidos ativos
+            </p>
+          </div>
+
+          <div className="bg-slate-950/85 p-3 rounded-xl border border-emerald-500/30 hover:border-emerald-500/50 transition-colors">
+            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
+              RECEBIDO / QUITADO
+            </span>
+            <p className="text-base sm:text-xl font-extrabold text-emerald-400 font-mono mt-1">
+              R$ {activeOrdersPaid.toFixed(2).replace('.', ',')}
+            </p>
+            <p className="text-[10px] text-emerald-400/70 mt-0.5">
+              Entradas confirmadas no caixa
+            </p>
+          </div>
+
+          <div className="bg-slate-950/85 p-3 rounded-xl border border-amber-500/30 hover:border-amber-500/50 transition-colors">
+            <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block">
+              PENDENTE A RECEBER
+            </span>
+            <p className="text-base sm:text-xl font-extrabold text-amber-400 font-mono mt-1">
+              R$ {activeOrdersPending.toFixed(2).replace('.', ',')}
+            </p>
+            <p className="text-[10px] text-amber-400/70 mt-0.5">
+              Saldos a quitar / pendências
+            </p>
+          </div>
+
+          <div className="bg-slate-950/85 p-3 rounded-xl border border-slate-800 hover:border-slate-700 transition-colors">
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-wider block">
+              PEDIDOS NO CAIXA
+            </span>
+            <p className="text-base sm:text-xl font-extrabold text-white font-tech mt-1">
+              {activeOrders.length} <span className="text-xs font-normal text-slate-400">pedidos</span>
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {activeOrders.filter((o) => ['Pago', 'Entregue'].includes(o.status)).length} quitados • {activeOrders.filter((o) => o.status === 'Pendente' || o.status === 'Pago Parcial').length} pendentes
+            </p>
+          </div>
+        </div>
+
+        {/* Indicador de Filtros na Tela vs Caixa Geral */}
+        {filteredOrders.length !== activeOrders.length && (
+          <div className="bg-slate-950/70 border border-slate-800 rounded-xl px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 text-slate-300 flex-wrap">
+              <span className="text-cyan-400 font-bold">🔍 Soma dos Pedidos Filtrados na Tela:</span>
+              <span className="font-mono text-white font-bold">
+                {filteredOrders.length} pedidos
+              </span>
+              <span className="text-slate-500">•</span>
+              <span>Total: <strong className="text-cyan-300 font-mono">R$ {filteredRevenue.toFixed(2).replace('.', ',')}</strong></span>
+              <span className="text-slate-500">•</span>
+              <span>Recebido: <strong className="text-emerald-300 font-mono">R$ {filteredPaid.toFixed(2).replace('.', ',')}</strong></span>
+              <span className="text-slate-500">•</span>
+              <span>Pendente: <strong className="text-amber-300 font-mono">R$ {filteredPending.toFixed(2).replace('.', ',')}</strong></span>
+            </div>
+            <span className="text-[11px] text-slate-400">
+              (Os 4 cards acima mostram o total geral do caixa aberto)
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Destaque Prioritário na Página Principal: Apenas Vencidos e Vence Hoje (Gestão Completa Fica Oculta/Retrátil) */}
@@ -3050,6 +3201,12 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                   R$ {(selectedOrder.shipping || 0).toFixed(2).replace('.', ',')}
                 </span>
               </div>
+              {(selectedOrder.additionalAmount || 0) > 0 && (
+                <div className="flex justify-between text-teal-400">
+                  <span>Valor Adicional / Acréscimo</span>
+                  <span>+ R$ {(selectedOrder.additionalAmount || 0).toFixed(2).replace('.', ',')}</span>
+                </div>
+              )}
               {(selectedOrder.discount || 0) > 0 && (
                 <div className="flex justify-between text-emerald-400">
                   <span>Desconto Aplicado</span>
@@ -3768,7 +3925,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                   <span>4. Valores, Pagamento & Status</span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                   <div>
                     <label className="block text-slate-400 font-medium mb-1">Frete (R$)</label>
                     <input
@@ -3791,6 +3948,23 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       onChange={(e) => setManualDiscount(parseFloat(e.target.value) || 0)}
                       className="w-full px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono min-h-[38px]"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-emerald-400 font-medium mb-1">Adicionar Valor (R$)</label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-2 text-emerald-400 font-bold text-xs">+</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        placeholder="0,00"
+                        value={manualAdditionalAmount || ''}
+                        onChange={(e) => setManualAdditionalAmount(parseFloat(e.target.value) || 0)}
+                        className="w-full pl-6 pr-2.5 py-1.5 bg-slate-900 border border-emerald-500/40 rounded-xl text-emerald-300 font-mono min-h-[38px]"
+                        title="Adicionar valor extra / acréscimo ao pedido"
+                      />
+                    </div>
                   </div>
 
                   <div>
@@ -3851,7 +4025,9 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 <div className="p-3 bg-gradient-to-r from-slate-900 to-slate-950 rounded-xl border border-cyan-500/30 flex items-center justify-between">
                   <div>
                     <span className="text-[11px] text-slate-400 block">Subtotal: R$ {manualSubtotal.toFixed(2).replace('.', ',')}</span>
-                    <span className="text-[11px] text-slate-400 block">Frete: +R$ {(Number(manualShipping) || 0).toFixed(2).replace('.', ',')} | Desconto: -R$ {(Number(manualDiscount) || 0).toFixed(2).replace('.', ',')}</span>
+                    <span className="text-[11px] text-slate-400 block">
+                      Frete: +R$ {(Number(manualShipping) || 0).toFixed(2).replace('.', ',')} | Adicional: +R$ {(Number(manualAdditionalAmount) || 0).toFixed(2).replace('.', ',')} | Desconto: -R$ {(Number(manualDiscount) || 0).toFixed(2).replace('.', ',')}
+                    </span>
                   </div>
                   <div className="text-right">
                     <span className="text-[10px] uppercase text-cyan-400 font-bold tracking-wider block">Total Faturado</span>
@@ -4380,7 +4556,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                   <DollarSign className="w-4 h-4 text-cyan-400" />
                   <span>4. Valores, Pagamento, Status & Auditoria</span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
                   <div>
                     <label className="block text-slate-400 font-medium mb-1">Frete (R$)</label>
                     <input
@@ -4402,6 +4578,24 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       onChange={(e) => setEditDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
                       className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white font-mono focus:outline-none focus:border-cyan-500 min-h-[40px]"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-emerald-400 font-semibold mb-1 flex items-center gap-1">
+                      <span>Adicionar Valor (R$)</span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2.5 text-emerald-400 font-bold text-xs">+</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="0,00"
+                        value={editAdditionalAmount || ''}
+                        onChange={(e) => setEditAdditionalAmount(Math.max(0, parseFloat(e.target.value) || 0))}
+                        className="w-full pl-7 pr-3 py-2 bg-slate-900 border border-emerald-500/40 rounded-xl text-emerald-300 font-mono focus:outline-none focus:border-emerald-400 min-h-[40px]"
+                        title="Adicionar valor extra / acréscimo ao total do pedido"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-slate-400 font-medium mb-1">Forma de Pagamento</label>
@@ -4661,7 +4855,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                   <div className="space-y-0.5">
                     <span className="text-[11px] text-slate-400">Total Atualizado:</span>
                     <p className="text-[10px] text-slate-400 font-mono">
-                      Subtotal: R$ {editSubtotal.toFixed(2).replace('.', ',')} | Frete: +R$ {(Number(editShipping) || 0).toFixed(2).replace('.', ',')} | Desc: -R$ {(Number(editDiscount) || 0).toFixed(2).replace('.', ',')}
+                      Subtotal: R$ {editSubtotal.toFixed(2).replace('.', ',')} | Frete: +R$ {(Number(editShipping) || 0).toFixed(2).replace('.', ',')} | Adicional: +R$ {(Number(editAdditionalAmount) || 0).toFixed(2).replace('.', ',')} | Desc: -R$ {(Number(editDiscount) || 0).toFixed(2).replace('.', ',')}
                     </p>
                   </div>
                   <div className="text-right">

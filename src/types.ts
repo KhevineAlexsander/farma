@@ -56,6 +56,7 @@ export interface Order {
   importTax?: number;
   taxExemptionApplied?: boolean;
   discount: number;
+  additionalAmount?: number; // Valor adicional / acréscimo no pedido
   total: number;
   paidAmount?: number; // Valor pago (entrada ou baixa parcial)
   remainingAmount?: number; // Saldo devedor pendente

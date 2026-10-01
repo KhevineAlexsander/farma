@@ -3580,6 +3580,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     subtotal?: number;
     shipping?: number;
     discount?: number;
+    additionalAmount?: number;
     paymentMethod: 'PIX' | 'Cartão de Crédito' | 'Boleto' | 'WhatsApp / A Combinar';
     status?: OrderStatus;
     paidAmount?: number;
@@ -3594,7 +3595,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : sanitizedItems.reduce((acc, it) => acc + (it.product?.price || 0) * (it.quantity || 1), 0);
     const shipping = Number((orderData.shipping || 0).toFixed(2));
     const discount = Number((orderData.discount || 0).toFixed(2));
-    const total = Number(Math.max(0, computedSubtotal + shipping - discount).toFixed(2));
+    const additionalAmount = Number((orderData.additionalAmount || 0).toFixed(2));
+    const total = Number(Math.max(0, computedSubtotal + shipping + additionalAmount - discount).toFixed(2));
     const currentStatus: OrderStatus = orderData.status || 'Pago';
     const isPaid = currentStatus === 'Pago' || currentStatus === 'Entregue' || currentStatus === 'Em Separação' || currentStatus === 'Enviado';
     const operator = orderData.clearedBy || currentUser?.name || 'Administrador Master';
@@ -3629,6 +3631,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       subtotal: Number(computedSubtotal.toFixed(2)),
       shipping,
       discount,
+      additionalAmount,
       total,
       paidAmount: parsedPaid,
       remainingAmount: parsedRemaining,
@@ -3736,10 +3739,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const shipping = updatedData.shipping !== undefined ? Number(updatedData.shipping) : (order.shipping || 0);
           const discount = updatedData.discount !== undefined ? Number(updatedData.discount) : (order.discount || 0);
+          const additionalAmount = updatedData.additionalAmount !== undefined ? Number(updatedData.additionalAmount) : (order.additionalAmount || 0);
           const total =
             updatedData.total !== undefined
               ? Number(updatedData.total)
-              : Number(Math.max(0, computedSubtotal + shipping - discount).toFixed(2));
+              : Number(Math.max(0, computedSubtotal + shipping + additionalAmount - discount).toFixed(2));
 
           const effectiveStatus = updatedData.status || order.status;
           const isPaidStatus = effectiveStatus === 'Pago' || effectiveStatus === 'Entregue' || effectiveStatus === 'Enviado';
@@ -3768,6 +3772,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             subtotal: Number(computedSubtotal.toFixed(2)),
             shipping: Number(shipping.toFixed(2)),
             discount: Number(discount.toFixed(2)),
+            additionalAmount: Number(additionalAmount.toFixed(2)),
             total: Number(total.toFixed(2)),
             updatedAt: isoTimestamp,
           };

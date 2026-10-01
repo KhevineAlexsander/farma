@@ -57,6 +57,9 @@ export const FinancialManagement: React.FC = () => {
   // Sales Scope Filter: 'all_active' (todos os pedidos do site) vs 'confirmed_only' (somente vendas pagas/confirmadas)
   const [salesScope, setSalesScope] = useState<'all_active' | 'confirmed_only'>('all_active');
 
+  // Cash Register Scope Filter: 'open_only' (apenas pedidos do caixa aberto/ativo) vs 'all' (todos os pedidos)
+  const [cashRegisterScope, setCashRegisterScope] = useState<'open_only' | 'all'>('open_only');
+
   // Auto-refresh and Sync state
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date>(() => new Date());
@@ -199,14 +202,17 @@ export const FinancialManagement: React.FC = () => {
     return { start: new Date(0), end: new Date(2100, 0, 1), label: 'Todo o Período' };
   }, [timeFilter, customStartDate, customEndDate]);
 
-  // Filter valid Orders within Period
+  // Filter valid Orders within Period & Cash Register Scope
   const periodOrders = useMemo(() => {
     return orders.filter((order) => {
       if (order.status === 'Cancelado') return false;
+      if (cashRegisterScope === 'open_only' && (order.isClosed || order.closedAt)) {
+        return false;
+      }
       const orderDate = new Date(order.createdAt || 0);
       return orderDate >= dateRange.start && orderDate <= dateRange.end;
     });
-  }, [orders, dateRange]);
+  }, [orders, dateRange, cashRegisterScope]);
 
   // Filter Financial Transactions within Period
   const periodTransactions = useMemo(() => {
@@ -606,31 +612,62 @@ export const FinancialManagement: React.FC = () => {
           </div>
         </div>
 
-        {/* Sales Scope Mode & Sync Status Indicator */}
+        {/* Sales Scope Mode, Cash Register Scope & Sync Status Indicator */}
         <div className="mt-4 pt-4 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-semibold">Base de Vendas:</span>
-            <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800">
-              <button
-                onClick={() => setSalesScope('all_active')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  salesScope === 'all_active'
-                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Todas as Vendas ({formatCurrency(grossSalesTotal)})
-              </button>
-              <button
-                onClick={() => setSalesScope('confirmed_only')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  salesScope === 'confirmed_only'
-                    ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                Somente Pagos ({formatCurrency(confirmedSalesTotal)})
-              </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-semibold">Caixa:</span>
+              <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+                <button
+                  onClick={() => setCashRegisterScope('open_only')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                    cashRegisterScope === 'open_only'
+                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Somente pedidos do caixa aberto/ativo no período"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-950 animate-pulse"></span>
+                  <span>Caixa Aberto (Ativo)</span>
+                </button>
+                <button
+                  onClick={() => setCashRegisterScope('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    cashRegisterScope === 'all'
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="Todos os pedidos, incluindo os já fechados em caixas anteriores"
+                >
+                  Todos os Caixas
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-slate-400 font-semibold">Base de Vendas:</span>
+              <div className="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800">
+                <button
+                  onClick={() => setSalesScope('all_active')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    salesScope === 'all_active'
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Todas as Vendas ({formatCurrency(grossSalesTotal)})
+                </button>
+                <button
+                  onClick={() => setSalesScope('confirmed_only')}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    salesScope === 'confirmed_only'
+                      ? 'bg-emerald-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Somente Pagos ({formatCurrency(confirmedSalesTotal)})
+                </button>
+              </div>
             </div>
           </div>
 

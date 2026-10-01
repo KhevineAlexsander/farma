@@ -147,6 +147,18 @@ export const mapOrderToDB = (o: Order) => {
     finalNotes = finalNotes.replace(/\[CAIXA_FECHADO:[^\]]+\]/g, '').trim();
   }
 
+  // Encode additionalAmount in notes tag if present
+  if (o.additionalAmount !== undefined && o.additionalAmount > 0) {
+    const addTag = `[ADICIONAL:${o.additionalAmount}]`;
+    if (!finalNotes.includes('[ADICIONAL:')) {
+      finalNotes = finalNotes ? `${finalNotes} ${addTag}` : addTag;
+    } else {
+      finalNotes = finalNotes.replace(/\[ADICIONAL:[^\]]+\]/g, addTag);
+    }
+  } else if (finalNotes.includes('[ADICIONAL:')) {
+    finalNotes = finalNotes.replace(/\[ADICIONAL:[^\]]+\]/g, '').trim();
+  }
+
   return {
     id: o.id,
     order_number: o.orderNumber,
@@ -228,6 +240,16 @@ export const mapDBToOrder = (d: any): Order => {
       if (match[2]) o.closedAt = match[2];
       if (match[3]) o.closedSessionName = match[3];
     }
+
+    // Parse additionalAmount tag if present
+    const addMatch = d.notes.match(/\[ADICIONAL:([^\]]+)\]/);
+    if (addMatch && !isNaN(Number(addMatch[1]))) {
+      o.additionalAmount = Number(addMatch[1]);
+    }
+  }
+
+  if (d.additional_amount != null || d.additionalAmount != null) {
+    o.additionalAmount = Number(d.additional_amount != null ? d.additional_amount : d.additionalAmount);
   }
 
   // Also support direct columns if present in database

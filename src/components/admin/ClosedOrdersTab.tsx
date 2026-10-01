@@ -1455,6 +1455,12 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                 <span>Frete:</span>
                 <span>R$ {(selectedOrder.shipping || 0).toFixed(2).replace('.', ',')}</span>
               </div>
+              {(selectedOrder.additionalAmount || 0) > 0 && (
+                <div className="flex justify-between text-teal-400">
+                  <span>Valor Adicional:</span>
+                  <span>+ R$ {selectedOrder.additionalAmount.toFixed(2).replace('.', ',')}</span>
+                </div>
+              )}
               {(selectedOrder.discount || 0) > 0 && (
                 <div className="flex justify-between text-emerald-400">
                   <span>Desconto:</span>
