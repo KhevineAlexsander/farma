@@ -906,9 +906,9 @@ export const DosageCalculatorPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Cards de Seringas (Inspirado no Peptiwise) */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                {(['u100-0.3ml', 'u100-0.5ml', 'u100-1ml'] as SyringeType[]).map((typeId) => {
+              {/* Cards de Seringas: 100 UI (1.0 mL) e 50 UI (0.5 mL) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(['u100-1ml', 'u100-0.5ml'] as SyringeType[]).map((typeId) => {
                   const spec = SYRINGE_SPECS[typeId];
                   const isSelected = syringeType === typeId;
                   return (
@@ -916,14 +916,14 @@ export const DosageCalculatorPage: React.FC = () => {
                       key={typeId}
                       type="button"
                       onClick={() => setSyringeType(typeId)}
-                      className={`p-3.5 rounded-xl border text-center transition-all cursor-pointer relative ${
+                      className={`p-4 rounded-xl border text-center transition-all cursor-pointer relative ${
                         isSelected
                           ? 'bg-cyan-500/15 border-cyan-400 text-white shadow-md shadow-cyan-500/10 ring-1 ring-cyan-400/40'
                           : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                       }`}
                     >
                       <Syringe className={`w-5 h-5 mx-auto mb-1 ${isSelected ? 'text-cyan-400' : 'text-slate-400'}`} />
-                      <div className="text-sm font-black text-white">{spec.volumeMl} mL</div>
+                      <div className="text-base font-black text-white">{spec.capacityUnits} UI ({spec.volumeMl} mL)</div>
                       <div className="text-xs font-bold text-cyan-400">{spec.capacityUnits} UI</div>
                       <div className="text-[10px] text-slate-400 mt-0.5">
                         Marcas de {spec.graduationStepUnits} em {spec.graduationStepUnits} UI
