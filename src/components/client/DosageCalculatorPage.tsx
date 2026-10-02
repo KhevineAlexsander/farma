@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Calculator,
   Syringe,
@@ -28,32 +28,67 @@ import {
   User,
   Mail,
   Plus,
+  Search,
+  Check,
+  RotateCcw,
+  Sliders,
+  ChevronUp,
+  MessageCircle,
+  Activity,
+  TrendingUp,
+  CheckCircle,
+  X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, SavedDoseProtocol } from '../../types';
 import { PeptideVial } from '../PeptideVial';
+import { SyringeVisualizer } from './SyringeVisualizer';
+import {
+  calculatePeptideDosage,
+  CalculatorInput,
+  CalculatorResult,
+  SyringeType,
+  TargetDoseUnit,
+  FrequencyType,
+  SYRINGE_SPECS,
+  FREQUENCY_SPECS,
+  suggestAlternativeDiluent,
+  calculatePharmacokinetics,
+  PharmacokineticsResult,
+  PEPTIDE_HALF_LIFE_MAP,
+  DoseLogEntry,
+  INJECTION_SITES,
+} from '../../utils/peptideCalculator';
 
 interface PresetDoseOption {
   label: string;
   doseMcgOrMg: number;
-  unit: 'mcg' | 'mg' | 'UI';
+  unit: TargetDoseUnit;
   description: string;
 }
 
-// Preset recommended protocols based on the store's products
-const PRODUCT_DOSING_PRESETS: Record<string, { defaultWaterMl: number; defaultDoseValue: number; defaultUnit: 'mcg' | 'mg' | 'UI'; presets: PresetDoseOption[] }> = {
+// Preset recomendados baseados no catálogo oficial da loja
+const PRODUCT_DOSING_PRESETS: Record<
+  string,
+  {
+    defaultWaterMl: number;
+    defaultDoseValue: number;
+    defaultUnit: TargetDoseUnit;
+    presets: PresetDoseOption[];
+  }
+> = {
   'prod-tirzepatida-60': {
-    defaultWaterMl: 2.0,
+    defaultWaterMl: 3.0,
     defaultDoseValue: 2.5,
     defaultUnit: 'mg',
     presets: [
-      { label: 'Iniciação (Semanas 1 a 4)', doseMcgOrMg: 2.5, unit: 'mg', description: 'Dose padrão de adaptação gástrica (1x/semana)' },
-      { label: 'Intermediária (Semanas 5 a 8)', doseMcgOrMg: 5.0, unit: 'mg', description: 'Titulação com aceleração metabólica (1x/semana)' },
+      { label: 'Iniciação (Semanas 1 a 4)', doseMcgOrMg: 2.5, unit: 'mg', description: 'Adaptação gástrica (1x/semana)' },
+      { label: 'Intermediária (Semanas 5 a 8)', doseMcgOrMg: 5.0, unit: 'mg', description: 'Titulação metabólica (1x/semana)' },
       { label: 'Avançada / Manutenção', doseMcgOrMg: 7.5, unit: 'mg', description: 'Potência máxima e controle glicêmico (1x/semana)' },
     ],
   },
   'prod-tirzepatida-100': {
-    defaultWaterMl: 2.0,
+    defaultWaterMl: 3.0,
     defaultDoseValue: 5.0,
     defaultUnit: 'mg',
     presets: [
@@ -63,22 +98,32 @@ const PRODUCT_DOSING_PRESETS: Record<string, { defaultWaterMl: number; defaultDo
     ],
   },
   'prod-retratutide-30': {
-    defaultWaterMl: 2.0,
+    defaultWaterMl: 3.0,
     defaultDoseValue: 1.0,
     defaultUnit: 'mg',
     presets: [
-      { label: 'Iniciação (Semanas 1 a 4)', doseMcgOrMg: 0.5, unit: 'mg', description: '500 mcg (0.5mg) / semana para rápida adaptação' },
-      { label: 'Intermediária (Semanas 5 a 8)', doseMcgOrMg: 1.0, unit: 'mg', description: '1.0 mg / semana (forte termogênese)' },
-      { label: 'Avançada (Semanas 9+)', doseMcgOrMg: 2.0, unit: 'mg', description: '2.0 mg / semana (queima acelerada)' },
+      { label: 'Iniciação (Semanas 1 a 4)', doseMcgOrMg: 0.5, unit: 'mg', description: '500 mcg (0.5 mg) / semana para adaptação' },
+      { label: 'Intermediária (Semanas 5 a 8)', doseMcgOrMg: 1.0, unit: 'mg', description: '1.0 mg / semana (termogênese acelerada)' },
+      { label: 'Avançada (Semanas 9+)', doseMcgOrMg: 2.0, unit: 'mg', description: '2.0 mg / semana (queima máxima)' },
     ],
   },
   'prod-retratutide-60': {
-    defaultWaterMl: 2.0,
+    defaultWaterMl: 3.0,
     defaultDoseValue: 2.0,
     defaultUnit: 'mg',
     presets: [
       { label: 'Dose Padrão', doseMcgOrMg: 2.0, unit: 'mg', description: '2.0 mg por semana' },
       { label: 'Dose Elevada', doseMcgOrMg: 4.0, unit: 'mg', description: '4.0 mg por semana dividida em 1 ou 2 aplicações' },
+    ],
+  },
+  'prod-cagrilintide-10': {
+    defaultWaterMl: 2.0,
+    defaultDoseValue: 0.3,
+    defaultUnit: 'mg',
+    presets: [
+      { label: 'Dose Inicial', doseMcgOrMg: 0.3, unit: 'mg', description: '300 mcg (0.3 mg) 1x por semana' },
+      { label: 'Titulação Intermediária', doseMcgOrMg: 0.6, unit: 'mg', description: '600 mcg (0.6 mg) 1x por semana' },
+      { label: 'Dose Plena', doseMcgOrMg: 1.2, unit: 'mg', description: '1.2 mg 1x por semana' },
     ],
   },
   'prod-bpc-tb-500-10': {
@@ -88,7 +133,7 @@ const PRODUCT_DOSING_PRESETS: Record<string, { defaultWaterMl: number; defaultDo
     presets: [
       { label: 'Manutenção Articular', doseMcgOrMg: 250, unit: 'mcg', description: '250 mcg 1x ao dia (proteção e leve inflamação)' },
       { label: 'Tratamento de Lesão Aguda', doseMcgOrMg: 500, unit: 'mcg', description: '500 mcg 1x ao dia ou 250 mcg 2x ao dia' },
-      { label: 'Pós-Cirúrgico / Tendinite Forte', doseMcgOrMg: 750, unit: 'mcg', description: '750 mcg fracionado para rápida cicatrização' },
+      { label: 'Pós-Cirúrgico / Tendinite', doseMcgOrMg: 750, unit: 'mcg', description: '750 mcg fracionado para cicatrização' },
     ],
   },
   'prod-ghk-cu-100': {
@@ -105,17 +150,17 @@ const PRODUCT_DOSING_PRESETS: Record<string, { defaultWaterMl: number; defaultDo
     defaultDoseValue: 200,
     defaultUnit: 'mcg',
     presets: [
-      { label: 'Dose Noturna Padrão', doseMcgOrMg: 200, unit: 'mcg', description: '200 mcg antes de deitar em estômago vazio' },
+      { label: 'Dose Noturna Padrão', doseMcgOrMg: 200, unit: 'mcg', description: '200 mcg antes de deitar em jejum' },
       { label: 'Atletas / Hipertrofia', doseMcgOrMg: 300, unit: 'mcg', description: '300 mcg à noite (pico potente de GH)' },
     ],
   },
   'prod-semax-10-cat': {
     defaultWaterMl: 2.0,
-    defaultDoseValue: 500,
+    defaultDoseValue: 300,
     defaultUnit: 'mcg',
     presets: [
       { label: 'Foco Diário de Trabalho', doseMcgOrMg: 300, unit: 'mcg', description: '300 mcg pela manhã' },
-      { label: 'Alta Performance Cognitiva', doseMcgOrMg: 600, unit: 'mcg', description: '600 mcg pela manhã antes de tarefas complexas' },
+      { label: 'Alta Performance Cognitiva', doseMcgOrMg: 600, unit: 'mcg', description: '600 mcg pela manhã antes de tarefas' },
     ],
   },
   'prod-selank-5-cat': {
@@ -145,16 +190,12 @@ const PRODUCT_DOSING_PRESETS: Record<string, { defaultWaterMl: number; defaultDo
       { label: 'Biohacking Avançado', doseMcgOrMg: 100, unit: 'mg', description: '100 mg 2x por semana' },
     ],
   },
-  'prod-botox-allergan-100': {
-    defaultWaterMl: 2.5,
-    defaultDoseValue: 4,
-    defaultUnit: 'UI',
-    presets: [
-      { label: 'Ponto Facial Padrão (0,1ml)', doseMcgOrMg: 4, unit: 'UI', description: '4 UI por ponto de 0.1ml (com 2.5ml de diluente)' },
-      { label: 'Micro-ponto Estético (0,05ml)', doseMcgOrMg: 2, unit: 'UI', description: '2 UI por ponto delicado' },
-    ],
-  },
 };
+
+const COMMON_VIAL_CHIPS = [5, 10, 15, 20, 30, 60, 100];
+const COMMON_DILUENT_CHIPS = [1.0, 2.0, 2.5, 3.0, 5.0, 10.0];
+const COMMON_DOSE_MCG_CHIPS = [50, 100, 250, 300, 500, 750, 1000];
+const COMMON_DOSE_MG_CHIPS = [0.25, 0.3, 0.5, 1.0, 2.0, 2.5, 5.0, 7.5, 10.0];
 
 export const DosageCalculatorPage: React.FC = () => {
   const {
@@ -163,65 +204,146 @@ export const DosageCalculatorPage: React.FC = () => {
     setSelectedCalculatorProduct,
     setCurrentView,
     currentUser,
-    loginWithGoogle,
-    loginClientWithEmail,
-    registerClientAccount,
     saveDoseProtocol,
     deleteDoseProtocol,
     setIsAuthOpen,
     addToCart,
     showToast,
+    storeSettings,
   } = useApp();
 
-  // Auth gate state if not logged in
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  const [authName, setAuthName] = useState('');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authPhone, setAuthPhone] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [isSavingProtocol, setIsSavingProtocol] = useState(false);
-  const [isSavedListOpen, setIsSavedListOpen] = useState(false);
-
-  // Selected product from the catalog (or null for manual custom)
+  // State principal da calculadora
   const [selectedProductId, setSelectedProductId] = useState<string>(() => {
     return selectedCalculatorProduct?.id || 'prod-tirzepatida-60';
   });
+  const [isCustomProduct, setIsCustomProduct] = useState<boolean>(false);
+  const [customProductName, setCustomProductName] = useState<string>('Peptídeo de Pesquisa');
+  const [productSearch, setProductSearch] = useState<string>('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Current active product
-  const activeProduct = useMemo(() => {
-    return products.find((p) => p.id === selectedProductId) || null;
-  }, [products, selectedProductId]);
-
-  // If selectedCalculatorProduct changes from outside, sync
-  useEffect(() => {
-    if (selectedCalculatorProduct) {
-      setSelectedProductId(selectedCalculatorProduct.id);
-    }
-  }, [selectedCalculatorProduct]);
-
-  // Form Inputs
-  const [customName, setCustomName] = useState<string>('Peptídeo de Pesquisa');
+  // Variáveis de Reconstituição
   const [vialQuantityMg, setVialQuantityMg] = useState<number>(60);
-  const [waterVolumeMl, setWaterVolumeMl] = useState<number>(2.0);
+  const [waterVolumeMl, setWaterVolumeMl] = useState<number>(3.0);
   const [targetDoseValue, setTargetDoseValue] = useState<number>(2.5);
-  const [targetDoseUnit, setTargetDoseUnit] = useState<'mcg' | 'mg' | 'UI'>('mg');
-  const [syringeType, setSyringeType] = useState<'u100-1ml' | 'u100-0.5ml' | 'u100-0.3ml' | 'u40-1ml' | 'standard-1ml'>('u100-1ml');
-  const [frequency, setFrequency] = useState<'daily' | 'eod' | '2x_week' | 'weekly' | '3x_week'>('weekly');
+  const [targetDoseUnit, setTargetDoseUnit] = useState<TargetDoseUnit>('mg');
+  const [syringeType, setSyringeType] = useState<SyringeType>('u100-1ml');
+  const [frequency, setFrequency] = useState<FrequencyType>('1x_week');
+
+  // Meia-vida e Farmacocinética
+  const defaultHalfLife = useMemo(() => {
+    if (isCustomProduct) return 7.0;
+    return PEPTIDE_HALF_LIFE_MAP[selectedProductId]?.halfLifeDays || 7.0;
+  }, [selectedProductId, isCustomProduct]);
+
+  const [customHalfLifeDays, setCustomHalfLifeDays] = useState<number>(defaultHalfLife);
+  const [halfLifeUnit, setHalfLifeUnit] = useState<'days' | 'hours'>('days');
+  const [intervalDays, setIntervalDays] = useState<number>(7);
+
+  // Sincronizar meia-vida padrão ao mudar produto
+  useEffect(() => {
+    setCustomHalfLifeDays(defaultHalfLife);
+  }, [defaultHalfLife]);
+
+  // Sincronizar intervalo de aplicação pela frequência escolhida
+  useEffect(() => {
+    switch (frequency) {
+      case '1x_week': setIntervalDays(7); break;
+      case '2x_week': setIntervalDays(3.5); break;
+      case '3x_week': setIntervalDays(2.33); break;
+      case '5x_week': setIntervalDays(1.4); break;
+      case 'daily': setIntervalDays(1); break;
+      case 'eod': setIntervalDays(2); break;
+      default: setIntervalDays(7);
+    }
+  }, [frequency]);
+
+  // Histórico de Doses Aplicadas
+  const [doseHistory, setDoseHistory] = useState<DoseLogEntry[]>(() => {
+    try {
+      const raw = localStorage.getItem('peptide_applied_doses_history');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isLogModalOpen, setIsLogModalOpen] = useState<boolean>(false);
+  const [selectedSite, setSelectedSite] = useState<string>('Abdômen Direito');
+  const [logNotes, setLogNotes] = useState<string>('');
+
+  // Cronograma & Doses tomadas
   const [scheduleStartDate, setScheduleStartDate] = useState<string>(() => {
     return new Date().toISOString().split('T')[0];
   });
   const [scheduleWeeks, setScheduleWeeks] = useState<number>(8);
   const [completedDoses, setCompletedDoses] = useState<Record<string, boolean>>({});
 
-  // When changing product, load smart defaults
-  const handleProductChange = (productId: string) => {
+  // UI helpers
+  const [copiedResult, setCopiedResult] = useState<boolean>(false);
+  const [isSavingProtocol, setIsSavingProtocol] = useState<boolean>(false);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  // Produto ativo do catálogo
+  const activeProduct = useMemo(() => {
+    if (isCustomProduct) return null;
+    return products.find((p) => p.id === selectedProductId) || null;
+  }, [products, selectedProductId, isCustomProduct]);
+
+  // Sincronização externa caso venha pré-selecionado de outra página
+  useEffect(() => {
+    if (selectedCalculatorProduct) {
+      setSelectedProductId(selectedCalculatorProduct.id);
+      setIsCustomProduct(false);
+      handleProductSelect(selectedCalculatorProduct.id);
+    }
+  }, [selectedCalculatorProduct]);
+
+  // Leitura inicial de parâmetros da URL (Link compartilhável)
+  useEffect(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const hash = window.location.hash || '';
+      const hashQuery = hash.includes('?') ? hash.split('?')[1] : '';
+      const hashParams = new URLSearchParams(hashQuery);
+
+      const p = hashParams.get('p') || urlParams.get('p');
+      const vial = hashParams.get('vial') || urlParams.get('vial');
+      const dil = hashParams.get('dil') || urlParams.get('dil');
+      const dose = hashParams.get('dose') || urlParams.get('dose');
+      const unit = hashParams.get('unit') || urlParams.get('unit');
+      const syr = hashParams.get('syr') || urlParams.get('syr');
+      const freq = hashParams.get('freq') || urlParams.get('freq');
+
+      if (p) {
+        if (p === 'custom') {
+          setIsCustomProduct(true);
+        } else {
+          setSelectedProductId(p);
+          setIsCustomProduct(false);
+        }
+      }
+      if (vial && !isNaN(Number(vial)) && Number(vial) > 0) setVialQuantityMg(Number(vial));
+      if (dil && !isNaN(Number(dil)) && Number(dil) > 0) setWaterVolumeMl(Number(dil));
+      if (dose && !isNaN(Number(dose)) && Number(dose) > 0) setTargetDoseValue(Number(dose));
+      if (unit === 'mcg' || unit === 'mg') setTargetDoseUnit(unit);
+      if (syr && SYRINGE_SPECS[syr as SyringeType]) setSyringeType(syr as SyringeType);
+      if (freq && FREQUENCY_SPECS[freq as FrequencyType]) setFrequency(freq as FrequencyType);
+    } catch (e) {
+      console.warn('Erro ao processar parâmetros da URL:', e);
+    }
+  }, []);
+
+  // Seleção de produto e carregamento de valores inteligentes
+  const handleProductSelect = (productId: string) => {
+    if (productId === 'custom') {
+      setIsCustomProduct(true);
+      return;
+    }
+
+    setIsCustomProduct(false);
     setSelectedProductId(productId);
     const prod = products.find((p) => p.id === productId);
 
     if (prod) {
-      // Extract mg from dosage string e.g. "60 mg" or "10 mg"
       const match = prod.dosage.match(/([\d.,]+)\s*(mg|UI|U)/i);
       if (match) {
         const val = parseFloat(match[1].replace(',', '.'));
@@ -235,131 +357,114 @@ export const DosageCalculatorPage: React.FC = () => {
         setTargetDoseUnit(presetConfig.defaultUnit);
       } else {
         setWaterVolumeMl(2.0);
-        setTargetDoseValue(250);
-        setTargetDoseUnit('mcg');
+        if (vialQuantityMg <= 10) {
+          setTargetDoseValue(250);
+          setTargetDoseUnit('mcg');
+        } else {
+          setTargetDoseValue(2.5);
+          setTargetDoseUnit('mg');
+        }
       }
     }
   };
 
-  // Convert target dose to equivalent mg
-  const targetDoseInMg = useMemo(() => {
-    if (targetDoseUnit === 'mcg') {
-      return targetDoseValue / 1000;
+  // Alternância de unidade mcg <-> mg com conversão fluida
+  const handleUnitToggle = (newUnit: TargetDoseUnit) => {
+    if (newUnit === targetDoseUnit) return;
+    if (newUnit === 'mcg') {
+      setTargetDoseValue(Math.round(targetDoseValue * 1000 * 10) / 10);
+    } else {
+      setTargetDoseValue(Math.round((targetDoseValue / 1000) * 100) / 100);
     }
-    if (targetDoseUnit === 'UI') {
-      // For Botox / HCG where vial is in UI
-      return targetDoseValue;
-    }
-    return targetDoseValue; // mg
-  }, [targetDoseValue, targetDoseUnit]);
+    setTargetDoseUnit(newUnit);
+  };
 
-  // Mathematical Calculations:
-  // 1. Solution concentration
-  const concentrationMgPerMl = useMemo(() => {
-    if (!waterVolumeMl || waterVolumeMl <= 0) return 0;
-    return vialQuantityMg / waterVolumeMl;
-  }, [vialQuantityMg, waterVolumeMl]);
+  // Cálculo puro da dose
+  const calculationResult: CalculatorResult = useMemo(() => {
+    const input: CalculatorInput = {
+      vialMg: vialQuantityMg,
+      diluentMl: waterVolumeMl,
+      doseValue: targetDoseValue,
+      doseUnit: targetDoseUnit,
+      syringeType,
+      frequency,
+    };
+    return calculatePeptideDosage(input);
+  }, [vialQuantityMg, waterVolumeMl, targetDoseValue, targetDoseUnit, syringeType, frequency]);
 
-  const concentrationMcgPerMl = useMemo(() => {
-    return concentrationMgPerMl * 1000;
-  }, [concentrationMgPerMl]);
+  // Cálculo puro da farmacocinética / acúmulo
+  const pkResult: PharmacokineticsResult = useMemo(() => {
+    const halfLifeInDays = halfLifeUnit === 'hours' ? customHalfLifeDays / 24 : customHalfLifeDays;
+    return calculatePharmacokinetics(calculationResult.doseMg, halfLifeInDays, intervalDays);
+  }, [calculationResult.doseMg, customHalfLifeDays, halfLifeUnit, intervalDays]);
 
-  // 2. Volume to inject in mL
-  const volumeToInjectMl = useMemo(() => {
-    if (!concentrationMgPerMl || concentrationMgPerMl <= 0) return 0;
-    return targetDoseInMg / concentrationMgPerMl;
-  }, [targetDoseInMg, concentrationMgPerMl]);
-
-  // 3. Syringe Units (UI)
-  const syringeUnits = useMemo(() => {
-    if (volumeToInjectMl <= 0) return 0;
-
-    if (syringeType.startsWith('u100')) {
-      // U-100: 100 UI = 1.0 ml -> UI = ml * 100
-      return Math.round(volumeToInjectMl * 100 * 10) / 10;
-    }
-    if (syringeType === 'u40-1ml') {
-      // U-40: 40 UI = 1.0 ml -> UI = ml * 40
-      return Math.round(volumeToInjectMl * 40 * 10) / 10;
-    }
-    // Standard 1ml decimal syringe
-    return Math.round(volumeToInjectMl * 100) / 100;
-  }, [volumeToInjectMl, syringeType]);
-
-  // Max units of the selected syringe
-  const syringeCapacityUnits = useMemo(() => {
-    switch (syringeType) {
-      case 'u100-0.3ml': return 30;
-      case 'u100-0.5ml': return 50;
-      case 'u40-1ml': return 40;
-      case 'standard-1ml': return 1.0;
-      case 'u100-1ml':
-      default: return 100;
-    }
-  }, [syringeType]);
-
-  // Overfill warning
-  const isOverSyringeCapacity = syringeUnits > syringeCapacityUnits;
-
-  // 4. Total doses in vial
-  const totalDosesInVial = useMemo(() => {
-    if (!targetDoseInMg || targetDoseInMg <= 0) return 0;
-    return Math.floor(vialQuantityMg / targetDoseInMg);
-  }, [vialQuantityMg, targetDoseInMg]);
-
-  // 5. Cost per dose (if from catalog)
+  // Custo por dose baseado no frasco da loja
   const costPerDose = useMemo(() => {
-    if (!activeProduct || !totalDosesInVial || totalDosesInVial <= 0) return null;
-    return activeProduct.price / totalDosesInVial;
-  }, [activeProduct, totalDosesInVial]);
-
-  // 6. Supply duration in days
-  const daysOfSupply = useMemo(() => {
-    if (!totalDosesInVial || totalDosesInVial <= 0) return 0;
-    switch (frequency) {
-      case 'daily': return totalDosesInVial;
-      case 'eod': return totalDosesInVial * 2;
-      case '3x_week': return Math.round((totalDosesInVial / 3) * 7);
-      case '2x_week': return Math.round((totalDosesInVial / 2) * 7);
-      case 'weekly': return totalDosesInVial * 7;
-      default: return totalDosesInVial * 7;
+    if (!activeProduct || !calculationResult.dosesPerVialExact || calculationResult.dosesPerVialExact <= 0) {
+      return null;
     }
-  }, [totalDosesInVial, frequency]);
+    return activeProduct.price / calculationResult.dosesPerVialExact;
+  }, [activeProduct, calculationResult.dosesPerVialExact]);
 
-  // Protocol Schedule Generation
+  // Produtos filtrados por categoria e busca
+  const categoriesList = useMemo(() => {
+    const set = new Set<string>();
+    products.forEach((p) => {
+      if (p.category) set.add(p.category);
+    });
+    return ['all', ...Array.from(set)];
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
+      const q = productSearch.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        p.name.toLowerCase().includes(q) ||
+        p.dosage.toLowerCase().includes(q) ||
+        (p.category && p.category.toLowerCase().includes(q));
+      return matchesCategory && matchesSearch;
+    });
+  }, [products, selectedCategory, productSearch]);
+
+  // Cronograma detalhado de aplicações
   const scheduleRows = useMemo(() => {
     const list: { index: number; dateStr: string; dayName: string; doseText: string; isPast: boolean }[] = [];
-    if (!scheduleStartDate || totalDosesInVial <= 0) return list;
+    if (!scheduleStartDate || !calculationResult.isValid || calculationResult.dosesPerVialExact <= 0) {
+      return list;
+    }
 
     const [y, m, d] = scheduleStartDate.split('-').map(Number);
     let curDate = new Date(y, m - 1, d);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const maxItems = Math.min(totalDosesInVial, scheduleWeeks * (frequency === 'daily' ? 7 : frequency === 'weekly' ? 1 : 2));
+    const maxItems = Math.min(
+      Math.ceil(calculationResult.dosesPerVialExact),
+      scheduleWeeks * (frequency === 'daily' ? 7 : frequency === '1x_week' ? 1 : 2)
+    );
 
     let doseCount = 0;
     let loopGuard = 0;
 
     while (doseCount < maxItems && loopGuard < 300) {
       loopGuard++;
-
-      const dayOfWeek = curDate.getDay(); // 0 is Sun, 1 is Mon, etc.
+      const dayOfWeek = curDate.getDay();
       let isDoseDay = false;
 
       if (frequency === 'daily') {
         isDoseDay = true;
       } else if (frequency === 'eod') {
         isDoseDay = doseCount === 0 || loopGuard % 2 === 1;
-      } else if (frequency === 'weekly') {
-        // Same day every week
+      } else if (frequency === '1x_week') {
         isDoseDay = loopGuard === 1 || dayOfWeek === new Date(y, m - 1, d).getDay();
       } else if (frequency === '2x_week') {
-        // Monday (1) and Thursday (4) or every 3-4 days
         isDoseDay = dayOfWeek === 1 || dayOfWeek === 4;
       } else if (frequency === '3x_week') {
-        // Mon (1), Wed (3), Fri (5)
         isDoseDay = dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5;
+      } else if (frequency === '5x_week') {
+        isDoseDay = dayOfWeek >= 1 && dayOfWeek <= 5;
       }
 
       if (isDoseDay) {
@@ -372,7 +477,7 @@ export const DosageCalculatorPage: React.FC = () => {
           index: doseCount,
           dateStr: dateFormatted,
           dayName: weekday.toUpperCase().replace('.', ''),
-          doseText: `${targetDoseValue} ${targetDoseUnit} (${syringeUnits} UI)`,
+          doseText: `${targetDoseValue} ${targetDoseUnit} (${calculationResult.syringeUnitsRounded} UI)`,
           isPast,
         });
       }
@@ -381,9 +486,140 @@ export const DosageCalculatorPage: React.FC = () => {
     }
 
     return list;
-  }, [scheduleStartDate, totalDosesInVial, frequency, scheduleWeeks, targetDoseValue, targetDoseUnit, syringeUnits]);
+  }, [scheduleStartDate, calculationResult, frequency, scheduleWeeks, targetDoseValue, targetDoseUnit]);
 
-  // Toggle dose check
+  // Copiar resumo
+  const handleCopySummary = () => {
+    const prodName = isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo';
+    const textToCopy = [
+      `🧪 CÁLCULO DE DOSAGEM & SERINGA — ${prodName.toUpperCase()}`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `• Frasco: ${vialQuantityMg} mg`,
+      `• Diluente: ${waterVolumeMl} mL de água bacteriostática`,
+      `• Dose desejada: ${targetDoseValue} ${targetDoseUnit}`,
+      `• Seringa recomendada: ${calculationResult.syringeSpec.label}`,
+      `• ASPIRAR NA SERINGA: ${calculationResult.syringeUnitsRounded} UI (${calculationResult.volumeToInjectMl.toFixed(2).replace('.', ',')} mL)`,
+      `• Concentração: ${calculationResult.concentrationMgPerMl.toFixed(3).replace('.', ',')} mg/mL`,
+      `• Rendimento do frasco: ${calculationResult.dosesPerVialRounded.toFixed(1).replace('.', ',')} doses`,
+      `• Frequência: ${calculationResult.frequencySpec.label} (~${Math.round(calculationResult.weeksDurationRounded)} semanas)`,
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      `⚠️ Ferramenta informativa e educacional. Não substitui orientação médica.`,
+    ].join('\n');
+
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedResult(true);
+    showToast('Resultado copiado com sucesso para a área de transferência!');
+    setTimeout(() => setCopiedResult(false), 3000);
+  };
+
+  // Gerar link compartilhável com parâmetros na URL
+  const handleShareLink = () => {
+    const params = new URLSearchParams();
+    if (isCustomProduct) {
+      params.set('p', 'custom');
+    } else if (activeProduct?.id) {
+      params.set('p', activeProduct.id);
+    }
+    params.set('vial', String(vialQuantityMg));
+    params.set('dil', String(waterVolumeMl));
+    params.set('dose', String(targetDoseValue));
+    params.set('unit', targetDoseUnit);
+    params.set('syr', syringeType);
+    params.set('freq', frequency);
+
+    const shareUrl = `${window.location.origin}${window.location.pathname}#calculo-doses?${params.toString()}`;
+    navigator.clipboard.writeText(shareUrl);
+    showToast('Link do cálculo copiado! Envie no WhatsApp ou salve nos favoritos.');
+  };
+
+  // Salvar no perfil
+  const handleSaveProtocol = async () => {
+    if (!currentUser) {
+      setIsAuthOpen(true);
+      showToast('Entre com sua conta ou crie um cadastro gratuito para salvar o protocolo na nuvem.');
+      return;
+    }
+
+    setIsSavingProtocol(true);
+    try {
+      const prodName = isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo Personalizado';
+      await saveDoseProtocol({
+        productId: activeProduct?.id,
+        productName: prodName,
+        dosageLabel: `${targetDoseValue} ${targetDoseUnit}`,
+        vialMg: vialQuantityMg,
+        waterMl: waterVolumeMl,
+        doseValue: targetDoseValue,
+        doseUnit: targetDoseUnit,
+        syringeUnits: calculationResult.syringeUnitsRounded,
+        syringeType,
+        frequency: frequency as any,
+        concentrationMgPerMl: calculationResult.concentrationMgPerMl,
+        totalDosesInVial: Math.floor(calculationResult.dosesPerVialExact),
+        notes: `Reconstituição com ${waterVolumeMl} mL (${calculationResult.concentrationMgPerMl.toFixed(2)} mg/mL). Puxar ${calculationResult.syringeUnitsRounded} UI.`,
+      });
+      showToast('Protocolo salvo com sucesso no seu perfil!');
+    } finally {
+      setIsSavingProtocol(false);
+    }
+  };
+
+  // Pedir no WhatsApp
+  const handleOrderWhatsApp = () => {
+    const rawNumber = (storeSettings.whatsappNumber || '5511993456789').replace(/\D/g, '');
+    const prodName = isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo de Pesquisa';
+    const presentation = activeProduct?.dosage || `${vialQuantityMg} mg`;
+
+    const message = [
+      `Olá! Estava utilizando a Calculadora de Doses do site e gostaria de fazer o pedido:`,
+      ``,
+      `🧪 *Produto:* ${prodName} (${presentation})`,
+      `💧 *Reconstituição Planejada:* ${vialQuantityMg} mg com ${waterVolumeMl} mL de água bacteriostática`,
+      `💉 *Dose Alvo:* ${targetDoseValue} ${targetDoseUnit} (*${calculationResult.syringeUnitsRounded} UI* na seringa de ${calculationResult.syringeSpec.shortLabel})`,
+      `📦 *Rendimento:* ${calculationResult.dosesPerVialRounded.toFixed(1)} doses (~${Math.round(calculationResult.weeksDurationRounded)} semanas a ${calculationResult.frequencySpec.label})`,
+      ``,
+      `Gostaria de verificar o valor e a disponibilidade para envio!`,
+    ].join('\n');
+
+    window.open(`https://wa.me/${rawNumber}?text=${encodeURIComponent(message)}`, '_blank');
+  };
+
+  // Registrar dose aplicada no histórico
+  const handleRecordDose = () => {
+    const prodName = isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo';
+    const now = new Date();
+    const newEntry: DoseLogEntry = {
+      id: `log-${Date.now()}`,
+      timestamp: now.toISOString(),
+      dateFormatted: now.toLocaleDateString('pt-BR'),
+      timeFormatted: now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      productName: prodName,
+      doseMg: calculationResult.doseMg,
+      doseFormatted: calculationResult.doseFormatted,
+      syringeUnits: calculationResult.syringeUnitsRounded,
+      injectionSite: selectedSite,
+      notes: logNotes.trim() || undefined,
+    };
+
+    const updated = [newEntry, ...doseHistory];
+    setDoseHistory(updated);
+    try {
+      localStorage.setItem('peptide_applied_doses_history', JSON.stringify(updated));
+    } catch {}
+    setIsLogModalOpen(false);
+    setLogNotes('');
+    showToast('Aplicação registrada com sucesso no seu histórico!');
+  };
+
+  const handleDeleteDoseLog = (id: string) => {
+    const updated = doseHistory.filter((item) => item.id !== id);
+    setDoseHistory(updated);
+    try {
+      localStorage.setItem('peptide_applied_doses_history', JSON.stringify(updated));
+    } catch {}
+    showToast('Registro de aplicação removido.');
+  };
+
   const toggleDose = (idx: number) => {
     setCompletedDoses((prev) => ({
       ...prev,
@@ -391,305 +627,97 @@ export const DosageCalculatorPage: React.FC = () => {
     }));
   };
 
-  const handleCopySchedule = () => {
-    const text = scheduleRows
-      .map((r) => `Dose #${r.index} | ${r.dateStr} (${r.dayName}) - ${r.doseText} [${completedDoses[r.index] ? 'FEITO' : 'PENDENTE'}]`)
-      .join('\n');
-    navigator.clipboard.writeText(
-      `CRONOGRAMA DE APLICAÇÃO - ${activeProduct?.name || customName}\nConcentração: ${concentrationMgPerMl.toFixed(2)} mg/ml\nVolume: ${volumeToInjectMl.toFixed(3)} ml (${syringeUnits} UI)\n\n` + text
-    );
-    showToast('Cronograma copiado para a área de transferência!');
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const handleSaveCurrentProtocol = async () => {
-    if (!currentUser) {
-      setIsAuthOpen(true);
-      return;
-    }
-    setIsSavingProtocol(true);
-    try {
-      await saveDoseProtocol({
-        productId: activeProduct?.id,
-        productName: activeProduct?.name || customName,
-        dosageLabel: `${targetDoseValue} ${targetDoseUnit}`,
-        vialMg: vialQuantityMg,
-        waterMl: waterVolumeMl,
-        doseValue: targetDoseValue,
-        doseUnit: targetDoseUnit,
-        syringeUnits: syringeUnits,
-        syringeType: syringeType,
-        frequency: frequency,
-        concentrationMgPerMl: concentrationMgPerMl,
-        totalDosesInVial: totalDosesInVial,
-        notes: `Reconstituição com ${waterVolumeMl}ml (${concentrationMgPerMl.toFixed(2)} mg/ml). Aspirar ${syringeUnits} ${syringeType === 'standard-1ml' ? 'ml' : 'UI'}.`,
-      });
-    } finally {
-      setIsSavingProtocol(false);
-    }
-  };
-
-  const handleLoadSavedProtocol = (proto: SavedDoseProtocol) => {
-    if (proto.productId) {
-      setSelectedProductId(proto.productId);
-    }
-    setVialQuantityMg(proto.vialMg);
-    setWaterVolumeMl(proto.waterMl);
-    setTargetDoseValue(proto.doseValue);
-    setTargetDoseUnit(proto.doseUnit);
-    setSyringeType(proto.syringeType as any);
-    setFrequency(proto.frequency as any);
-    showToast(`Protocolo "${proto.productName}" carregado na calculadora!`);
-  };
-
-  // If user is not logged in, enforce authentication requirement gate
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-[#070A10] py-16 px-4 sm:px-6 lg:px-8 text-white flex items-center justify-center pb-24">
-        <div className="max-w-md w-full bg-slate-900/95 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative backdrop-blur-md">
-          <button
-            onClick={() => setCurrentView('store')}
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white mb-6 group cursor-pointer"
-          >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-            <span>Voltar para a Loja</span>
-          </button>
-
-          <div className="text-center mb-6">
-            <div className="w-14 h-14 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-center mx-auto mb-3 text-cyan-400 shadow-md">
-              <Syringe className="w-7 h-7" />
-            </div>
-            <h2 className="text-xl sm:text-2xl font-extrabold text-white font-tech">
-              ACESSO EXCLUSIVO À CALCULADORA
-            </h2>
-            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              Faça login ou crie seu cadastro gratuito para calcular reconstituições, visualizar marcações na seringa milimétrica e salvar seus protocolos personalizados no seu perfil.
-            </p>
-          </div>
-
-          {/* Quick Google Sign In */}
-          <button
-            type="button"
-            onClick={async () => {
-              setAuthLoading(true);
-              setAuthError(null);
-              try {
-                const res = await loginWithGoogle();
-                if (!res.success) {
-                  setAuthError(res.message || 'Falha na autenticação Google');
-                }
-              } finally {
-                setAuthLoading(false);
-              }
-            }}
-            disabled={authLoading}
-            className="w-full py-3 px-4 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-750 text-white font-bold text-xs tracking-wide shadow-md transition-all flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60"
-          >
-            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
-            </svg>
-            <span>{authLoading ? 'Conectando...' : 'Entrar com Conta Google'}</span>
-          </button>
-
-          <div className="flex items-center my-4">
-            <div className="flex-1 border-t border-slate-800" />
-            <span className="px-3 text-[11px] text-slate-500 font-medium">ou com e-mail</span>
-            <div className="flex-1 border-t border-slate-800" />
-          </div>
-
-          {authError && (
-            <div className="mb-4 p-3 bg-red-950/60 border border-red-800/80 rounded-xl text-xs text-red-300 flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
-              <span>{authError}</span>
-            </div>
-          )}
-
-          {/* Email / Password Form */}
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setAuthError(null);
-              if (!authEmail) return;
-              setAuthLoading(true);
-              try {
-                if (authMode === 'register') {
-                  const res = await registerClientAccount(authName, authEmail, authPassword, authPhone);
-                  if (!res.success) setAuthError(res.message || 'Erro ao criar conta');
-                } else {
-                  const res = await loginClientWithEmail(authEmail, authPassword);
-                  if (!res.success) setAuthError(res.message || 'Erro ao entrar');
-                }
-              } finally {
-                setAuthLoading(false);
-              }
-            }}
-            className="space-y-3 text-xs"
-          >
-            {authMode === 'register' && (
-              <>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Nome Completo</label>
-                  <input
-                    type="text"
-                    required
-                    value={authName}
-                    onChange={(e) => setAuthName(e.target.value)}
-                    placeholder="Seu nome completo"
-                    className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">WhatsApp</label>
-                  <input
-                    type="tel"
-                    value={authPhone}
-                    onChange={(e) => setAuthPhone(e.target.value)}
-                    placeholder="(11) 99999-0000"
-                    className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
-                  />
-                </div>
-              </>
-            )}
-
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">E-mail</label>
-              <input
-                type="email"
-                required
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="seu.email@exemplo.com"
-                className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-slate-300 font-semibold mb-1">Senha</label>
-              <input
-                type="password"
-                required
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 text-xs"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={authLoading}
-              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-lg transition-all cursor-pointer mt-2 disabled:opacity-60"
-            >
-              {authLoading
-                ? 'Conectando...'
-                : authMode === 'register'
-                ? 'CRIAR CONTA E ACESSAR CALCULADORA'
-                : 'ENTRAR E ACESSAR CALCULADORA'}
-            </button>
-          </form>
-
-          <div className="pt-4 text-center text-xs text-slate-400">
-            {authMode === 'register' ? (
-              <p>
-                Já possui conta?{' '}
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('login')}
-                  className="text-cyan-400 font-bold hover:underline ml-1"
-                >
-                  Fazer Login
-                </button>
-              </p>
-            ) : (
-              <p>
-                Novo usuário?{' '}
-                <button
-                  type="button"
-                  onClick={() => setAuthMode('register')}
-                  className="text-cyan-400 font-bold hover:underline ml-1"
-                >
-                  Criar conta grátis
-                </button>
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-[#070A10] text-slate-100 pb-28">
-      {/* Top Header */}
-      <section className="relative overflow-hidden pt-12 pb-12 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#0B0F17] to-[#070A10]">
+    <div className="min-h-screen bg-[#070A10] text-slate-100 pb-32">
+      {/* Top Hero Banner */}
+      <section className="relative overflow-hidden pt-10 pb-8 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#0B0F17] to-[#070A10]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="max-w-3xl space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold uppercase tracking-wider">
+            <div className="max-w-3xl space-y-2.5">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-bold uppercase tracking-wider shadow-sm">
                 <Calculator className="w-3.5 h-3.5" />
-                <span>Calculadora Farmacêutica de Precisão</span>
+                <span>Calculadora de Seringa & Reconstituição</span>
               </div>
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight">
-                Cálculo de <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-300">Doses & Reconstituição</span>
+                Calculadora de <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-300">Doses & Seringa</span>
               </h1>
               <p className="text-slate-300 text-xs sm:text-sm leading-relaxed">
-                Determine com rigor milimétrico quantas Unidades (UI) aspirar na seringa, a concentração final em mg/ml e gere um cronograma completo de aplicações.
+                Dosagem exata na seringa de insulina, concentração milimétrica em mg/mL, curva farmacocinética de platô e controle diário de injeções.
               </p>
             </div>
 
-            {/* Quick Links */}
+            {/* Quick Actions */}
             <div className="flex flex-wrap md:flex-col gap-2 shrink-0">
               <button
                 onClick={() => {
                   setCurrentView('benefits');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs transition-colors cursor-pointer"
               >
-                <Sparkles className="w-4 h-4 text-cyan-400" />
-                <span>Ver Guia de Benefícios</span>
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Guia de Benefícios</span>
               </button>
               <button
-                onClick={() => {
-                  setCurrentView('diet-control');
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs transition-colors cursor-pointer"
+                onClick={handleShareLink}
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-cyan-950/60 hover:bg-cyan-900/70 border border-cyan-500/30 text-cyan-300 font-bold text-xs transition-colors cursor-pointer"
+                title="Copiar link com esses parâmetros"
               >
-                <Clock className="w-4 h-4 text-emerald-400" />
-                <span>Controle de Dieta & Macros</span>
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Compartilhar Link</span>
               </button>
+            </div>
+          </div>
+
+          {/* Warning Banner (Inspirado no Peptiwise) */}
+          <div className="mt-5 p-3 sm:p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-start gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong className="text-amber-300 font-bold uppercase tracking-wider block sm:inline mr-1">
+                Atenção Farmacotécnica:
+              </strong>
+              Peptídeos possuem ligações frágeis. Ao adicionar a água bacteriostática, incline o frasco e deixe o líquido escorrer suavemente pelas paredes. <strong>Nunca chacoalhe o frasco</strong>; faça apenas movimentos circulares brandos.
             </div>
           </div>
         </div>
       </section>
 
       {/* Main Interactive Work Area: 2-Column Grid */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Saved Protocols from User Profile */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        {/* Saved Protocols from User Profile (se houver) */}
         {currentUser?.savedDoseProtocols && currentUser.savedDoseProtocols.length > 0 && (
-          <div className="mb-8 p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 border border-cyan-500/30 rounded-2xl shadow-lg">
+          <div className="mb-8 p-4 sm:p-5 bg-gradient-to-r from-slate-900 via-cyan-950/30 to-slate-900 border border-cyan-500/30 rounded-2xl shadow-lg">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-cyan-300 font-bold text-xs uppercase tracking-wider">
                 <BookmarkCheck className="w-4 h-4 text-cyan-400" />
                 <span>Seus Protocolos Salvos na Nuvem ({currentUser.savedDoseProtocols.length})</span>
               </div>
-              <span className="text-[11px] text-slate-400">Clique para carregar na calculadora</span>
+              <span className="text-[11px] text-slate-400 hidden sm:inline">Clique para carregar na calculadora</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
               {currentUser.savedDoseProtocols.map((proto) => (
                 <div
                   key={proto.id}
-                  className="p-3 bg-slate-950/80 border border-slate-800 hover:border-cyan-500/50 rounded-xl flex items-center justify-between gap-3 group transition-all"
+                  className="p-3 bg-slate-950/90 border border-slate-800 hover:border-cyan-500/50 rounded-xl flex items-center justify-between gap-3 group transition-all"
                 >
                   <div
-                    onClick={() => handleLoadSavedProtocol(proto)}
+                    onClick={() => {
+                      if (proto.productId) {
+                        setSelectedProductId(proto.productId);
+                        setIsCustomProduct(false);
+                      } else {
+                        setIsCustomProduct(true);
+                        setCustomProductName(proto.productName);
+                      }
+                      setVialQuantityMg(proto.vialMg);
+                      setWaterVolumeMl(proto.waterMl);
+                      setTargetDoseValue(proto.doseValue);
+                      setTargetDoseUnit(proto.doseUnit as TargetDoseUnit);
+                      setSyringeType(proto.syringeType as SyringeType);
+                      setFrequency(proto.frequency as FrequencyType);
+                      showToast(`Protocolo "${proto.productName}" carregado!`);
+                    }}
                     className="flex-1 min-w-0 cursor-pointer"
                   >
                     <p className="text-xs font-bold text-white truncate group-hover:text-cyan-300 transition-colors">
@@ -716,268 +744,367 @@ export const DosageCalculatorPage: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Left Column (Inputs & Product Selector): 7 cols */}
+          {/* Left Column: Form Stepper (7 cols) */}
           <div className="lg:col-span-7 space-y-6">
             
-            {/* 1. Step 1: Select Peptides from Catalog */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center">
+            {/* PASSO 1: Seleção de Peptídeo */}
+            <div className="bg-slate-900/85 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
                     1
                   </span>
-                  <h3 className="font-bold text-white text-sm uppercase tracking-wider">
-                    Selecione o Peptídeo do Catálogo
-                  </h3>
+                  <div>
+                    <h3 className="font-bold text-white text-sm uppercase tracking-wider">
+                      Peptídeo / Composto
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Toque para preencher automaticamente os mg do frasco e diluente.
+                    </p>
+                  </div>
                 </div>
-                {activeProduct && (
-                  <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                    Estoque: {activeProduct.stock} frascos
-                  </span>
-                )}
               </div>
 
-              {/* Product Select Dropdown */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                  Escolha o produto ou selecione personalizado:
-                </label>
+              {/* Barra de Busca e Filtro de Categorias */}
+              <div className="space-y-2.5">
                 <div className="relative">
-                  <select
-                    value={selectedProductId}
-                    onChange={(e) => handleProductChange(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-3 text-sm text-white font-medium focus:outline-none appearance-none pr-10 cursor-pointer"
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    placeholder="Buscar peptídeo do catálogo (ex: Tirzepatida, BPC, Cagrilintida...)"
+                    className="w-full pl-9 pr-4 py-2.5 bg-slate-950 border border-slate-700/80 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                  {productSearch && (
+                    <button
+                      onClick={() => setProductSearch('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-xs font-bold"
+                    >
+                      Limpar
+                    </button>
+                  )}
+                </div>
+
+                {/* Categorias */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 admin-nav-scrollbar text-[11px]">
+                  {categoriesList.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                        selectedCategory === cat
+                          ? 'bg-cyan-500 text-slate-950'
+                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {cat === 'all' ? 'Todos os Peptídeos' : cat}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleProductSelect('custom')}
+                    className={`px-2.5 py-1 rounded-lg font-bold whitespace-nowrap transition-colors cursor-pointer border ${
+                      isCustomProduct
+                        ? 'bg-purple-500 text-slate-950 border-purple-400 font-black'
+                        : 'bg-slate-950 text-purple-400 border-purple-500/30 hover:border-purple-400'
+                    }`}
                   >
-                    <optgroup label="Emagrecimento & Metabolismo">
-                      <option value="prod-tirzepatida-60">Tirzepatida 60 mg (Duplo agonista GIP/GLP-1)</option>
-                      <option value="prod-tirzepatida-100">Tirzepatida 100 mg (Apresentação concentrada)</option>
-                      <option value="prod-retratutide-30">Retratutide 30 mg (Triplo agonista GLP-1/GIP/Glucagon)</option>
-                      <option value="prod-retratutide-60">Retratutide 60 mg (Triplo agonista alta dose)</option>
-                      <option value="prod-cagrilintide-10">Cagrilintide 10 mg (Análogo de amilina)</option>
-                      <option value="prod-aod-9604-5">AOD-9604 5 mg (Fragmento lipolítico de GH)</option>
-                      <option value="prod-slu-pp-322-5">SLU-PP-322 5 mg (Mimético de exercício)</option>
-                    </optgroup>
-
-                    <optgroup label="Recuperação, Desempenho & GH">
-                      <option value="prod-bpc-tb-500-10">BPC-157 + TB-500 10 mg (Regeneração de tecidos e tendões)</option>
-                      <option value="prod-cjc-ipamorelin-10">CJC-1295 + Ipamorelin 10 mg (Combo secretagogo de GH)</option>
-                      <option value="prod-ipamorelin-10">Ipamorelin 10 mg (Secretagogo limpo de GH)</option>
-                      <option value="prod-tesamorelin-10-cat">Tesamorelin 10 mg (Gordura visceral profunda)</option>
-                      <option value="prod-hcg-5000">HCG 5.000 UI (Gonadotrofina coriônica humana)</option>
-                    </optgroup>
-
-                    <optgroup label="Estética & Beleza">
-                      <option value="prod-botox-allergan-100">BOTOX ALLERGAN 100 U (Toxina botulínica tipo A)</option>
-                      <option value="prod-ghk-cu-100">GHK-Cu 100 mg (Tripeptídeo de cobre - colágeno e pele)</option>
-                      <option value="prod-melanotan-ii-10">Melanotan II 10 mg (Bronzeamento e melanogênese)</option>
-                      <option value="prod-pt-141-10">PT-141 10 mg (Bremelanotide - libido e vigor)</option>
-                    </optgroup>
-
-                    <optgroup label="Longevidade & Biohacking">
-                      <option value="prod-nad-1000">NAD+ 1000 mg (Coenzima da longevidade celular)</option>
-                      <option value="prod-epithalon-10-cat">Epithalon 10 mg (Ativador de telomerase)</option>
-                      <option value="prod-ss-31-10">SS-31 10 mg (Proteção e ATP mitocondrial)</option>
-                    </optgroup>
-
-                    <optgroup label="Cognição & Imunidade">
-                      <option value="prod-semax-10-cat">Semax 10 mg (BDNF, foco e neuroproteção)</option>
-                      <option value="prod-selank-5-cat">Selank 5 mg (Ansiolítico sem sedação)</option>
-                      <option value="prod-dsip-10">DSIP 10 mg (Indutor do sono delta)</option>
-                      <option value="prod-kpv-10">KPV 10 mg (Reparo intestinal e anti-inflamatório)</option>
-                      <option value="prod-vip-10">VIP 10 mg (Imunorregulação neuroendócrina)</option>
-                    </optgroup>
-                  </select>
-                  <ChevronDown className="w-5 h-5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    + Outro / Personalizado
+                  </button>
                 </div>
               </div>
 
-              {/* Active Product Mini Card */}
-              {activeProduct && (
-                <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3.5 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-14 bg-slate-900 rounded-lg flex items-center justify-center p-1 shrink-0 border border-slate-800">
-                      <PeptideVial
-                        capColor={activeProduct.capColor}
-                        name={activeProduct.name}
-                        dosage={activeProduct.dosage}
-                        size="sm"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-white font-bold text-xs sm:text-sm truncate">
-                        {activeProduct.name} - {activeProduct.dosage}
-                      </div>
-                      <div className="text-[11px] text-cyan-400 flex items-center gap-1">
-                        <ShieldCheck className="w-3 h-3" />
-                        {activeProduct.purity}
-                      </div>
-                    </div>
-                  </div>
+              {/* Cards Grid de Produtos */}
+              {!isCustomProduct ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1 admin-nav-scrollbar">
+                  {filteredProducts.map((prod) => {
+                    const isSelected = selectedProductId === prod.id && !isCustomProduct;
+                    return (
+                      <button
+                        key={prod.id}
+                        type="button"
+                        onClick={() => handleProductSelect(prod.id)}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer relative group flex flex-col justify-between ${
+                          isSelected
+                            ? 'bg-cyan-500/15 border-cyan-400 shadow-md shadow-cyan-500/10 ring-1 ring-cyan-400/40'
+                            : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className="w-6 h-8 bg-slate-900 rounded flex items-center justify-center shrink-0 border border-slate-800">
+                            <PeptideVial capColor={prod.capColor} size="sm" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] uppercase font-bold text-slate-400 block truncate">
+                              {prod.category || 'Peptídeo'}
+                            </span>
+                            <span className="text-xs font-bold text-white block truncate group-hover:text-cyan-300">
+                              {prod.name}
+                            </span>
+                          </div>
+                        </div>
 
-                  <div className="text-right shrink-0">
-                    <div className="text-xs text-slate-400">Preço do Frasco</div>
-                    <div className="text-sm font-black text-emerald-400">
-                      R$ {activeProduct.price.toFixed(2).replace('.', ',')}
-                    </div>
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-800/80">
+                          <span className="font-mono text-cyan-400 font-bold">{prod.dosage}</span>
+                          <span className="text-emerald-400 font-bold">R$ {prod.price.toFixed(0)}</span>
+                        </div>
+
+                        {isSelected && (
+                          <div className="absolute top-1.5 right-1.5 w-4 h-4 bg-cyan-500 rounded-full flex items-center justify-center text-slate-950">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                /* Entrada para Peptídeo Personalizado */
+                <div className="p-3.5 bg-slate-950 border border-purple-500/40 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-purple-300">
+                      Nome do Composto Personalizado:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleProductSelect(products[0]?.id || 'prod-tirzepatida-60')}
+                      className="text-[11px] text-cyan-400 hover:underline"
+                    >
+                      Voltar ao Catálogo
+                    </button>
                   </div>
+                  <input
+                    type="text"
+                    value={customProductName}
+                    onChange={(e) => setCustomProductName(e.target.value)}
+                    placeholder="Ex: Cagrilintida, GHRP-2, Epithalon..."
+                    className="w-full px-3.5 py-2 bg-slate-900 border border-slate-700 focus:border-purple-400 rounded-xl text-xs text-white"
+                  />
                 </div>
               )}
             </div>
 
-            {/* 2. Step 2: Reconstitution Volume & Vial Quantity */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center">
-                  2
-                </span>
-                <h3 className="font-bold text-white text-sm uppercase tracking-wider">
-                  Dados de Diluição & Reconstituição
-                </h3>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Vial quantity mg */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                    Quantidade de Princípio Ativo no Frasco:
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0.1"
-                      value={vialQuantityMg}
-                      onChange={(e) => setVialQuantityMg(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-2.5 text-sm text-white font-bold focus:outline-none"
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      {targetDoseUnit === 'UI' ? 'UI' : 'mg'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Diluent added (ml) */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center justify-between">
-                    <span>Água Bacteriostática Adicionada:</span>
-                    <span className="text-[10px] text-cyan-400 font-bold">{waterVolumeMl} mL</span>
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      max="20"
-                      value={waterVolumeMl}
-                      onChange={(e) => setWaterVolumeMl(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-2.5 text-sm text-white font-bold focus:outline-none"
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      mL
-                    </span>
+            {/* PASSO 2: Seringa de Insulina */}
+            <div className="bg-slate-900/85 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
+                    2
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-white text-sm uppercase tracking-wider">
+                      Seringa de Insulina (U-100)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Escolha o tamanho da seringa para ajustar as marcações físicas exatas.
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Quick Diluent Presets */}
-              <div className="flex items-center gap-2 text-xs pt-1">
-                <span className="text-slate-400 text-[11px]">Atalhos de Diluição:</span>
-                {[1.0, 2.0, 2.5, 3.0, 5.0].map((v) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setWaterVolumeMl(v)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                      waterVolumeMl === v
-                        ? 'bg-cyan-500 text-slate-950'
-                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                    }`}
-                  >
-                    {v} ml
-                  </button>
-                ))}
+              {/* Cards de Seringas (Inspirado no Peptiwise) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {(['u100-0.3ml', 'u100-0.5ml', 'u100-1ml'] as SyringeType[]).map((typeId) => {
+                  const spec = SYRINGE_SPECS[typeId];
+                  const isSelected = syringeType === typeId;
+                  return (
+                    <button
+                      key={typeId}
+                      type="button"
+                      onClick={() => setSyringeType(typeId)}
+                      className={`p-3.5 rounded-xl border text-center transition-all cursor-pointer relative ${
+                        isSelected
+                          ? 'bg-cyan-500/15 border-cyan-400 text-white shadow-md shadow-cyan-500/10 ring-1 ring-cyan-400/40'
+                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                      }`}
+                    >
+                      <Syringe className={`w-5 h-5 mx-auto mb-1 ${isSelected ? 'text-cyan-400' : 'text-slate-400'}`} />
+                      <div className="text-sm font-black text-white">{spec.volumeMl} mL</div>
+                      <div className="text-xs font-bold text-cyan-400">{spec.capacityUnits} UI</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">
+                        Marcas de {spec.graduationStepUnits} em {spec.graduationStepUnits} UI
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* 3. Step 3: Desired Target Dose & Clinical Presets */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center">
+            {/* PASSO 3: Quantidade no Frasco (mg) */}
+            <div className="bg-slate-900/85 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
                     3
                   </span>
-                  <h3 className="font-bold text-white text-sm uppercase tracking-wider">
-                    Dose Alvo Desejada por Aplicação
-                  </h3>
+                  <div>
+                    <h3 className="font-bold text-white text-sm uppercase tracking-wider">
+                      Quantidade no Frasco (mg)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Quanto princípio ativo liofilizado existe no frasco fechado.
+                    </p>
+                  </div>
                 </div>
-
-                {/* Unit Switcher */}
-                <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800">
-                  {(['mcg', 'mg', 'UI'] as const).map((u) => (
-                    <button
-                      key={u}
-                      type="button"
-                      onClick={() => setTargetDoseUnit(u)}
-                      className={`px-2.5 py-0.5 rounded-md text-xs font-bold transition-colors ${
-                        targetDoseUnit === u
-                          ? 'bg-cyan-500 text-slate-950'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {u}
-                    </button>
-                  ))}
-                </div>
+                <span className="text-sm font-black text-cyan-400 font-mono">
+                  {vialQuantityMg} mg
+                </span>
               </div>
 
-              {/* Target Dose Input */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                    Quantidade da Dose:
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="any"
-                      min="0.01"
-                      value={targetDoseValue}
-                      onChange={(e) => setTargetDoseValue(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-2.5 text-base text-cyan-400 font-black focus:outline-none"
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      {targetDoseUnit}
-                    </span>
+              {/* Chips Rápidos de mg */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {COMMON_VIAL_CHIPS.map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setVialQuantityMg(val)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      vialQuantityMg === val
+                        ? 'bg-cyan-500 text-slate-950 shadow font-black'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {val} mg
+                  </button>
+                ))}
+              </div>
+
+              {/* Campo Numérico */}
+              <div className="relative pt-1">
+                <input
+                  type="number"
+                  step="any"
+                  min="0.1"
+                  value={vialQuantityMg || ''}
+                  onChange={(e) => setVialQuantityMg(parseFloat(e.target.value) || 0)}
+                  placeholder="Ou digite outro valor em mg..."
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700/80 focus:border-cyan-500 rounded-xl text-xs sm:text-sm text-white font-mono font-bold focus:outline-none"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pt-1">
+                  mg no frasco
+                </span>
+              </div>
+            </div>
+
+            {/* PASSO 4: Volume do Diluente (mL) */}
+            <div className="bg-slate-900/85 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
+                    4
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-white text-sm uppercase tracking-wider">
+                      Volume do Diluente (mL)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Volume de água bacteriostática estéril adicionada para reconstituir.
+                    </p>
+                  </div>
+                </div>
+                <span className="text-sm font-black text-cyan-400 font-mono">
+                  {waterVolumeMl} mL
+                </span>
+              </div>
+
+              {/* Chips Rápidos de Diluente */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {COMMON_DILUENT_CHIPS.map((val) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setWaterVolumeMl(val)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      waterVolumeMl === val
+                        ? 'bg-cyan-500 text-slate-950 shadow font-black'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {val} mL
+                  </button>
+                ))}
+              </div>
+
+              {/* Campo Numérico */}
+              <div className="relative pt-1">
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="30"
+                  value={waterVolumeMl || ''}
+                  onChange={(e) => setWaterVolumeMl(parseFloat(e.target.value) || 0)}
+                  placeholder="Ou digite outro volume em mL..."
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700/80 focus:border-cyan-500 rounded-xl text-xs sm:text-sm text-white font-mono font-bold focus:outline-none"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pt-1">
+                  mL de água
+                </span>
+              </div>
+            </div>
+
+            {/* PASSO 5: Dose Desejada */}
+            <div className="bg-slate-900/85 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
+                    5
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-white text-sm uppercase tracking-wider">
+                      Dose Desejada por Aplicação
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Quanto você quer aplicar em cada injeção.
+                    </p>
                   </div>
                 </div>
 
-                {/* Frequency selection */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                    Frequência das Aplicações:
-                  </label>
-                  <select
-                    value={frequency}
-                    onChange={(e) => setFrequency(e.target.value as any)}
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white font-medium focus:outline-none cursor-pointer"
+                {/* Switcher mcg / mg */}
+                <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => handleUnitToggle('mcg')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      targetDoseUnit === 'mcg'
+                        ? 'bg-cyan-500 text-slate-950 font-black shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
                   >
-                    <option value="weekly">1 vez por semana (ex: Tirzepatida / Retratutide)</option>
-                    <option value="2x_week">2 vezes por semana (ex: Seg e Qui)</option>
-                    <option value="3x_week">3 vezes por semana (ex: Seg / Qua / Sex)</option>
-                    <option value="daily">Diariamente (1x ao dia - ex: BPC-157 / Semax)</option>
-                    <option value="eod">Dias alternados (Dia sim, dia não)</option>
-                  </select>
+                    mcg
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUnitToggle('mg')}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      targetDoseUnit === 'mg'
+                        ? 'bg-cyan-500 text-slate-950 font-black shadow'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    mg
+                  </button>
                 </div>
               </div>
 
-              {/* Protocol Presets for Selected Product */}
-              {PRODUCT_DOSING_PRESETS[selectedProductId] && (
-                <div className="pt-2">
-                  <div className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1.5">
+              {/* Lembrete Didático: 1 mg = 1000 mcg */}
+              <div className="p-2.5 rounded-xl bg-blue-950/40 border border-blue-500/20 text-[11px] text-cyan-300 flex items-center gap-2">
+                <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+                <span>
+                  Lembrete de conversão farmacêutica: <strong>1 mg = 1.000 mcg</strong> (ex: 250 mcg = 0,25 mg | 500 mcg = 0,5 mg | 5 mg = 5.000 mcg).
+                </span>
+              </div>
+
+              {/* Presets Clínicos Sugeridos para o Peptídeo Atual */}
+              {!isCustomProduct && PRODUCT_DOSING_PRESETS[selectedProductId] && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                    Protocolos Clínicos Sugeridos para este Peptídeo:
+                    Protocolos Sugeridos para {activeProduct?.name}:
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {PRODUCT_DOSING_PRESETS[selectedProductId].presets.map((preset, idx) => (
@@ -990,11 +1117,11 @@ export const DosageCalculatorPage: React.FC = () => {
                         }}
                         className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                           targetDoseValue === preset.doseMcgOrMg && targetDoseUnit === preset.unit
-                            ? 'bg-cyan-500/15 border-cyan-400 text-white shadow-sm'
+                            ? 'bg-cyan-500/20 border-cyan-400 text-white shadow-sm ring-1 ring-cyan-400/30'
                             : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
                         }`}
                       >
-                        <div className="text-[11px] font-bold text-cyan-300 truncate">
+                        <div className="text-[10px] font-bold text-cyan-300 truncate">
                           {preset.label}
                         </div>
                         <div className="text-sm font-black text-white">
@@ -1008,340 +1135,682 @@ export const DosageCalculatorPage: React.FC = () => {
                   </div>
                 </div>
               )}
-            </div>
 
-            {/* 4. Step 4: Syringe Selector */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-              <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
-                <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 font-bold text-xs flex items-center justify-center">
-                  4
-                </span>
-                <h3 className="font-bold text-white text-sm uppercase tracking-wider">
-                  Tipo de Seringa Utilizada
-                </h3>
+              {/* Chips Rápidos de Dose (mcg ou mg) */}
+              <div className="space-y-1.5 pt-1">
+                <span className="text-[11px] text-slate-400 font-semibold block">Doses Comuns em {targetDoseUnit}:</span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {(targetDoseUnit === 'mcg' ? COMMON_DOSE_MCG_CHIPS : COMMON_DOSE_MG_CHIPS).map((val) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setTargetDoseValue(val)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        targetDoseValue === val
+                          ? 'bg-cyan-500 text-slate-950 shadow font-black'
+                          : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      {val} {targetDoseUnit}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {/* Campo Numérico */}
+              <div className="relative pt-1">
+                <input
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  value={targetDoseValue || ''}
+                  onChange={(e) => setTargetDoseValue(parseFloat(e.target.value) || 0)}
+                  placeholder={`Digite a dose desejada em ${targetDoseUnit}...`}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700/80 focus:border-cyan-500 rounded-xl text-sm font-bold text-cyan-400 font-mono focus:outline-none"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pt-1">
+                  {targetDoseUnit} por aplicação
+                </span>
+              </div>
+            </div>
+
+            {/* PASSO 6: Frequência de Aplicação */}
+            <div className="bg-slate-900/85 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow-xl space-y-3.5">
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-cyan-500 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
+                    6
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-white text-sm uppercase tracking-wider">
+                      Frequência de Uso
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Atualiza a estimativa de duração em semanas e o intervalo para a curva farmacocinética.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {[
-                  { id: 'u100-1ml', title: 'Seringa U-100 (1.0 ml)', subtitle: '100 UI = 1.0 ml (Padrão mais comum)', max: '100 UI' },
-                  { id: 'u100-0.5ml', title: 'Seringa U-100 (0.5 ml)', subtitle: '50 UI = 0.5 ml (Ótima para médias doses)', max: '50 UI' },
-                  { id: 'u100-0.3ml', title: 'Seringa U-100 (0.3 ml)', subtitle: '30 UI = 0.3 ml (Máxima precisão)', max: '30 UI' },
-                  { id: 'u40-1ml', title: 'Seringa U-40 (1.0 ml)', subtitle: '40 UI = 1.0 ml (Graduação veterinária)', max: '40 UI' },
-                  { id: 'standard-1ml', title: 'Seringa Comum (1.0 ml)', subtitle: 'Leitura direta em centésimos de mL', max: '1.0 ml' },
-                ].map((s) => (
+                  { id: '1x_week', label: '1x / sem' },
+                  { id: '2x_week', label: '2x / sem' },
+                  { id: '3x_week', label: '3x / sem' },
+                  { id: '5x_week', label: '5x / sem' },
+                  { id: 'daily', label: 'Diário' },
+                ].map((f) => (
                   <button
-                    key={s.id}
+                    key={f.id}
                     type="button"
-                    onClick={() => setSyringeType(s.id as any)}
-                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                      syringeType === s.id
-                        ? 'bg-cyan-500/15 border-cyan-400 shadow-md shadow-cyan-500/10'
-                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                    onClick={() => setFrequency(f.id as FrequencyType)}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold text-center transition-all cursor-pointer ${
+                      frequency === f.id
+                        ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
+                        : 'bg-slate-950 text-slate-300 hover:text-white border border-slate-800'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-bold text-white">{s.title}</div>
-                      <span className="text-[10px] font-mono text-cyan-400 font-bold">{s.max}</span>
-                    </div>
-                    <div className="text-[10px] text-slate-400 mt-1 leading-tight">{s.subtitle}</div>
+                    {f.label}
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Right Column (Visual Syringe & Calculation Results): 5 cols */}
-          <div className="lg:col-span-5 space-y-6">
+          {/* Right Column: Sticky Result Card (5 cols) */}
+          <div ref={resultRef} className="lg:col-span-5 lg:sticky lg:top-24 space-y-5">
             
-            {/* The Main Result Card */}
-            <div className="bg-gradient-to-b from-slate-900 to-[#0B0F17] border-2 border-cyan-500/40 rounded-3xl p-6 shadow-2xl space-y-6 relative overflow-hidden">
+            <div className="bg-gradient-to-b from-slate-900 to-[#0B0F17] border-2 border-cyan-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-4">
-                <div>
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-cyan-400">
-                    Resultado Farmacotécnico
-                  </div>
-                  <h2 className="text-lg font-black text-white">Marcação Exata na Seringa</h2>
+              {/* Header do Card de Resultado */}
+              <div className="flex items-center justify-between border-b border-slate-800/90 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">
+                    RESULTADO DA RECONSTITUIÇÃO
+                  </span>
                 </div>
-                <Syringe className="w-6 h-6 text-cyan-400" />
+                <Syringe className="w-5 h-5 text-cyan-400" />
               </div>
 
-              {/* Big Highlight: Syringe Units */}
-              <div className="bg-slate-950/90 border border-cyan-500/30 rounded-2xl p-5 text-center relative shadow-inner">
-                {isOverSyringeCapacity ? (
-                  <div className="space-y-2">
-                    <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                    <div className="text-base font-bold text-amber-300">
-                      Volume excede a seringa selecionada!
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      Você precisa de <strong>{syringeUnits} UI</strong>, mas sua seringa comporta no máximo{' '}
-                      <strong>{syringeCapacityUnits} UI</strong>. Reduza o diluente ou divida a aplicação.
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
-                      Aspirar exatamente até:
-                    </div>
-                    <div className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400 tracking-tight">
-                      {syringeUnits} <span className="text-2xl font-bold text-cyan-300">{syringeType === 'standard-1ml' ? 'ml' : 'UI'}</span>
-                    </div>
-                    <div className="text-xs font-bold text-slate-300 mt-2">
-                      Volume correspondente: <strong className="text-cyan-400">{volumeToInjectMl.toFixed(3)} mL</strong>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Real-time Interactive Syringe Graphic */}
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-3">
-                <div className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                  <span>Visualizador da Seringa Graduada</span>
-                  <span className="text-[11px] text-cyan-400 font-mono font-bold">
-                    {syringeType.toUpperCase()}
+              {/* Big Highlight Circle Display (Inspirado no Zoukei) */}
+              <div className="bg-slate-950/90 border border-cyan-500/40 rounded-2xl p-5 text-center relative shadow-inner space-y-2">
+                <div className="w-32 h-32 sm:w-36 sm:h-36 mx-auto rounded-full bg-gradient-to-b from-cyan-500/15 via-blue-500/10 to-transparent border-2 border-cyan-400/50 flex flex-col items-center justify-center shadow-lg shadow-cyan-500/10">
+                  <span className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-cyan-400 to-blue-400 font-mono tracking-tight">
+                    {calculationResult.syringeUnitsRounded} UI
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                    na seringa
                   </span>
                 </div>
 
-                {/* Syringe SVG Graphic */}
-                <div className="relative py-3">
-                  <svg
-                    viewBox="0 0 400 90"
-                    className="w-full h-auto drop-shadow-md select-none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <defs>
-                      <linearGradient id="syringeGlass" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#ffffff" stopOpacity="0.25" />
-                        <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.05" />
-                        <stop offset="100%" stopColor="#0284c7" stopOpacity="0.2" />
-                      </linearGradient>
-
-                      <linearGradient id="peptideLiquid" x1="0" y1="0" x2="1" y2="0">
-                        <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.85" />
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.9" />
-                      </linearGradient>
-
-                      <linearGradient id="rubberPlunger" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#334155" />
-                        <stop offset="50%" stopColor="#0f172a" />
-                        <stop offset="100%" stopColor="#334155" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Needle (Left) */}
-                    <line x1="20" y1="45" x2="60" y2="45" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" />
-                    {/* Needle hub */}
-                    <polygon points="60,37 72,40 72,50 60,53" fill="#0284c7" />
-
-                    {/* Syringe Barrel (Glass tube) */}
-                    <rect x="72" y="24" width="280" height="42" rx="4" fill="url(#syringeGlass)" stroke="#64748b" strokeWidth="1.5" />
-
-                    {/* Syringe Flange (Finger grip right) */}
-                    <rect x="350" y="14" width="6" height="62" rx="3" fill="#475569" stroke="#64748b" strokeWidth="1" />
-
-                    {/* Liquid fill based on fraction of capacity (max width = 270) */}
-                    {(() => {
-                      const fillFraction = Math.min(Math.max(syringeUnits / (syringeCapacityUnits || 1), 0), 1);
-                      const liquidWidth = fillFraction * 270;
-                      const plungerX = 74 + liquidWidth;
-
-                      return (
-                        <>
-                          {/* Liquid rect */}
-                          <rect
-                            x="74"
-                            y="26"
-                            width={liquidWidth}
-                            height="38"
-                            fill="url(#peptideLiquid)"
-                            className="transition-all duration-300"
-                          />
-
-                          {/* Plunger Rubber Stopper */}
-                          <rect
-                            x={plungerX}
-                            y="25"
-                            width="14"
-                            height="40"
-                            rx="2"
-                            fill="url(#rubberPlunger)"
-                            stroke="#0f172a"
-                            strokeWidth="1"
-                            className="transition-all duration-300"
-                          />
-                          {/* Plunger rod extending to the right */}
-                          <rect
-                            x={plungerX + 14}
-                            y="41"
-                            width={Math.max(380 - (plungerX + 14), 20)}
-                            height="8"
-                            fill="#64748b"
-                            className="transition-all duration-300"
-                          />
-                          {/* Plunger thumb press flange */}
-                          <rect
-                            x={Math.max(plungerX + 14 + 50, 385)}
-                            y="32"
-                            width="6"
-                            height="26"
-                            rx="2"
-                            fill="#475569"
-                            className="transition-all duration-300"
-                          />
-
-                          {/* Dynamic Indicator Arrow pointing to the calculated line */}
-                          <g transform={`translate(${plungerX}, 18)`}>
-                            <polygon points="0,0 -4,-7 4,-7" fill="#38bdf8" />
-                          </g>
-                        </>
-                      );
-                    })()}
-
-                    {/* Graduation Ticks (0, 10, 20 ... 100) */}
-                    {Array.from({ length: 11 }).map((_, i) => {
-                      const tickX = 74 + (i / 10) * 270;
-                      const val = Math.round((i / 10) * syringeCapacityUnits);
-                      return (
-                        <g key={i}>
-                          <line x1={tickX} y1="24" x2={tickX} y2="34" stroke="#e2e8f0" strokeWidth="1.2" />
-                          <line x1={tickX} y1="56" x2={tickX} y2="66" stroke="#e2e8f0" strokeWidth="1.2" />
-                          <text
-                            x={tickX}
-                            y="20"
-                            fontSize="8"
-                            fill="#94a3b8"
-                            fontWeight="bold"
-                            textAnchor="middle"
-                          >
-                            {val}
-                          </text>
-                        </g>
-                      );
-                    })}
-
-                    {/* Minor Sub-ticks */}
-                    {Array.from({ length: 50 }).map((_, i) => {
-                      if (i % 5 === 0) return null;
-                      const tickX = 74 + (i / 50) * 270;
-                      return (
-                        <line
-                          key={`sub-${i}`}
-                          x1={tickX}
-                          y1="24"
-                          x2={tickX}
-                          y2="29"
-                          stroke="#cbd5e1"
-                          strokeWidth="0.8"
-                          strokeOpacity="0.7"
-                        />
-                      );
-                    })}
-                  </svg>
-                </div>
-
-                <div className="text-[11px] text-center text-slate-400 bg-slate-900/60 py-1.5 px-3 rounded-xl border border-slate-800">
-                  A ponta do êmbolo de borracha deve alinhar perfeitamente com a marca{' '}
-                  <strong className="text-cyan-400">{syringeUnits} {syringeType === 'standard-1ml' ? 'ml' : 'UI'}</strong>.
+                <div className="space-y-1 pt-1">
+                  <p className="text-xs font-bold text-white">
+                    Puxe <strong className="text-cyan-400">{calculationResult.syringeUnitsRounded} UI</strong> ({calculationResult.volumeToInjectMl.toFixed(2).replace('.', ',')} mL) para obter {calculationResult.doseFormatted}
+                  </p>
+                  {calculationResult.syringeUnitsRounded !== Math.round(calculationResult.syringeUnitsExact * 10) / 10 && (
+                    <p className="text-[10px] text-slate-400">
+                      Marcação na seringa: {calculationResult.syringeUnitsRounded} UI (leitura exata: {calculationResult.syringeUnitsExact.toFixed(2)} UI)
+                    </p>
+                  )}
                 </div>
               </div>
 
-              {/* Key Metrics Grid */}
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                  <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                    Concentração da Solução
-                  </div>
-                  <div className="text-base font-black text-white mt-0.5">
-                    {concentrationMgPerMl.toFixed(2)} mg/mL
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-mono">
-                    ({Math.round(concentrationMcgPerMl)} mcg/mL)
-                  </div>
+              {/* Badges de Doses e Semanas Lado a Lado (Inspirado no Zoukei) */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                  <span className="text-lg sm:text-xl font-black text-amber-400 font-mono block">
+                    {calculationResult.dosesPerVialRounded.toFixed(1).replace('.', ',')}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Doses no Frasco
+                  </span>
                 </div>
 
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                  <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                    Rendimento do Frasco
-                  </div>
-                  <div className="text-base font-black text-cyan-400 mt-0.5">
-                    {totalDosesInVial} doses
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    completas por liofilizado
-                  </div>
-                </div>
-
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                  <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                    Durabilidade Estimada
-                  </div>
-                  <div className="text-base font-black text-white mt-0.5">
-                    {daysOfSupply} dias
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    na frequência {frequency === 'weekly' ? 'semanal' : frequency === 'daily' ? 'diária' : 'selecionada'}
-                  </div>
-                </div>
-
-                <div className="bg-slate-950 p-3 rounded-xl border border-slate-800/80">
-                  <div className="text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                    Custo Médio por Dose
-                  </div>
-                  <div className="text-base font-black text-emerald-400 mt-0.5">
-                    {costPerDose ? `R$ ${costPerDose.toFixed(2).replace('.', ',')}` : 'Sob consulta'}
-                  </div>
-                  <div className="text-[10px] text-slate-400">
-                    baseado no frasco da loja
-                  </div>
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-center">
+                  <span className="text-lg sm:text-xl font-black text-cyan-400 font-mono block">
+                    {Math.round(calculationResult.weeksDurationRounded)}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    Semanas Estimadas
+                  </span>
                 </div>
               </div>
 
-              {/* Actions: Save to Profile & Direct Add to Cart */}
+              {/* Desenho da Seringa Graduada com Animação de Preenchimento Fluida */}
+              <SyringeVisualizer
+                currentUnits={calculationResult.syringeUnitsRounded}
+                capacityUnits={calculationResult.syringeSpec.capacityUnits}
+                volumeToInjectMl={calculationResult.volumeToInjectMl}
+                syringeLabel={calculationResult.syringeSpec.shortLabel}
+                isOverCapacity={calculationResult.syringeUnitsExact > calculationResult.syringeSpec.capacityUnits}
+              />
+
+              {/* Detalhes Farmacotécnicos */}
+              <div className="divide-y divide-slate-800/80 text-xs">
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Droplets className="w-3.5 h-3.5 text-cyan-400" />
+                    Concentração
+                  </span>
+                  <span className="text-white font-bold font-mono">
+                    {calculationResult.concentrationMgPerMl.toFixed(3).replace('.', ',')} mg/mL
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Syringe className="w-3.5 h-3.5 text-cyan-400" />
+                    Volume por dose
+                  </span>
+                  <span className="text-white font-bold font-mono">
+                    {calculationResult.volumeToInjectMl.toFixed(2).replace('.', ',')} mL
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-400 flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    Uso da seringa
+                  </span>
+                  <span className="text-white font-bold font-mono">
+                    {calculationResult.syringeUnitsRounded} UI / {calculationResult.syringePercentage.toFixed(0)}% da capacidade
+                  </span>
+                </div>
+
+                {costPerDose && (
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-slate-400 flex items-center gap-1.5">
+                      <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+                      Custo por dose
+                    </span>
+                    <span className="text-emerald-400 font-bold font-mono">
+                      R$ {costPerDose.toFixed(2).replace('.', ',')}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Avisos e Validações com Sugestão Automática */}
+              {calculationResult.notices.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {calculationResult.notices.map((notice, idx) => (
+                    <div
+                      key={idx}
+                      className={`p-3 rounded-xl text-xs space-y-2 border ${
+                        notice.type === 'error'
+                          ? 'bg-red-950/40 border-red-500/40 text-red-200'
+                          : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                      }`}
+                    >
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${notice.type === 'error' ? 'text-red-400' : 'text-amber-400'}`} />
+                        <span>{notice.message}</span>
+                      </div>
+
+                      {notice.suggestedDiluentMl && (
+                        <button
+                          type="button"
+                          onClick={() => setWaterVolumeMl(notice.suggestedDiluentMl!)}
+                          className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[11px] rounded-lg border border-amber-500/40 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Aplicar sugestão: Diluir com {notice.suggestedDiluentMl} mL de água</span>
+                        </button>
+                      )}
+
+                      {notice.suggestedSyringeType && (
+                        <button
+                          type="button"
+                          onClick={() => setSyringeType(notice.suggestedSyringeType!)}
+                          className="px-2.5 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 font-bold text-[11px] rounded-lg border border-red-500/40 flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <Syringe className="w-3 h-3" />
+                          <span>Trocar para seringa recomendada ({SYRINGE_SPECS[notice.suggestedSyringeType].label})</span>
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Botões de Ação do Resultado */}
               <div className="pt-2 space-y-2.5">
+                {/* Botão Pedir no WhatsApp */}
                 <button
                   type="button"
-                  onClick={handleSaveCurrentProtocol}
-                  disabled={isSavingProtocol}
-                  className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-cyan-600/25 transition-all cursor-pointer disabled:opacity-60"
+                  onClick={handleOrderWhatsApp}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
                 >
-                  <Bookmark className="w-4 h-4 text-cyan-200" />
-                  <span>{isSavingProtocol ? 'Salvando Protocolo...' : 'Salvar Protocolo no Meu Perfil'}</span>
+                  <MessageCircle className="w-4 h-4 fill-slate-950" />
+                  <span>Pedir no WhatsApp</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopySummary}
+                    className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition-colors cursor-pointer"
+                  >
+                    {copiedResult ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-cyan-400" />}
+                    <span>{copiedResult ? 'Copiado!' : 'Copiar'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsLogModalOpen(true)}
+                    className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-xs flex items-center justify-center gap-1.5 border border-cyan-500/30 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Registrar Dose</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveProtocol}
+                  disabled={isSavingProtocol}
+                  className="w-full py-2.5 rounded-xl bg-slate-950 hover:bg-slate-850 text-slate-200 border border-slate-700 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
+                >
+                  <Bookmark className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>{isSavingProtocol ? 'Salvando...' : 'Salvar no Meu Perfil'}</span>
                 </button>
 
                 {activeProduct && (
                   <button
+                    type="button"
                     onClick={() => {
                       addToCart(activeProduct, 1);
-                      showToast(`${activeProduct.name} adicionado ao seu carrinho!`);
+                      showToast(`${activeProduct.name} adicionado ao carrinho!`);
                     }}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 transition-all cursor-pointer"
+                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-black text-xs flex items-center justify-center gap-2 border border-slate-700 transition-all cursor-pointer"
                   >
-                    <ShoppingBag className="w-4 h-4" />
-                    <span>Comprar Frasco de {activeProduct.name} ({activeProduct.dosage})</span>
+                    <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Adicionar {activeProduct.name} ao Carrinho</span>
                   </button>
                 )}
               </div>
-            </div>
 
-            {/* Quick Scientific Safety Note */}
-            <div className="bg-blue-950/20 border border-blue-500/20 rounded-2xl p-4 text-xs space-y-2">
-              <div className="flex items-center gap-2 text-cyan-300 font-bold">
-                <Info className="w-4 h-4 text-cyan-400" />
-                <span>Normas de Biossegurança & Assepsia</span>
+              {/* Aviso Legal Fixo */}
+              <div className="pt-2 border-t border-slate-800/80 text-center">
+                <p className="text-[10px] text-slate-400 leading-relaxed">
+                  ⚠️ Ferramenta informativa e educacional. Não substitui orientação médica.
+                </p>
               </div>
-              <p className="text-slate-400 leading-relaxed text-[11px]">
-                Utilize sempre álcool 70% na tampa de borracha antes da punção. Não reutilize seringas nem agulhas descartáveis. Mantenha o frasco reconstituído entre 2°C e 8°C protegido da luz solar direta.
-              </p>
             </div>
           </div>
         </div>
       </section>
 
+      {/* SEÇÃO EXTRA: ACÚMULO NO ORGANISMO & MEIA-VIDA (Inspirado no Zoukei) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 border-t border-slate-800/80">
+        <div className="bg-slate-900/85 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div>
+              <div className="inline-flex items-center gap-2 text-amber-400 font-bold text-xs uppercase tracking-wider mb-1">
+                <Activity className="w-3.5 h-3.5" />
+                <span>Farmacocinética & Curva de Acúmulo</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2">
+                <span>Acúmulo no Organismo (Meia-Vida)</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-semibold border border-cyan-500/30">
+                  {isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo'}
+                </span>
+              </h2>
+              <p className="text-slate-400 text-xs mt-1">
+                Com doses repetidas, o peptídeo acumula no corpo até alcançar o estado de equilíbrio (platô). Veja os níveis calculados de pico e vale.
+              </p>
+            </div>
+
+            <div className="text-xs text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-3 py-1.5 rounded-xl font-bold flex items-center gap-1.5 shrink-0">
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Sincronizado com os dados da calculadora</span>
+            </div>
+          </div>
+
+          {/* Controles da Farmacocinética */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Dose por Aplicação:
+              </label>
+              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-800 text-white font-mono font-bold text-sm">
+                {calculationResult.doseFormatted} ({calculationResult.doseMg} mg)
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5 flex items-center justify-between">
+                <span>Meia-Vida Estimada:</span>
+                <div className="flex items-center gap-1 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setHalfLifeUnit('days')}
+                    className={`px-1.5 py-0.5 rounded font-bold ${halfLifeUnit === 'days' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400'}`}
+                  >
+                    dias
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setHalfLifeUnit('hours')}
+                    className={`px-1.5 py-0.5 rounded font-bold ${halfLifeUnit === 'hours' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400'}`}
+                  >
+                    horas
+                  </button>
+                </div>
+              </label>
+              <input
+                type="number"
+                step="any"
+                min="0.1"
+                value={customHalfLifeDays}
+                onChange={(e) => setCustomHalfLifeDays(parseFloat(e.target.value) || 1)}
+                className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-white font-mono font-bold focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 mb-1.5">
+                Intervalo entre Doses:
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0.5"
+                  value={intervalDays}
+                  onChange={(e) => setIntervalDays(parseFloat(e.target.value) || 1)}
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-cyan-500 rounded-xl px-3.5 py-2 text-xs sm:text-sm text-white font-mono font-bold focus:outline-none"
+                />
+                <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                  dias
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Texto de Resumo Farmacocinético */}
+          <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-2xl text-xs sm:text-sm text-slate-200">
+            {pkResult.summaryText}
+          </div>
+
+          {/* 4 Cards de Métricas Farmacocinéticas (Inspirado no Zoukei) */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Pico no Platô ✨
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-amber-400 font-mono block">
+                {pkResult.peakPlateau.toFixed(2).replace('.', ',')} mg
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                máximo logo após aplicar
+              </span>
+            </div>
+
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Vale no Platô ⚖️
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-cyan-400 font-mono block">
+                {pkResult.troughPlateau.toFixed(2).replace('.', ',')} mg
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                mínimo antes da próxima dose
+              </span>
+            </div>
+
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Tempo até o Platô ⏳
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-white font-mono block">
+                ~{pkResult.plateauTimeDays} dias
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                até o nível se estabilizar
+              </span>
+            </div>
+
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                Fator de Acúmulo 📈
+              </span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-400 font-mono block">
+                {pkResult.accumulationFactor.toFixed(1).replace('.', ',')}x
+              </span>
+              <span className="text-[10px] text-slate-500 block">
+                vs. uma dose única isolada
+              </span>
+            </div>
+          </div>
+
+          {/* Gráfico em Dente de Serra (SVG Puro & Leve) */}
+          <div className="bg-slate-950 p-4 sm:p-5 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-white flex items-center gap-1.5">
+                <TrendingUp className="w-4 h-4 text-amber-400" />
+                Curva de Concentração Plasmática (Dente de Serra)
+              </span>
+              <span className="text-[11px] text-amber-400 font-mono">
+                Pico máximo: {pkResult.peakPlateau.toFixed(2)} mg
+              </span>
+            </div>
+
+            <div className="relative w-full h-56 sm:h-64">
+              {(() => {
+                const points = pkResult.curvePoints;
+                if (!points || points.length === 0) return null;
+
+                const maxDay = Math.max(...points.map((p) => p.day), 1);
+                const maxLevel = Math.max(...points.map((p) => p.level), pkResult.peakPlateau * 1.05, 0.01);
+
+                const W = 700;
+                const H = 220;
+                const padL = 45;
+                const padR = 25;
+                const padT = 20;
+                const padB = 30;
+
+                const scaleX = (d: number) => padL + (d / maxDay) * (W - padL - padR);
+                const scaleY = (lvl: number) => H - padB - (lvl / maxLevel) * (H - padT - padB);
+
+                const pathData = points
+                  .map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${scaleX(p.day).toFixed(1)} ${scaleY(p.level).toFixed(1)}`)
+                  .join(' ');
+
+                const areaData = `${pathData} L ${scaleX(maxDay).toFixed(1)} ${H - padB} L ${scaleX(0).toFixed(1)} ${H - padB} Z`;
+
+                const plateauY = scaleY(pkResult.peakPlateau);
+
+                return (
+                  <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-full select-none">
+                    <defs>
+                      <linearGradient id="pkSawtoothGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Linhas de Grade e Eixo Y */}
+                    {[0, 0.25, 0.5, 0.75, 1.0].map((frac) => {
+                      const yVal = padT + frac * (H - padT - padB);
+                      const labelVal = (maxLevel * (1 - frac)).toFixed(2);
+                      return (
+                        <g key={frac}>
+                          <line x1={padL} y1={yVal} x2={W - padR} y2={yVal} stroke="#1e293b" strokeDasharray="3 3" />
+                          <text x={padL - 6} y={yVal + 3} fontSize="9" fill="#64748b" textAnchor="end" fontFamily="monospace">
+                            {labelVal}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Linha tracejada do platô */}
+                    <line
+                      x1={padL}
+                      y1={plateauY}
+                      x2={W - padR}
+                      y2={plateauY}
+                      stroke="#f59e0b"
+                      strokeWidth="1.2"
+                      strokeDasharray="4 4"
+                    />
+                    <text x={W - padR} y={plateauY - 5} fontSize="9" fill="#f59e0b" textAnchor="end" fontWeight="bold">
+                      pico no platô ({pkResult.peakPlateau.toFixed(2)} mg)
+                    </text>
+
+                    {/* Área sombreada */}
+                    <path d={areaData} fill="url(#pkSawtoothGradient)" />
+
+                    {/* Curva em dente de serra */}
+                    <path d={pathData} fill="none" stroke="#f59e0b" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+
+                    {/* Eixo X com marcas de dias */}
+                    {[0, 0.25, 0.5, 0.75, 1.0].map((frac) => {
+                      const dayVal = Math.round(maxDay * frac);
+                      const xVal = scaleX(dayVal);
+                      return (
+                        <g key={frac}>
+                          <line x1={xVal} y1={H - padB} x2={xVal} y2={H - padB + 4} stroke="#475569" />
+                          <text x={xVal} y={H - padB + 16} fontSize="9" fill="#94a3b8" textAnchor="middle" fontFamily="monospace">
+                            {dayVal}d
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                );
+              })()}
+            </div>
+            <div className="text-[10px] text-slate-500 text-center">
+              A linha amarela demonstra o acúmulo a cada dose aplicada e o declínio exponencial entre elas até estabilizar no platô.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SEÇÃO: HISTÓRICO DE DOSES APLICADAS (Diário de Aplicações) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 border-t border-slate-800/80">
+        <div className="bg-slate-900/85 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
+            <div>
+              <div className="inline-flex items-center gap-2 text-cyan-400 font-bold text-xs uppercase tracking-wider mb-1">
+                <Clock className="w-3.5 h-3.5" />
+                <span>Diário de Aplicações</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white">
+                Histórico de Doses Aplicadas
+              </h2>
+              <p className="text-slate-400 text-xs mt-1">
+                Registre suas injeções realizadas, local de aplicação (rodízio) e horário para manter seu histórico organizado.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsLogModalOpen(true)}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Registrar Nova Dose</span>
+            </button>
+          </div>
+
+          {/* Lista de Registros */}
+          {doseHistory.length === 0 ? (
+            <div className="p-8 text-center bg-slate-950 rounded-2xl border border-slate-800/80 space-y-2">
+              <Syringe className="w-8 h-8 text-slate-600 mx-auto" />
+              <p className="text-xs text-slate-400">
+                Nenhuma dose registrada ainda. Ao aplicar seu peptídeo, clique em <strong>"Registrar Nova Dose"</strong> para salvar o local e a data da aplicação.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {doseHistory.map((item) => (
+                <div
+                  key={item.id}
+                  className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-2 relative group hover:border-slate-700 transition-all"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-500 block">
+                        {item.dateFormatted} às {item.timeFormatted}
+                      </span>
+                      <h4 className="text-xs font-black text-white">{item.productName}</h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteDoseLog(item.id)}
+                      className="p-1 text-slate-500 hover:text-red-400 transition-colors"
+                      title="Excluir registro"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                    <span className="text-cyan-400 font-mono font-bold">
+                      {item.syringeUnits} UI ({item.doseFormatted})
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md bg-slate-900 text-slate-300 text-[10px] font-semibold border border-slate-800">
+                      📍 {item.injectionSite}
+                    </span>
+                  </div>
+
+                  {item.notes && (
+                    <p className="text-[10px] text-slate-400 italic bg-slate-900/50 p-2 rounded-lg">
+                      "{item.notes}"
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Floating Bottom Bar for Mobile View */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-slate-950/95 backdrop-blur-md border-t border-cyan-500/40 p-3 shadow-2xl flex items-center justify-between">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shrink-0">
+            <Syringe className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-xs font-black text-white block">
+              Puxe {calculationResult.syringeUnitsRounded} UI ({calculationResult.volumeToInjectMl.toFixed(2)} mL)
+            </span>
+            <span className="text-[10px] text-slate-400 block truncate">
+              {calculationResult.dosesPerVialRounded.toFixed(1)} doses • {Math.round(calculationResult.weeksDurationRounded)} semanas
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={handleOrderWhatsApp}
+            className="p-2.5 rounded-xl bg-emerald-500 text-slate-950 font-black cursor-pointer shadow"
+            title="Pedir no WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4 fill-slate-950" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              resultRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs cursor-pointer shadow"
+          >
+            Ver
+          </button>
+        </div>
+      </div>
+
       {/* Protocol Schedule Planner Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 border-t border-slate-800/80">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+        <div className="bg-slate-900/85 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-5">
             <div>
               <div className="inline-flex items-center gap-2 text-cyan-400 font-bold text-xs uppercase tracking-wider mb-1">
@@ -1356,14 +1825,23 @@ export const DosageCalculatorPage: React.FC = () => {
             {/* Action buttons: Copy & Print */}
             <div className="flex items-center gap-2">
               <button
-                onClick={handleCopySchedule}
+                onClick={() => {
+                  const text = scheduleRows
+                    .map((r) => `Dose #${r.index} | ${r.dateStr} (${r.dayName}) - ${r.doseText} [${completedDoses[r.index] ? 'FEITO' : 'PENDENTE'}]`)
+                    .join('\n');
+                  const prodName = isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo';
+                  navigator.clipboard.writeText(
+                    `CRONOGRAMA DE APLICAÇÃO - ${prodName}\nConcentração: ${calculationResult.concentrationMgPerMl.toFixed(3)} mg/mL\nVolume: ${calculationResult.volumeToInjectMl.toFixed(3)} mL (${calculationResult.syringeUnitsRounded} UI)\n\n` + text
+                  );
+                  showToast('Cronograma copiado para a área de transferência!');
+                }}
                 className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Copy className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Copiar</span>
+                <span>Copiar Cronograma</span>
               </button>
               <button
-                onClick={handlePrint}
+                onClick={() => window.print()}
                 className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5 text-slate-400" />
@@ -1514,7 +1992,7 @@ export const DosageCalculatorPage: React.FC = () => {
             {
               step: '2',
               title: 'Aspiração Suave',
-              desc: 'Com uma seringa estéril, aspire o volume desejado de água bacteriostática (ex: 2.0 ml) certificando-se de não deixar grandes bolhas de ar.',
+              desc: 'Com uma seringa estéril, aspire o volume desejado de água bacteriostática (ex: 2.0 ou 3.0 mL) certificando-se de retirar bolhas de ar.',
             },
             {
               step: '3',
@@ -1524,7 +2002,7 @@ export const DosageCalculatorPage: React.FC = () => {
             {
               step: '4',
               title: 'Dissolução & Geladeira',
-              desc: 'Movimente o frasco em círculos suaves sobre a mesa até dissolver por completo (não chacoalhe). Guarde imediatamente na geladeira de 2°C a 8°C.',
+              desc: 'Movimente o frasco em círculos suaves sobre a mesa até dissolver por completo (não chacoalhe). Guarde na geladeira de 2°C a 8°C.',
             },
           ].map((item) => (
             <div
@@ -1540,6 +2018,82 @@ export const DosageCalculatorPage: React.FC = () => {
           ))}
         </div>
       </section>
+
+      {/* MODAL: REGISTRAR DOSE APLICADA */}
+      {isLogModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Syringe className="w-5 h-5 text-cyan-400" />
+                <h3 className="font-bold text-white text-sm">Registrar Aplicação Realizada</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsLogModalOpen(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1">
+                <div className="text-slate-400">Composto & Dosagem:</div>
+                <div className="text-sm font-black text-white">
+                  {isCustomProduct ? customProductName : activeProduct?.name || 'Peptídeo'} — {calculationResult.doseFormatted}
+                </div>
+                <div className="text-cyan-400 font-bold font-mono">
+                  {calculationResult.syringeUnitsRounded} UI na seringa ({calculationResult.volumeToInjectMl.toFixed(2)} mL)
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Local da Aplicação (Rodízio):</label>
+                <select
+                  value={selectedSite}
+                  onChange={(e) => setSelectedSite(e.target.value)}
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white font-medium focus:outline-none focus:border-cyan-500"
+                >
+                  {INJECTION_SITES.map((site) => (
+                    <option key={site} value={site}>
+                      {site}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-bold mb-1">Observações (Opcional):</label>
+                <textarea
+                  value={logNotes}
+                  onChange={(e) => setLogNotes(e.target.value)}
+                  rows={2}
+                  placeholder="Ex: Sem dor no local, aplicação tranquila..."
+                  className="w-full p-2.5 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsLogModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold cursor-pointer transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRecordDose}
+                  className="flex-1 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black cursor-pointer transition-colors"
+                >
+                  Confirmar Registro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
