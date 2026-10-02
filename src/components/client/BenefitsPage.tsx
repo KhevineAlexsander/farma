@@ -182,12 +182,15 @@ const SCIENTIFIC_CATALOG_DATA: Record<string, ScientificPeptideData> = {
     id: 'prod-cagrilintide-10',
     name: 'Cagrilintide (10 mg)',
     categoryGoal: 'emagrecimento',
-    headline: 'Análogo Não Seletivo de Amilina para Supressão Gástrica Central',
-    cellularMechanism: 'Liga-se aos receptores de calcitonina/amilina na área postrema do cérebro, retardando o esvaziamento gástrico gástrico e gerando saciedade via via neuroquímica totalmente independente do GLP-1.',
+    headline: 'Análogo de amilina de longa duração para controle do peso e aumento da saciedade',
+    cellularMechanism:
+      'A cagrilintida é um análogo de amilina de longa duração desenvolvido para ajudar no controle do peso e do diabetes tipo 2, atuando principalmente na redução do apetite e aumento da saciedade.\n\nO que é e como funciona:\n• Análogo de amilina: Imita o hormônio natural amilina, produzido pelo pâncreas.\n• Controle da fome: Retarda o esvaziamento gástrico e envia sinais de saciedade ao cérebro.\n• Uso combinado: É frequentemente estudada em conjunto com a semaglutida (formando o CagriSema) para potencializar a perda de peso.\n• Para mais detalhes técnicos, consulte o Guia Completo de Medicação da Doctronic.',
     clinicalBenefits: [
-      'Quebra eficiente de platôs de perda de peso em usuários de Tirzepatida',
-      'Sensação de estômago cheio com porções reduzidas de comida',
-      'Redução da secreção pós-prandial de glucagon em excesso',
+      'Análogo de amilina: Imita o hormônio natural amilina, produzido pelo pâncreas',
+      'Controle da fome: Retarda o esvaziamento gástrico e envia sinais de saciedade ao cérebro',
+      'Uso combinado: Frequentemente estudada com a semaglutida (CagriSema) para perda de peso',
+      'Efeitos colaterais comuns: Náuseas, vômitos e diarreia nas primeiras semanas (tendem a diminuir com a adaptação)',
+      'Cuidados importantes: Risco de hipoglicemia se combinada com insulina ou antidiabéticos',
     ],
     protocolSuggestion: {
       route: 'Subcutânea (SubQ)',
@@ -195,8 +198,8 @@ const SCIENTIFIC_CATALOG_DATA: Record<string, ScientificPeptideData> = {
       timing: 'Co-administrado ou no mesmo dia do protocolo GLP-1',
       cycleDuration: '8 a 16 semanas',
     },
-    synergyWith: ['Tirzepatida (o clássico duo CagriSema)'],
-    scientificReference: 'Enebo LB et al. Safety, tolerability, and weight loss with Cagrilintide (Lancet).',
+    synergyWith: ['Semaglutida / Tirzepatida (formando o CagriSema)'],
+    scientificReference: 'Enebo LB et al. Safety, tolerability, and weight loss with Cagrilintide (Lancet) & Guia Técnico de Cagrilintide.',
     hplcHighlight: 'Pureza ≥ 99.5% HPLC',
   },
   'prod-aod-9604-5': {
@@ -927,7 +930,7 @@ export const BenefitsPage: React.FC = () => {
                           <Dna className="w-4 h-4 text-cyan-400" />
                           <span>Mecanismo de Ação Celular</span>
                         </div>
-                        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                        <p className="text-xs sm:text-sm text-slate-300 leading-relaxed whitespace-pre-line">
                           {sci?.cellularMechanism || product.description}
                         </p>
                       </div>

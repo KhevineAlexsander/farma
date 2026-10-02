@@ -82,6 +82,32 @@ export const ScientificGuide: React.FC = () => {
       warnings: 'Pode causar náuseas e redução de apetite nos primeiros dias de adaptação.',
     },
     {
+      id: 'cagrilintida',
+      name: 'Cagrilintida (Análogo de Amilina)',
+      category: 'metabolismo',
+      categoryLabel: 'Perda de Peso & Metabolismo',
+      badge: 'Análogo de Amilina',
+      headline: 'Análogo de Amilina de Longa Duração para Saciedade & Controle do Peso',
+      scientificSummary:
+        'A cagrilintida é um análogo de amilina de longa duração desenvolvido para ajudar no controle do peso e do diabetes tipo 2, atuando principalmente na redução do apetite e aumento da saciedade.',
+      mechanism:
+        'O que é e como funciona:\n• Análogo de amilina: Imita o hormônio natural amilina, produzido pelo pâncreas.\n• Controle da fome: Retarda o esvaziamento gástrico e envia sinais de saciedade ao cérebro.\n• Uso combinado: É frequentemente estudada em conjunto com a semaglutida (formando o CagriSema) para potencializar a perda de peso.\n• Para mais detalhes técnicos, consulte o Guia Completo de Medicação da Doctronic.',
+      dosage: {
+        initial: '0,3 mg (300 mcg) / semana',
+        common: '0,6 mg a 1,2 mg / semana',
+        max: '2,4 mg / semana',
+        route: 'Subcutânea (SubQ)',
+        timing: '1 vez por semana, co-administrado ou no mesmo dia do protocolo metabólico.',
+      },
+      practicalTips: [
+        'Efeitos colaterais comuns: Náuseas, vômitos e diarreia nas primeiras semanas.',
+        'Sintomas que tendem a diminuir conforme o corpo se adapta ao longo do protocolo.',
+        'Excelente sinergia quando combinada com agonistas de GLP-1 para quebra de platô.',
+      ],
+      warnings:
+        'Cuidados importantes:\n• Risco de hipoglicemia se combinada com insulina ou medicamentos para diabetes.\n• Necessidade de acompanhamento médico rigoroso para ajustes de dose.\n• Saiba mais sobre as vias de ação no Guia Técnico de Cagrilintide.',
+    },
+    {
       id: 'cagrisema',
       name: 'CagriSema (Cagrilintida + Semaglutida)',
       category: 'metabolismo',
@@ -1075,7 +1101,7 @@ export const ScientificGuide: React.FC = () => {
                               <span className="text-[11px] font-bold text-blue-400 uppercase tracking-wider block flex items-center gap-1.5">
                                 <Activity className="w-3.5 h-3.5" /> Mecanismo Biológico de Ação
                               </span>
-                              <p className="text-slate-300 leading-relaxed font-sans">{pep.mechanism}</p>
+                              <p className="text-slate-300 leading-relaxed font-sans whitespace-pre-line">{pep.mechanism}</p>
                             </div>
                           </div>
 
@@ -1132,7 +1158,7 @@ export const ScientificGuide: React.FC = () => {
                                 <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
                                   <AlertTriangle className="w-3.5 h-3.5" /> Cuidados & Bio-Feedback:
                                 </span>
-                                <p className="text-slate-300 leading-relaxed">{pep.warnings}</p>
+                                <p className="text-slate-300 leading-relaxed whitespace-pre-line">{pep.warnings}</p>
                               </div>
 
                               <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between">
