@@ -33,6 +33,7 @@ import {
   MessageSquare,
   Printer,
   ShieldCheck,
+  Share2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CashRegisterSession } from '../../types';
@@ -85,6 +86,85 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
   // Reopen single order modal state
   const [orderToReopen, setOrderToReopen] = useState<Order | null>(null);
   const [isReopeningOrder, setIsReopeningOrder] = useState<boolean>(false);
+
+  // WhatsApp Order Summary / Relatório Modal State
+  const [summaryOrder, setSummaryOrder] = useState<Order | null>(null);
+  const [summaryWhatsAppPhone, setSummaryWhatsAppPhone] = useState<string>('');
+  const [summaryCopied, setSummaryCopied] = useState<boolean>(false);
+
+  const handleOpenOrderSummaryModal = (order: Order, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSummaryOrder(order);
+    setSummaryWhatsAppPhone(order.customer?.phone || '');
+    setSummaryCopied(false);
+  };
+
+  const generateOrderSummaryText = (order: Order): string => {
+    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const customerName = order.customer?.name || 'Cliente';
+    const totalItems = (order.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
+    const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
+    const isPaid = order.status === 'Pago' || order.status === 'Entregue' || order.status === 'Enviado';
+    const paidAmountVal = order.paidAmount !== undefined ? Number(order.paidAmount) : (isPaid ? Number(order.total || 0) : 0);
+    const paidStr = paidAmountVal.toFixed(2).replace('.', ',');
+    const remainingAmountVal = order.remainingAmount !== undefined ? Number(order.remainingAmount) : (isPaid ? 0 : Math.max(0, Number(order.total || 0) - paidAmountVal));
+    const remainingStr = remainingAmountVal.toFixed(2).replace('.', ',');
+    const itemsList = (order.items || []).map((i) => `• ${i.quantity}x ${i.product?.name || 'Produto'} (${i.product?.dosage || ''}) - R$ ${((i.product?.price || 0) * (i.quantity || 1)).toFixed(2).replace('.', ',')}`).join('\n');
+
+    return `📦 *RELATÓRIO DO PEDIDO - ${brand}*
+----------------------------------------
+*Pedido:* ${order.orderNumber}
+${order.closedSessionName ? `*Sessão de Caixa:* ${order.closedSessionName}\n` : ''}*Data do Pedido:* ${new Date(order.createdAt).toLocaleDateString('pt-BR')} às ${new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+*Status:* ${order.status}
+${order.trackingCode ? `*Rastreio:* ${order.trackingCode}\n` : ''}
+👤 *DADOS DO CLIENTE:*
+• *Nome:* ${customerName}
+• *Telefone:* ${order.customer?.phone || '-'}
+• *Email:* ${order.customer?.email || '-'}
+• *Endereço:* ${order.address?.street || ''}, ${order.address?.number || ''} ${order.address?.complement || ''} - ${order.address?.neighborhood || ''}, ${order.address?.city || ''}/${order.address?.state || ''} - CEP: ${order.address?.zipCode || '-'}
+
+💊 *ITENS DO PEDIDO (${totalItems} frascos):*
+${itemsList}
+
+💰 *FINANCEIRO:*
+• *Subtotal:* R$ ${(order.subtotal || 0).toFixed(2).replace('.', ',')}
+• *Frete:* R$ ${(order.shipping || 0).toFixed(2).replace('.', ',')}
+${(order.additionalAmount || 0) > 0 ? `• *Valor Adicional:* R$ ${(order.additionalAmount || 0).toFixed(2).replace('.', ',')}\n` : ''}${(order.discount || 0) > 0 ? `• *Desconto:* R$ ${(order.discount || 0).toFixed(2).replace('.', ',')}\n` : ''}• *TOTAL:* *R$ ${totalStr}*
+• *Valor Pago:* R$ ${paidStr}
+${(order.status === 'Pago Parcial' || remainingAmountVal > 0) ? `• *SALDO RESTANTE:* *R$ ${remainingStr}*\n` : ''}• *Forma de Pagamento:* ${order.paymentMethod || 'A Combinar'}
+
+${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
+*${brand}*`;
+  };
+
+  const handleCopyOrderSummary = async () => {
+    if (!summaryOrder) return;
+    const text = generateOrderSummaryText(summaryOrder);
+    try {
+      await navigator.clipboard.writeText(text);
+      setSummaryCopied(true);
+      showToast('📋 Relatório do pedido copiado!');
+      setTimeout(() => setSummaryCopied(false), 2500);
+    } catch (err) {
+      console.error(err);
+      showToast('Erro ao copiar relatório.');
+    }
+  };
+
+  const handleSendOrderWhatsApp = () => {
+    if (!summaryOrder) return;
+    const rawPhone = summaryWhatsAppPhone || summaryOrder.customer?.phone || '';
+    const cleanPhone = rawPhone.replace(/\D/g, '');
+    if (!cleanPhone) {
+      showToast('⚠️ Informe um número de WhatsApp válido.');
+      return;
+    }
+    const phoneWithDDI = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
+    const text = generateOrderSummaryText(summaryOrder);
+    const url = `https://wa.me/${phoneWithDDI}?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
+    showToast(`🚀 Relatório enviado no WhatsApp!`);
+  };
 
   const handleOpenClearModal = (order: Order, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -984,6 +1064,15 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                           <td className="py-3 px-4 text-right whitespace-nowrap space-x-1.5" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
+                              onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                              className="p-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-500/30 transition-colors cursor-pointer"
+                              title="Enviar relatório individual do pedido no WhatsApp"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <button
+                              type="button"
                               onClick={(e) => handleOpenClearModal(order, e)}
                               className={`p-1.5 rounded-lg transition-colors cursor-pointer border ${
                                 order.status === 'Pago Parcial' || (order.remainingAmount !== undefined && order.remainingAmount > 0) || order.status === 'Pendente'
@@ -1115,6 +1204,16 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                               <span>Editar / Baixa</span>
                             </button>
 
+                            <button
+                              type="button"
+                              onClick={(e) => handleOpenOrderSummaryModal(order, e)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-600 border border-emerald-500/30 text-emerald-300 hover:text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+                              title="Enviar relatório completo do pedido para o WhatsApp"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                              <span>Relatório WhatsApp</span>
+                            </button>
+
                             {cleanPhone && (
                               <a
                                 href={`https://wa.me/55${cleanPhone}?text=${chargeMsg}`}
@@ -1123,7 +1222,7 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors shadow-xs"
                                 title="Enviar lembrete de cobrança no WhatsApp"
                               >
-                                <Send className="w-3.5 h-3.5 text-emerald-400" />
+                                <Send className="w-3.5 h-3.5 text-amber-400" />
                                 <span>Cobrar WhatsApp</span>
                               </a>
                             )}
@@ -1478,6 +1577,16 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
+                  onClick={() => handleOpenOrderSummaryModal(selectedOrder)}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold transition-all shadow-md shadow-emerald-500/25 flex items-center gap-1.5 cursor-pointer"
+                  title="Enviar relatório formatado do pedido para o WhatsApp"
+                >
+                  <Share2 className="w-4 h-4" />
+                  <span>Enviar Relatório no WhatsApp</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleOpenClearModal(selectedOrder)}
                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-amber-500/30 flex items-center gap-1.5 cursor-pointer"
                   title="Editar valor pago e o que falta pagar"
@@ -1830,6 +1939,123 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Relatório do Pedido Individual via WhatsApp (Caixa Fechado) */}
+      {summaryOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-xl bg-slate-900 border border-slate-700 rounded-2xl sm:rounded-3xl p-5 sm:p-7 text-white shadow-2xl max-h-[92vh] overflow-y-auto">
+            <button
+              onClick={() => setSummaryOrder(null)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-full min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3 mb-4 pr-10">
+              <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl sm:rounded-2xl border border-emerald-500/30 shrink-0">
+                <Share2 className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <div>
+                <span className="text-[10px] sm:text-xs text-emerald-400 font-bold uppercase tracking-wider block">
+                  Caixa Fechado • Relatório Individual
+                </span>
+                <h3 className="text-base sm:text-xl font-extrabold font-tech text-white">
+                  Relatório do Pedido: {summaryOrder.orderNumber}
+                </h3>
+              </div>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              {/* WhatsApp Destination Phone Input */}
+              <div className="p-3.5 bg-slate-950 rounded-xl sm:rounded-2xl border border-slate-800 space-y-2">
+                <label className="block text-slate-200 font-bold text-xs flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-cyan-400" />
+                  <span>Número de WhatsApp para Envio:</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={summaryWhatsAppPhone}
+                    onChange={(e) => setSummaryWhatsAppPhone(e.target.value)}
+                    placeholder="Ex: (11) 99999-9999 ou 5511999999999"
+                    className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 text-xs focus:outline-none focus:border-cyan-500 font-mono"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Você pode digitar ou alterar o número acima para quem deseja enviar o relatório do pedido.
+                </p>
+              </div>
+
+              {/* Message Preview */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-300 font-bold text-xs flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Prévia do Resumo Formatado:</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleCopyOrderSummary}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-300 font-bold text-[11px] flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    {summaryCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar Texto</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-mono text-[11px] leading-relaxed max-h-60 overflow-y-auto whitespace-pre-wrap select-all selection:bg-cyan-500 selection:text-slate-950">
+                  {generateOrderSummaryText(summaryOrder)}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setSummaryOrder(null)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer text-xs font-bold min-h-[42px]"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyOrderSummary}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white transition-colors cursor-pointer text-xs font-bold flex items-center justify-center gap-1.5 min-h-[42px]"
+                >
+                  {summaryCopied ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-400" />
+                      <span className="text-emerald-400 font-extrabold">Copiado com Sucesso!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Resumo</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSendOrderWhatsApp}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/25 transition-all cursor-pointer flex items-center justify-center gap-2 min-h-[42px]"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Enviar no WhatsApp</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
