@@ -171,6 +171,77 @@ export const Footer: React.FC = () => {
 
         </div>
 
+        {/* SEO Topical Authority & Indexable Search Keywords */}
+        <div className="py-6 border-b border-slate-850/60 space-y-3 text-[11px] text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+            <span className="text-slate-300 font-bold uppercase tracking-wider text-[10px]">
+              Principais Moléculas & Buscas no Brasil:
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                { label: 'Retatrutida 10mg / 15mg', term: 'Retatrutida' },
+                { label: 'Cagrilintida & CagriSema', term: 'Cagrilintida' },
+                { label: 'Tirzepatida Padrão Ouro', term: 'Tirzepatida' },
+                { label: 'Semaglutida Importada', term: 'Semaglutida' },
+                { label: 'BPC-157 Regenerativo', term: 'BPC-157' },
+                { label: 'TB-500 Timosina Beta-4', term: 'TB-500' },
+                { label: 'GHK-Cu Peptídeo de Cobre', term: 'GHK-Cu' },
+                { label: 'MOTS-c Longevidade', term: 'MOTS-c' },
+                { label: 'Epithalon Telômeros', term: 'Epithalon' },
+                { label: '5-Amino-1MQ', term: '5-Amino' },
+                { label: 'AOD-9604 Lipolítico', term: 'AOD' },
+                { label: 'CJC-1295 + Ipamorelina', term: 'CJC' },
+              ].map((item, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => {
+                    setCurrentView('store');
+                    const query = item.term;
+                    const el = document.getElementById('catalogo');
+                    if (el) el.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-2.5 py-1 rounded-md bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-cyan-400 border border-slate-800/80 transition-colors cursor-pointer text-[10px]"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[10px] text-slate-500">
+            <span className="font-semibold text-slate-400">Ferramentas & Protocolos:</span>
+            <button
+              onClick={() => {
+                setCurrentView('dosage-calculator');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-cyan-400 underline underline-offset-2 transition-colors cursor-pointer"
+            >
+              Calculadora de UI em Seringa de Insulina (50 UI e 100 UI)
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => {
+                setCurrentView('guide');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-cyan-400 underline underline-offset-2 transition-colors cursor-pointer"
+            >
+              Guia Completo de Reconstituição com Água Bacteriostática
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => {
+                setCurrentView('benefits');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className="hover:text-cyan-400 underline underline-offset-2 transition-colors cursor-pointer"
+            >
+              Laudos de Pureza HPLC Superior a 99%
+            </button>
+          </div>
+        </div>
+
         {/* Bottom Legal & Copyright Notice */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px] border-t border-slate-800/40 mt-2">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">

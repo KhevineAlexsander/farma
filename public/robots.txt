@@ -1,0 +1,19 @@
+# robots.txt for Peptide Imports Farma
+# https://peptideimportsfarma.com.br
+
+User-agent: *
+Allow: /
+Allow: /?view=store
+Allow: /?view=guide
+Allow: /?view=dosage-calculator
+Allow: /?view=benefits
+Allow: /?view=diet-control
+Allow: /?view=product-request
+
+# Admin & Private routes
+Disallow: /admin
+Disallow: /?view=admin
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://peptideimportsfarma.com.br/sitemap.xml

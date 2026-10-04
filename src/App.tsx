@@ -24,6 +24,7 @@ import { AdminLoadingScreen } from './components/AdminLoadingScreen';
 import { BenefitsPage } from './components/client/BenefitsPage';
 import { DosageCalculatorPage } from './components/client/DosageCalculatorPage';
 import { DietControlPage } from './components/client/DietControlPage';
+import { SEOHead } from './components/SEOHead';
 
 const MainLayout: React.FC = () => {
   const { currentView, currentUser, isAdminLoading } = useApp();
@@ -37,6 +38,7 @@ const MainLayout: React.FC = () => {
   if (currentView === 'product-request') {
     return (
       <div className="min-h-screen bg-[#070A10]">
+        <SEOHead />
         <ProductRequestPage />
       </div>
     );
@@ -47,6 +49,7 @@ const MainLayout: React.FC = () => {
     if (currentUser?.role !== 'ADMIN') {
       return (
         <div className="min-h-screen flex flex-col bg-[#0B0F17]">
+          <SEOHead />
           <Navbar />
           <main className="flex-1">
             <HeroSection />
@@ -73,6 +76,9 @@ const MainLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#0B0F17]">
+      {/* Dynamic SEO Meta & Title Manager */}
+      <SEOHead />
+
       {/* Top Navbar */}
       <Navbar />
 
