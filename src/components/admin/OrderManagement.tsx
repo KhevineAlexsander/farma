@@ -913,7 +913,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     dueDateVal?: string,
     pixKeyVal?: string
   ): string => {
-    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
     const customerName = order.customer?.name || 'Prezado(a) Cliente';
     const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
     const paidStr = (order.paidAmount || 0).toFixed(2).replace('.', ',');
@@ -1251,7 +1251,7 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
     const rawPhone = order.customer?.phone || '';
     const cleanPhone = rawPhone.replace(/\D/g, '');
     const phoneWithDDI = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const text = encodeURIComponent(`Olá ${order.customer?.name || 'Cliente'}, referente ao seu pedido ${order.orderNumber} na ${storeSettings.storeName || 'Peptide Imports Farma'}:`);
+    const text = encodeURIComponent(`Olá ${order.customer?.name || 'Cliente'}, referente ao seu pedido ${order.orderNumber} na ${storeSettings.storeName || 'Glow Slim Peptide Imports'}:`);
     return `https://wa.me/${phoneWithDDI}?text=${text}`;
   };
 
@@ -1434,7 +1434,7 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
   };
 
   const generateOrderSummaryText = (order: Order): string => {
-    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
     const customerName = order.customer?.name || 'Cliente';
     const totalItems = (order.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
     const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
@@ -1532,7 +1532,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
   const handleExportOrdersExcel = () => {
     try {
       const title = statusFilter === 'Todos' ? 'todos_pedidos' : statusFilter.toLowerCase().replace(/\s+/g, '_');
-      const filename = exportOrdersListToExcel(filteredOrders, title, storeSettings?.storeName || 'Peptide Imports Farma');
+      const filename = exportOrdersListToExcel(filteredOrders, title, storeSettings?.storeName || 'Glow Slim Peptide Imports');
       showToast(`📊 Planilha Excel com ${filteredOrders.length} pedidos baixada: ${filename}`);
     } catch (err: any) {
       console.error(err);
@@ -1543,7 +1543,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
   const handleExportOrdersTxt = () => {
     try {
       const title = statusFilter === 'Todos' ? 'todos_pedidos' : statusFilter.toLowerCase().replace(/\s+/g, '_');
-      const filename = exportOrdersListToTxt(filteredOrders, title, storeSettings?.storeName || 'Peptide Imports Farma');
+      const filename = exportOrdersListToTxt(filteredOrders, title, storeSettings?.storeName || 'Glow Slim Peptide Imports');
       showToast(`📄 Arquivo TXT com ${filteredOrders.length} pedidos baixado: ${filename}`);
     } catch (err: any) {
       console.error(err);
@@ -2652,7 +2652,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       </td>
 
                       {/* Sticky Actions Column */}
-                      <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors" onClick={(e) => e.stopPropagation()}>
+                      <td className="py-3 px-3 sm:px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#22163a] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] transition-colors" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end">
                           <button
                             type="button"
@@ -3690,7 +3690,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                               }`}
                             >
                               <div className="flex items-center gap-2 min-w-0">
-                                <PeptideVial color={p.vialColor || '#06b6d4'} size="sm" />
+                                <PeptideVial color={p.vialColor || '#b0476f'} size="sm" />
                                 <div className="min-w-0">
                                   <span className="font-bold text-white block truncate">
                                     {p.name} {p.dosage ? `(${p.dosage})` : ''}
@@ -3735,7 +3735,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       {/* Linha de Identificação do Produto */}
                       <div className="flex items-center justify-between gap-2 border-b border-slate-800/80 pb-2 flex-wrap">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <PeptideVial color={currentSelectedProduct.vialColor || '#06b6d4'} size="sm" />
+                          <PeptideVial color={currentSelectedProduct.vialColor || '#b0476f'} size="sm" />
                           <div className="min-w-0">
                             <span className="text-xs font-bold text-white block truncate">
                               {currentSelectedProduct.name} {currentSelectedProduct.dosage ? `(${currentSelectedProduct.dosage})` : ''}
@@ -3883,7 +3883,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                             className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 bg-slate-900 rounded-xl border border-slate-800"
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <PeptideVial color={item.product.vialColor || '#06b6d4'} size="sm" />
+                              <PeptideVial color={item.product.vialColor || '#b0476f'} size="sm" />
                               <div className="min-w-0">
                                 <h5 className="font-bold text-white truncate text-xs">{item.product.name}</h5>
                                 <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
@@ -4417,7 +4417,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                           >
                             <div className="flex items-center gap-2.5 min-w-0">
                               <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center shrink-0">
-                                <PeptideVial capColor={p.capColor || '#06b6d4'} labelColor={p.labelColor || '#0891b2'} />
+                                <PeptideVial capColor={p.capColor || '#b0476f'} labelColor={p.labelColor || '#a04165'} />
                               </div>
                               <div className="min-w-0">
                                 <p className="font-bold text-white text-xs truncate">
@@ -4528,7 +4528,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="w-8 h-8 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0">
-                            <PeptideVial capColor={item.product.capColor || '#06b6d4'} labelColor={item.product.labelColor || '#0891b2'} />
+                            <PeptideVial capColor={item.product.capColor || '#b0476f'} labelColor={item.product.labelColor || '#a04165'} />
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-white text-xs truncate">

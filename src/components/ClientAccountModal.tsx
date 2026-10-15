@@ -120,7 +120,7 @@ export const ClientAccountModal: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 text-slate-900">
+    <div className="min-h-screen bg-[#faf9fb] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 text-slate-900">
       <div className="max-w-5xl mx-auto">
         
         {/* Back Link */}
@@ -155,7 +155,7 @@ export const ClientAccountModal: React.FC = () => {
             {currentUser?.role === 'ADMIN' && (
               <button
                 onClick={() => setCurrentView('admin')}
-                className="px-3.5 py-2 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-cyan-400 font-bold text-xs flex items-center gap-1.5 shadow-sm border border-slate-700 transition-colors cursor-pointer"
+                className="px-3.5 py-2 rounded-xl bg-[#3f2971] hover:bg-slate-800 text-cyan-400 font-bold text-xs flex items-center gap-1.5 shadow-sm border border-slate-700 transition-colors cursor-pointer"
                 title="Acessar Painel ERP"
               >
                 <ShieldCheck className="w-4 h-4 text-cyan-400" />
@@ -519,7 +519,7 @@ export const ClientAccountModal: React.FC = () => {
                 </p>
                 <button
                   onClick={() => setCurrentView('store')}
-                  className="mt-2 px-5 py-2.5 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
+                  className="mt-2 px-5 py-2.5 rounded-xl bg-[#3f2971] hover:bg-slate-800 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
                 >
                   Ver Produtos na Loja
                 </button>
@@ -763,7 +763,7 @@ export const ClientAccountModal: React.FC = () => {
               </div>
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-[#0F172A] text-white font-bold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-6 py-2.5 bg-[#3f2971] text-white font-bold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Salvar Alterações
               </button>
@@ -839,7 +839,7 @@ export const ClientAccountModal: React.FC = () => {
               </div>
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-[#0F172A] text-white font-bold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-6 py-2.5 bg-[#3f2971] text-white font-bold rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Atualizar Endereço
               </button>

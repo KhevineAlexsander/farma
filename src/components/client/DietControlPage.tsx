@@ -444,7 +444,7 @@ export const DietControlPage: React.FC = () => {
   // If user is not logged in, enforce authentication requirement gate
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-[#070A10] py-16 px-4 sm:px-6 lg:px-8 text-white flex items-center justify-center pb-24">
+      <div className="min-h-screen bg-[#0b0712] py-16 px-4 sm:px-6 lg:px-8 text-white flex items-center justify-center pb-24">
         <div className="max-w-md w-full bg-slate-900/95 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative backdrop-blur-md">
           <button
             onClick={() => setCurrentView('store')}
@@ -621,9 +621,9 @@ export const DietControlPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#070A10] text-slate-100 pb-28">
+    <div className="min-h-screen bg-[#0b0712] text-slate-100 pb-28">
       {/* Top Banner */}
-      <section className="relative overflow-hidden pt-12 pb-12 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#0B0F17] to-[#070A10]">
+      <section className="relative overflow-hidden pt-12 pb-12 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#120b1c] to-[#0b0712]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="max-w-3xl space-y-3">
@@ -1073,7 +1073,7 @@ export const DietControlPage: React.FC = () => {
           <div className="lg:col-span-4 space-y-6">
             
             {/* Water Tracker */}
-            <div className="bg-gradient-to-b from-slate-900 to-[#0B0F17] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="bg-gradient-to-b from-slate-900 to-[#120b1c] border border-cyan-500/30 rounded-3xl p-6 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Droplets className="w-5 h-5 text-cyan-400" />

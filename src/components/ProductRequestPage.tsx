@@ -49,7 +49,7 @@ const POPULAR_DOSAGES = [
 ];
 
 const CAP_COLORS = [
-  { name: 'Azul Cyan', hex: '#0088FF' },
+  { name: 'Azul Cyan', hex: '#ad5cb2' },
   { name: 'Verde Esmeralda', hex: '#22C55E' },
   { name: 'Rosa Magenta', hex: '#EC4899' },
   { name: 'Roxo Índigo', hex: '#8B5CF6' },
@@ -79,7 +79,7 @@ export const ProductRequestPage: React.FC = () => {
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
   const [stock, setStock] = useState('30');
-  const [capColor, setCapColor] = useState('#0088FF');
+  const [capColor, setCapColor] = useState('#ad5cb2');
   const [imageUrl, setImageUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [autoApprove, setAutoApprove] = useState(false);
@@ -185,9 +185,9 @@ export const ProductRequestPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#070A10] text-slate-100 flex flex-col selection:bg-cyan-500/30">
+    <div className="min-h-screen bg-[#0b0712] text-slate-100 flex flex-col selection:bg-cyan-500/30">
       {/* Top Header */}
-      <header className="bg-[#0B0F17]/90 border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur-md">
+      <header className="bg-[#120b1c]/90 border-b border-slate-800/80 sticky top-0 z-30 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 sm:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <DnaLogo size="sm" />
@@ -358,7 +358,7 @@ export const ProductRequestPage: React.FC = () => {
                   return (
                     <div
                       key={req.id}
-                      className="bg-[#070A10] border border-slate-800 hover:border-slate-700 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
+                      className="bg-[#0b0712] border border-slate-800 hover:border-slate-700 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
                     >
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
@@ -482,7 +482,7 @@ export const ProductRequestPage: React.FC = () => {
                       value={customCategory}
                       onChange={(e) => setCustomCategory(e.target.value)}
                       placeholder="Ex: Terapia de Reposição, Fitoterápicos, etc."
-                      className="w-full bg-[#070A10] border border-cyan-500/40 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400"
+                      className="w-full bg-[#0b0712] border border-cyan-500/40 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-400"
                     />
                   </div>
                 )}
@@ -506,7 +506,7 @@ export const ProductRequestPage: React.FC = () => {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Ex: Tirzepatida, BPC-157, NAD+"
-                      className="w-full bg-[#070A10] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase placeholder:normal-case focus:outline-none focus:border-cyan-500 transition-colors"
+                      className="w-full bg-[#0b0712] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase placeholder:normal-case focus:outline-none focus:border-cyan-500 transition-colors"
                     />
                     <p className="text-[11px] text-slate-500 mt-1">Nome comercial ou princípio ativo do composto.</p>
                   </div>
@@ -521,7 +521,7 @@ export const ProductRequestPage: React.FC = () => {
                       value={dosage}
                       onChange={(e) => setDosage(e.target.value)}
                       placeholder="Ex: 10 MG, 60 MG, 5000 UI"
-                      className="w-full bg-[#070A10] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase placeholder:normal-case focus:outline-none focus:border-cyan-500 transition-colors"
+                      className="w-full bg-[#0b0712] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white uppercase placeholder:normal-case focus:outline-none focus:border-cyan-500 transition-colors"
                     />
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       {POPULAR_DOSAGES.map((d) => (
@@ -566,7 +566,7 @@ export const ProductRequestPage: React.FC = () => {
                         value={costPrice}
                         onChange={(e) => setCostPrice(e.target.value)}
                         placeholder="Ex: 80,00"
-                        className="w-full bg-[#070A10] border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors"
+                        className="w-full bg-[#0b0712] border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500 transition-colors"
                       />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">Custo de aquisição do frasco ou importação.</p>
@@ -587,7 +587,7 @@ export const ProductRequestPage: React.FC = () => {
                         value={price}
                         onChange={(e) => setPrice(e.target.value)}
                         placeholder="Ex: 180,00"
-                        className="w-full bg-[#070A10] border border-cyan-500/40 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-cyan-400 transition-colors"
+                        className="w-full bg-[#0b0712] border border-cyan-500/40 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white font-bold focus:outline-none focus:border-cyan-400 transition-colors"
                       />
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">Preço final ao cliente na loja virtual.</p>
@@ -644,7 +644,7 @@ export const ProductRequestPage: React.FC = () => {
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="Descreva a finalidade do composto, especificações farmacêuticas, recomendações de armazenamento e modo de conservação..."
-                    className="w-full bg-[#070A10] border border-slate-700 rounded-xl p-3.5 text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-cyan-500 leading-relaxed resize-y"
+                    className="w-full bg-[#0b0712] border border-slate-700 rounded-xl p-3.5 text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-cyan-500 leading-relaxed resize-y"
                   />
                   <p className="text-[11px] text-slate-500 mt-1">
                     Esta descrição será exibida no modal de detalhes do produto para os compradores da loja.
@@ -670,7 +670,7 @@ export const ProductRequestPage: React.FC = () => {
                       min="0"
                       value={stock}
                       onChange={(e) => setStock(e.target.value)}
-                      className="w-full bg-[#070A10] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500"
+                      className="w-full bg-[#0b0712] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-cyan-500"
                     />
                   </div>
 
@@ -707,7 +707,7 @@ export const ProductRequestPage: React.FC = () => {
                       value={imageUrl}
                       onChange={(e) => setImageUrl(e.target.value)}
                       placeholder="Cole o link da imagem (URL) ou use o upload ao lado"
-                      className="flex-1 bg-[#070A10] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
+                      className="flex-1 bg-[#0b0712] border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
                     />
                     <label className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors">
                       <Upload className="w-3.5 h-3.5 text-cyan-400" />
@@ -727,7 +727,7 @@ export const ProductRequestPage: React.FC = () => {
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder="Ex: Fornecedor Xangai Lab, prazo de entrega 7 dias, lote 2026-A"
-                    className="w-full bg-[#070A10] border border-slate-700 rounded-xl px-4 py-2 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
+                    className="w-full bg-[#0b0712] border border-slate-700 rounded-xl px-4 py-2 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
                   />
                 </div>
               </div>
@@ -791,7 +791,7 @@ export const ProductRequestPage: React.FC = () => {
                 {/* Preview Card styled identically to the store */}
                 <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-xl">
                   {/* Visual: Peptide Vial or Uploaded Photo */}
-                  <div className="bg-gradient-to-b from-[#070A10] to-slate-950 rounded-xl p-4 flex items-center justify-center min-h-[160px] border border-slate-800/80">
+                  <div className="bg-gradient-to-b from-[#0b0712] to-slate-950 rounded-xl p-4 flex items-center justify-center min-h-[160px] border border-slate-800/80">
                     {imageUrl ? (
                       <img
                         src={imageUrl}
@@ -843,7 +843,7 @@ export const ProductRequestPage: React.FC = () => {
                 </div>
 
                 {/* Direct Share Link Box */}
-                <div className="bg-[#0B0F17] border border-slate-800 rounded-xl p-4 space-y-2">
+                <div className="bg-[#120b1c] border border-slate-800 rounded-xl p-4 space-y-2">
                   <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                     <ExternalLink className="w-3.5 h-3.5 text-cyan-400" />
                     Link do Dono do Site

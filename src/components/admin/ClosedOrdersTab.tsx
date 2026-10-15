@@ -100,7 +100,7 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
   };
 
   const generateOrderSummaryText = (order: Order): string => {
-    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
     const customerName = order.customer?.name || 'Cliente';
     const totalItems = (order.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
     const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
@@ -558,7 +558,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
     const filename = exportOrdersListToExcel(
       filteredClosedOrders,
       `Relatório de Pedidos Fechados - ${sessionLabel}`,
-      storeSettings?.storeName || 'Peptide Imports Farma'
+      storeSettings?.storeName || 'Glow Slim Peptide Imports'
     );
     showToast(`📊 Planilha Excel baixada com sucesso: ${filename}`);
   };
@@ -573,7 +573,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
     const filename = exportOrdersListToTxt(
       filteredClosedOrders,
       `Relatório de Pedidos Fechados - ${sessionLabel}`,
-      storeSettings?.storeName || 'Peptide Imports Farma'
+      storeSettings?.storeName || 'Glow Slim Peptide Imports'
     );
     showToast(`📄 Relatório TXT baixado com sucesso: ${filename}`);
   };
@@ -1167,7 +1167,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       const cleanPhone = (order.customer?.phone || '').replace(/\D/g, '');
 
                       const chargeMsg = encodeURIComponent(
-                        `Olá, ${order.customer?.name || 'Cliente'}! Tudo bem? Passando para lembrar sobre o saldo pendente de R$ ${remaining.toFixed(2).replace('.', ',')} referente ao seu pedido ${order.orderNumber} na ${storeSettings?.storeName || 'Peptide Imports Farma'}. Qualquer dúvida estamos à disposição!`
+                        `Olá, ${order.customer?.name || 'Cliente'}! Tudo bem? Passando para lembrar sobre o saldo pendente de R$ ${remaining.toFixed(2).replace('.', ',')} referente ao seu pedido ${order.orderNumber} na ${storeSettings?.storeName || 'Glow Slim Peptide Imports'}. Qualquer dúvida estamos à disposição!`
                       );
 
                       return (
@@ -1528,7 +1528,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                         {it.product?.imageUrl ? (
                           <img src={it.product.imageUrl} alt={it.product.name} className="w-full h-full object-cover rounded-lg" />
                         ) : (
-                          <PeptideVial capColor={it.product?.capColor || '#0088FF'} size="sm" />
+                          <PeptideVial capColor={it.product?.capColor || '#ad5cb2'} size="sm" />
                         )}
                       </div>
                       <div>

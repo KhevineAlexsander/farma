@@ -26,19 +26,19 @@ export const InfoModals: React.FC = () => {
         {infoModal === 'about' && (
           <div className="space-y-5">
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-[#0B0F17] rounded-xl">
+              <div className="p-2.5 bg-[#120b1c] rounded-xl">
                 <DnaLogo size="sm" withText={false} />
               </div>
               <div>
                 <h3 className="text-xl font-extrabold text-slate-900 font-tech">
-                  SOBRE A PEPTIDE IMPORTS FARMA
+                  SOBRE A GLOW SLIM PEPTIDE IMPORTS
                 </h3>
                 <p className="text-xs text-slate-500">Excelência e Rigor Científico em Biotecnologia</p>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              A <strong>PEPTIDE IMPORTS FARMA</strong> nasceu com a missão de disponibilizar os mais puros e avançados peptídeos e bioreguladores sintéticos do mundo diretamente para o mercado nacional.
+              A <strong>GLOW SLIM PEPTIDE IMPORTS</strong> nasceu com a missão de disponibilizar os mais puros e avançados peptídeos e bioreguladores sintéticos do mundo diretamente para o mercado nacional.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">

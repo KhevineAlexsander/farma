@@ -10,7 +10,7 @@ export const AdminLoadingScreen: React.FC<AdminLoadingScreenProps> = ({
   message = 'Sincronizando dados em tempo real e validando acessos...',
 }) => {
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#0B0F17] text-white p-4 select-none animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-[#120b1c] text-white p-4 select-none animate-in fade-in duration-200">
       <div className="flex flex-col items-center text-center max-w-sm w-full space-y-6">
         
         {/* Futuristic DNA Brand Icon with Subtle Pulse */}

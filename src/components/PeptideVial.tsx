@@ -10,7 +10,7 @@ interface PeptideVialProps {
 }
 
 export const PeptideVial: React.FC<PeptideVialProps> = ({
-  capColor = '#0088FF',
+  capColor = '#ad5cb2',
   name = 'PEPTIDE',
   dosage = '',
   size = 'md',
@@ -61,20 +61,20 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
 
           {/* Aluminum Crimp Gradient */}
           <linearGradient id={`metalCrimp-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#94A3B8" />
-            <stop offset="25%" stopColor="#F8FAFC" />
-            <stop offset="50%" stopColor="#CBD5E1" />
-            <stop offset="85%" stopColor="#64748B" />
-            <stop offset="100%" stopColor="#334155" />
+            <stop offset="0%" stopColor="#a89cb0" />
+            <stop offset="25%" stopColor="#faf9fb" />
+            <stop offset="50%" stopColor="#d7d0dc" />
+            <stop offset="85%" stopColor="#796d82" />
+            <stop offset="100%" stopColor="#463b4d" />
           </linearGradient>
 
           {/* Glass Specular Reflection */}
           <linearGradient id={`glassGrad-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.3" />
-            <stop offset="15%" stopColor="#E2E8F0" stopOpacity="0.1" />
+            <stop offset="15%" stopColor="#eae5ed" stopOpacity="0.1" />
             <stop offset="70%" stopColor="#FFFFFF" stopOpacity="0.05" />
-            <stop offset="90%" stopColor="#94A3B8" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#334155" stopOpacity="0.4" />
+            <stop offset="90%" stopColor="#a89cb0" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#463b4d" stopOpacity="0.4" />
           </linearGradient>
 
           {/* Glass Highlight Line */}
@@ -85,17 +85,17 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
 
           {/* Dark Metallic Label Gradient */}
           <linearGradient id={`labelGrad-${uniqueId}`} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#0A0E17" />
-            <stop offset="20%" stopColor="#1E293B" />
-            <stop offset="50%" stopColor="#0F172A" />
-            <stop offset="80%" stopColor="#1E293B" />
-            <stop offset="100%" stopColor="#0A0E17" />
+            <stop offset="0%" stopColor="#110a1a" />
+            <stop offset="20%" stopColor="#2e2534" />
+            <stop offset="50%" stopColor="#3f2971" />
+            <stop offset="80%" stopColor="#2e2534" />
+            <stop offset="100%" stopColor="#110a1a" />
           </linearGradient>
 
           {/* Lyophilized Cake / Powder Gradient */}
           <linearGradient id={`powderGrad-${uniqueId}`} x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#F1F5F9" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="#E2E8F0" stopOpacity="0.5" />
+            <stop offset="0%" stopColor="#f5f3f7" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="#eae5ed" stopOpacity="0.5" />
           </linearGradient>
         </defs>
 
@@ -121,22 +121,22 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
           fill={`url(#metalCrimp-${uniqueId})`}
         />
         {/* Crimp Horizontal Indents / Grooves */}
-        <line x1="42" y1="20" x2="78" y2="20" stroke="#475569" strokeWidth="0.8" opacity="0.6" />
-        <line x1="42" y1="24" x2="78" y2="24" stroke="#334155" strokeWidth="0.8" opacity="0.7" />
+        <line x1="42" y1="20" x2="78" y2="20" stroke="#5a4f61" strokeWidth="0.8" opacity="0.6" />
+        <line x1="42" y1="24" x2="78" y2="24" stroke="#463b4d" strokeWidth="0.8" opacity="0.7" />
 
         {/* --- 3. GLASS VIAL BODY --- */}
         {/* Glass Neck */}
         <path
           d="M 44 28 L 44 36 C 44 42, 28 46, 28 56 L 28 152 C 28 160, 34 166, 44 166 L 76 166 C 86 166, 92 160, 92 152 L 92 56 C 92 46, 76 42, 76 36 L 76 28 Z"
           fill={`url(#glassGrad-${uniqueId})`}
-          stroke="#94A3B8"
+          stroke="#a89cb0"
           strokeWidth="1.2"
         />
 
         {/* Bottom Glass Thickness (Base) */}
         <path
           d="M 30 148 C 30 162, 90 162, 90 148 L 90 152 C 90 164, 30 164, 30 152 Z"
-          fill="#64748B"
+          fill="#796d82"
           fillOpacity="0.4"
         />
 
@@ -155,33 +155,33 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
           height="66"
           rx="2"
           fill={`url(#labelGrad-${uniqueId})`}
-          stroke="#334155"
+          stroke="#463b4d"
           strokeWidth="0.6"
         />
 
         {/* Label Content: Glow DNA Helix Logo & Brand */}
         <g transform="translate(60, 84)">
           {/* Mini DNA Helix */}
-          <circle cx="-5" cy="-10" r="1.5" fill="#00E5FF" />
-          <circle cx="5" cy="-10" r="1.5" fill="#38BDF8" />
-          <line x1="-5" y1="-10" x2="5" y2="-10" stroke="#00E5FF" strokeWidth="1" strokeOpacity="0.7" />
+          <circle cx="-5" cy="-10" r="1.5" fill="#cc809d" />
+          <circle cx="5" cy="-10" r="1.5" fill="#cc809d" />
+          <line x1="-5" y1="-10" x2="5" y2="-10" stroke="#cc809d" strokeWidth="1" strokeOpacity="0.7" />
 
           <circle cx="0" cy="-6" r="1.2" fill="#FFFFFF" />
 
-          <circle cx="5" cy="-2" r="1.5" fill="#00E5FF" />
-          <circle cx="-5" cy="-2" r="1.5" fill="#38BDF8" />
-          <line x1="-5" y1="-2" x2="5" y2="-2" stroke="#00E5FF" strokeWidth="1" strokeOpacity="0.7" />
+          <circle cx="5" cy="-2" r="1.5" fill="#cc809d" />
+          <circle cx="-5" cy="-2" r="1.5" fill="#cc809d" />
+          <line x1="-5" y1="-2" x2="5" y2="-2" stroke="#cc809d" strokeWidth="1" strokeOpacity="0.7" />
 
           {/* DNA Waves */}
           <path
             d="M -5 -10 Q 0 -6 5 -2"
-            stroke="#00E5FF"
+            stroke="#cc809d"
             strokeWidth="1.2"
             fill="none"
           />
           <path
             d="M 5 -10 Q 0 -6 -5 -2"
-            stroke="#38BDF8"
+            stroke="#cc809d"
             strokeWidth="1.2"
             fill="none"
           />
@@ -197,19 +197,19 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
             fontFamily="Space Grotesk, sans-serif"
             letterSpacing="0.8"
           >
-            PEPTIDE
+            GLOW SLIM
           </text>
           <text
             x="0"
             y="18"
             textAnchor="middle"
-            fill="#00E5FF"
+            fill="#cc809d"
             fontSize="3.8"
             fontWeight="600"
             fontFamily="Space Grotesk, sans-serif"
             letterSpacing="1.2"
           >
-            IMPORTS
+            PEPTIDE
           </text>
 
           {/* Subtle Dosage Indicator on Label */}
@@ -218,7 +218,7 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
               x="0"
               y="32"
               textAnchor="middle"
-              fill="#94A3B8"
+              fill="#a89cb0"
               fontSize="3.2"
               fontWeight="bold"
               fontFamily="sans-serif"

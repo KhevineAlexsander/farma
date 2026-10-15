@@ -197,7 +197,7 @@ export const AdminDashboard: React.FC = () => {
   // If accessed by non-admin, strictly deny access
   if (currentUser?.role !== 'ADMIN') {
     return (
-      <div className="min-h-screen bg-[#0B0F17] flex items-center justify-center p-4 text-white">
+      <div className="min-h-screen bg-[#120b1c] flex items-center justify-center p-4 text-white">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center space-y-4 shadow-2xl">
           <div className="w-14 h-14 rounded-2xl bg-red-500/10 text-red-400 flex items-center justify-center mx-auto border border-red-500/20">
             <ShieldAlert className="w-8 h-8" />
@@ -222,7 +222,7 @@ export const AdminDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col">
+    <div className="min-h-screen bg-[#120b1c] text-slate-100 flex flex-col">
       {/* Top Admin App Header */}
       <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -586,7 +586,7 @@ export const AdminDashboard: React.FC = () => {
       {/* Admin Panel Footer */}
       <footer className="border-t border-slate-800/60 bg-slate-950/80 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>PEPTIDE IMPORTS ERP • Painel de Gestão Farmacêutica</span>
+          <span>GLOW SLIM ERP • Painel de Gestão Farmacêutica</span>
           <span>
             Sistema criado por{' '}
             <a

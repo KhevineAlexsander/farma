@@ -2286,7 +2286,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       price: target.price,
       costPrice: target.costPrice,
       stock: target.stock || 25,
-      capColor: target.capColor || ((target.category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : '#0088FF'),
+      capColor: target.capColor || ((target.category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : '#ad5cb2'),
       description: target.description,
       benefits: ['Laudo laboratorial HPLC certificado', 'Alta pureza e biodisponibilidade', 'Rastreabilidade garantida'],
       purity: '99.5% HPLC',

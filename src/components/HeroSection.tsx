@@ -61,21 +61,21 @@ export const HeroSection: React.FC = () => {
 
   const heroShowcases = [
     {
-      center: { name: 'GHK-CU', dosage: '100 MG', capColor: '#0088FF' },
+      center: { name: 'GHK-CU', dosage: '100 MG', capColor: '#ad5cb2' },
       left: { name: 'KLOW', dosage: '80 MG', capColor: '#16A34A' },
-      right: { name: 'MOTS-C', dosage: '40 MG', capColor: '#06B6D4' },
+      right: { name: 'MOTS-C', dosage: '40 MG', capColor: '#b0476f' },
       tagline: 'Fórmula Padrão Ouro em Regeneração e Firmeza',
     },
     {
       center: { name: 'GLOW', dosage: '70 MG', capColor: '#EC4899' },
       left: { name: 'CAGRILINTIDE', dosage: '10 MG', capColor: '#10B981' },
-      right: { name: 'TESAMORELIN', dosage: '10 MG', capColor: '#2563EB' },
+      right: { name: 'TESAMORELIN', dosage: '10 MG', capColor: '#753979' },
       tagline: 'Definição Metabólica e Queima de Gordura Visceral',
     },
     {
       center: { name: 'SEMAX', dosage: '10 MG', capColor: '#EAB308' },
       left: { name: 'SELANK', dosage: '10 MG', capColor: '#9333EA' },
-      right: { name: 'BPC-157', dosage: '10 MG', capColor: '#0284C7' },
+      right: { name: 'BPC-157', dosage: '10 MG', capColor: '#a04165' },
       tagline: 'Otimização Cognitiva e Recuperação Muscular Extrema',
     },
   ];
@@ -91,7 +91,7 @@ export const HeroSection: React.FC = () => {
   };
 
   return (
-    <section className="relative overflow-hidden bg-[#0B0F17] py-12 md:py-20 border-b border-slate-800/80">
+    <section className="relative overflow-hidden bg-[#120b1c] py-12 md:py-20 border-b border-slate-800/80">
       {/* High-Tech Background Glow & Mesh Orbs */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] bg-gradient-to-tr from-cyan-600/15 via-blue-600/15 to-transparent rounded-full blur-3xl pointer-events-none" />
       <div className="absolute top-10 right-10 w-72 h-72 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
@@ -139,7 +139,7 @@ export const HeroSection: React.FC = () => {
             <div className="pt-2 flex flex-wrap items-center justify-center lg:justify-start gap-3">
               <button
                 onClick={scrollToCatalog}
-                className="inline-flex items-center justify-center gap-3 px-7 py-3.5 rounded-full bg-white text-slate-950 font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(255,255,255,0.35)] hover:shadow-[0_0_28px_rgba(0,229,255,0.6)] hover:bg-cyan-50 hover:text-cyan-950 transition-all active:scale-95 group cursor-pointer"
+                className="inline-flex items-center justify-center gap-3 px-7 py-3.5 rounded-full bg-white text-slate-950 font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(255,255,255,0.35)] hover:shadow-[0_0_28px_rgba(204,128,157,0.6)] hover:bg-cyan-50 hover:text-cyan-950 transition-all active:scale-95 group cursor-pointer"
               >
                 <span>Ver todos os produtos</span>
                 <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
@@ -205,7 +205,7 @@ export const HeroSection: React.FC = () => {
                 <PeptideVial
                   name={currentShowcase?.right?.name || 'Peptídeo'}
                   dosage={currentShowcase?.right?.dosage || ''}
-                  capColor={currentShowcase?.right?.capColor || '#06B6D4'}
+                  capColor={currentShowcase?.right?.capColor || '#b0476f'}
                   size="md"
                 />
               </div>
@@ -215,7 +215,7 @@ export const HeroSection: React.FC = () => {
                 <PeptideVial
                   name={currentShowcase?.center?.name || 'GHK-CU'}
                   dosage={currentShowcase?.center?.dosage || ''}
-                  capColor={currentShowcase?.center?.capColor || '#0088FF'}
+                  capColor={currentShowcase?.center?.capColor || '#ad5cb2'}
                   size="lg"
                   glow={true}
                 />
@@ -235,7 +235,7 @@ export const HeroSection: React.FC = () => {
                   onClick={() => setActiveSlide(idx)}
                   className={`transition-all rounded-full ${
                     activeSlide === idx
-                      ? 'w-6 h-2 bg-cyan-400 shadow-[0_0_8px_rgba(0,229,255,0.8)]'
+                      ? 'w-6 h-2 bg-cyan-400 shadow-[0_0_8px_rgba(204,128,157,0.8)]'
                       : 'w-2 h-2 bg-slate-700 hover:bg-slate-500'
                   }`}
                   aria-label={`Slide ${idx + 1}`}

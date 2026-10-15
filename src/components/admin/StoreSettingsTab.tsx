@@ -69,7 +69,7 @@ export const StoreSettingsTab: React.FC = () => {
   });
 
   const [formData, setFormData] = useState({
-    storeName: storeSettings.storeName || 'PEPTIDE IMPORTS FARMA',
+    storeName: storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS',
     whatsappNumber: storeSettings.whatsappNumber || '5511993456789',
     whatsappDisplay: storeSettings.whatsappDisplay || '(11) 99345-6789',
     supportEmail: storeSettings.supportEmail || 'contato@peptideimports.com.br',
@@ -1024,7 +1024,7 @@ export const StoreSettingsTab: React.FC = () => {
             <div className="p-5 flex-1 overflow-y-auto bg-slate-950 font-mono text-xs text-slate-300 select-all space-y-1">
               <pre className="whitespace-pre-wrap text-emerald-300 leading-relaxed font-mono">
 {`-- ==============================================================================
--- PEPTIDE IMPORTS FARMA - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
+-- GLOW SLIM PEPTIDE IMPORTS - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -1041,7 +1041,7 @@ CREATE TABLE IF NOT EXISTS public.products (
   original_price NUMERIC(10, 2),
   cost_price NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
   stock INTEGER NOT NULL DEFAULT 0,
-  cap_color TEXT NOT NULL DEFAULT '#06b6d4',
+  cap_color TEXT NOT NULL DEFAULT '#b0476f',
   purity TEXT NOT NULL DEFAULT '99.4% HPLC',
   storage TEXT NOT NULL DEFAULT '2°C a 8°C (Refrigerado)',
   reconstitution TEXT NOT NULL DEFAULT 'Água bacteriostática (2ml a 3ml)',
@@ -1119,7 +1119,7 @@ CREATE TABLE IF NOT EXISTS public.financial_transactions (
 -- 6. TABELA DE CONFIGURAÇÕES DA LOJA
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id TEXT PRIMARY KEY DEFAULT 'config',
-  store_name TEXT NOT NULL DEFAULT 'PEPTIDE IMPORTS FARMA',
+  store_name TEXT NOT NULL DEFAULT 'GLOW SLIM PEPTIDE IMPORTS',
   whatsapp_number TEXT NOT NULL DEFAULT '5511993456789',
   whatsapp_display TEXT NOT NULL DEFAULT '(11) 99345-6789',
   support_email TEXT NOT NULL DEFAULT 'contato@peptideimports.com.br',

@@ -1,5 +1,87 @@
 @import "tailwindcss";
 
+/* Paleta Glow Slim: as escalas usadas no app são remapeadas para as cores da marca
+   (framboesa #b0476f, ameixa #753979, roxo #3f2971, pêssego #ec8f63, menta #bddac6). */
+@theme {
+  --color-cyan-50: #faf5f7;
+  --color-cyan-100: #f4e7ec;
+  --color-cyan-200: #eaccd8;
+  --color-cyan-300: #dca8bc;
+  --color-cyan-400: #cc809d;
+  --color-cyan-500: #b0476f;
+  --color-cyan-600: #a04165;
+  --color-cyan-700: #833553;
+  --color-cyan-800: #662940;
+  --color-cyan-900: #4c1f30;
+  --color-cyan-950: #2f131e;
+  --color-blue-50: #f9f5fa;
+  --color-blue-100: #f2e8f3;
+  --color-blue-200: #e7cee8;
+  --color-blue-300: #d5acd8;
+  --color-blue-400: #c286c6;
+  --color-blue-500: #ad5cb2;
+  --color-blue-600: #753979;
+  --color-blue-700: #793b7d;
+  --color-blue-800: #5e2e61;
+  --color-blue-900: #462249;
+  --color-blue-950: #2c152d;
+  --color-indigo-50: #f6f4fa;
+  --color-indigo-100: #eae6f4;
+  --color-indigo-200: #d5cbec;
+  --color-indigo-300: #b7a5de;
+  --color-indigo-400: #967ccf;
+  --color-indigo-500: #714fbf;
+  --color-indigo-600: #5c3ca5;
+  --color-indigo-700: #4b3187;
+  --color-indigo-800: #3f2971;
+  --color-indigo-900: #2c1d4f;
+  --color-indigo-950: #1b1231;
+  --color-teal-50: #f6f9f7;
+  --color-teal-100: #e9f1ec;
+  --color-teal-200: #bddac6;
+  --color-teal-300: #b1d3bb;
+  --color-teal-400: #8dbf9c;
+  --color-teal-500: #5f9c78;
+  --color-teal-600: #4a7f61;
+  --color-teal-700: #3b664e;
+  --color-teal-800: #335c40;
+  --color-teal-900: #264530;
+  --color-teal-950: #182a1e;
+  --color-orange-50: #fcf6f2;
+  --color-orange-100: #f9e9e1;
+  --color-orange-200: #f7d1bf;
+  --color-orange-300: #f2b192;
+  --color-orange-400: #ec8f63;
+  --color-orange-500: #e56629;
+  --color-orange-600: #c85118;
+  --color-orange-700: #a44214;
+  --color-orange-800: #7f3310;
+  --color-orange-900: #5f270c;
+  --color-orange-950: #3b1807;
+  --color-slate-50: #faf9fb;
+  --color-slate-100: #f5f3f7;
+  --color-slate-200: #eae5ed;
+  --color-slate-300: #d7d0dc;
+  --color-slate-400: #a89cb0;
+  --color-slate-500: #796d82;
+  --color-slate-600: #5a4f61;
+  --color-slate-700: #463b4d;
+  --color-slate-800: #2e2534;
+  --color-slate-900: #1e1524;
+  --color-slate-950: #0d0712;
+  --color-sky-50: #faf5f7;
+  --color-sky-100: #f4e7ec;
+  --color-sky-200: #eaccd8;
+  --color-sky-300: #dca8bc;
+  --color-sky-400: #cc809d;
+  --color-sky-500: #b0476f;
+  --color-sky-600: #a04165;
+  --color-sky-700: #833553;
+  --color-sky-800: #662940;
+  --color-sky-900: #4c1f30;
+  --color-sky-950: #2f131e;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -37,14 +119,36 @@ button, [role="button"] {
 
 @media (hover: hover) and (pointer: fine) {
   button:not(:disabled):hover,
-  [role="button"]:not([aria-disabled="true"]):hover {
+  [role="button"]:not([aria-disabled="true"]):not([data-no-press]):hover {
     transform: translateY(-1px);
   }
 }
 
 button:not(:disabled):active,
-[role="button"]:not([aria-disabled="true"]):active {
+[role="button"]:not([aria-disabled="true"]):not([data-no-press]):active {
   transform: scale(0.98);
+}
+
+/* Foco visível para navegação por teclado. Fora de @layer de propósito:
+   precisa vencer os vários `outline-none` utilitários espalhados pelo app. */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible,
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid #cc809d;
+  outline-offset: 2px;
+}
+
+a, button, [role="button"], input, select, textarea, label {
+  touch-action: manipulation;
+}
+
+.apple-overlay-bg {
+  overscroll-behavior: contain;
 }
 
 /* Transições fluidas para inputs, selects e textareas */
@@ -176,14 +280,14 @@ input:focus, select:focus, textarea:focus {
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0b0f17;
+  background: #120b1c;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
+  background: #2e2534;
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #0284c7;
+  background: #a04165;
 }
 
 /* Specific horizontal scrollbar for admin navigation */
@@ -195,11 +299,11 @@ input:focus, select:focus, textarea:focus {
   border-radius: 9999px;
 }
 .admin-nav-scrollbar::-webkit-scrollbar-thumb {
-  background: #0284c7;
+  background: #a04165;
   border-radius: 9999px;
 }
 .admin-nav-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #38bdf8;
+  background: #cc809d;
 }
 
 /* Barra de carregamento ao acessar o painel (cores baseadas no site) */
@@ -208,10 +312,10 @@ input:focus, select:focus, textarea:focus {
   width: 260px;
   height: 5px;
   border-radius: 999px;
-  background: #1e293b;
+  background: #2e2534;
   overflow: hidden;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(6, 182, 212, 0.25);
+  border: 1px solid rgba(176,71,111, 0.25);
 }
 
 .barra__trilho {
@@ -219,8 +323,8 @@ input:focus, select:focus, textarea:focus {
   inset: 0;
   width: 40%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #06b6d4, #2563eb);
-  box-shadow: 0 0 14px rgba(6, 182, 212, 0.85);
+  background: linear-gradient(90deg, #b0476f, #753979);
+  box-shadow: 0 0 14px rgba(176,71,111, 0.85);
   animation: barra 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 
@@ -241,7 +345,7 @@ input:focus, select:focus, textarea:focus {
   .barra__trilho { animation: none; width: 100%; opacity: 0.5; }
   .apple-card-hover:hover,
   button:not(:disabled):hover,
-  [role="button"]:not([aria-disabled="true"]):hover,
+  [role="button"]:not([aria-disabled="true"]):not([data-no-press]):hover,
   input:focus, select:focus, textarea:focus {
     transform: none !important;
   }

@@ -1,5 +1,5 @@
 -- ==============================================================================
--- PEPTIDE IMPORTS FARMA - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
+-- GLOW SLIM PEPTIDE IMPORTS - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
 -- ==============================================================================
 -- Copie e cole este script integralmente no SQL Editor do seu Supabase Dashboard:
 -- https://supabase.com/dashboard/project/_/sql
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS public.financial_transactions (
 -- 7. TABELA DE CONFIGURAÇÕES DA LOJA
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id TEXT PRIMARY KEY DEFAULT 'config',
-  store_name TEXT NOT NULL DEFAULT 'PEPTIDE IMPORTS FARMA',
+  store_name TEXT NOT NULL DEFAULT 'GLOW SLIM PEPTIDE IMPORTS',
   whatsapp_number TEXT NOT NULL DEFAULT '5511993456789',
   whatsapp_display TEXT NOT NULL DEFAULT '(11) 99345-6789',
   support_email TEXT NOT NULL DEFAULT 'contato@peptideimports.com.br',
@@ -238,7 +238,7 @@ INSERT INTO public.store_settings (
 )
 VALUES (
   'config',
-  'PEPTIDE IMPORTS FARMA',
+  'GLOW SLIM PEPTIDE IMPORTS',
   '5511993456789',
   '(11) 99345-6789',
   'contato@peptideimports.com.br',

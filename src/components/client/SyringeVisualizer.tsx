@@ -64,45 +64,45 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
             {/* Gradiente do Corpo de Vidro */}
             <linearGradient id="syringeGlassBody" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
-              <stop offset="25%" stopColor="#38bdf8" stopOpacity="0.08" />
-              <stop offset="75%" stopColor="#0f172a" stopOpacity="0.25" />
-              <stop offset="100%" stopColor="#0284c7" stopOpacity="0.25" />
+              <stop offset="25%" stopColor="#cc809d" stopOpacity="0.08" />
+              <stop offset="75%" stopColor="#3f2971" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#a04165" stopOpacity="0.25" />
             </linearGradient>
 
             {/* Gradiente do Líquido (Peptídeo Reconstituído) */}
             <linearGradient id="peptideFluidGradient" x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.95" />
-              <stop offset="50%" stopColor="#0284c7" stopOpacity="0.9" />
-              <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.95" />
+              <stop offset="0%" stopColor="#b0476f" stopOpacity="0.95" />
+              <stop offset="50%" stopColor="#a04165" stopOpacity="0.9" />
+              <stop offset="100%" stopColor="#cc809d" stopOpacity="0.95" />
             </linearGradient>
 
             {/* Brilho Superior no Líquido */}
             <linearGradient id="fluidSheen" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#ffffff" stopOpacity="0.45" />
-              <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.1" />
-              <stop offset="100%" stopColor="#0369a1" stopOpacity="0.6" />
+              <stop offset="50%" stopColor="#cc809d" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#833553" stopOpacity="0.6" />
             </linearGradient>
 
             {/* Êmbolo de Borracha Negra */}
             <linearGradient id="plungerRubber" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#475569" />
-              <stop offset="40%" stopColor="#0f172a" />
-              <stop offset="60%" stopColor="#020617" />
-              <stop offset="100%" stopColor="#334155" />
+              <stop offset="0%" stopColor="#5a4f61" />
+              <stop offset="40%" stopColor="#3f2971" />
+              <stop offset="60%" stopColor="#0d0712" />
+              <stop offset="100%" stopColor="#463b4d" />
             </linearGradient>
 
             {/* Haste Plástica do Êmbolo */}
             <linearGradient id="plungerRodGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#94a3b8" />
-              <stop offset="50%" stopColor="#475569" />
-              <stop offset="100%" stopColor="#1e293b" />
+              <stop offset="0%" stopColor="#a89cb0" />
+              <stop offset="50%" stopColor="#5a4f61" />
+              <stop offset="100%" stopColor="#2e2534" />
             </linearGradient>
 
             {/* Agulha de Aço Inox */}
             <linearGradient id="steelNeedle" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#e2e8f0" />
-              <stop offset="50%" stopColor="#94a3b8" />
-              <stop offset="100%" stopColor="#cbd5e1" />
+              <stop offset="0%" stopColor="#eae5ed" />
+              <stop offset="50%" stopColor="#a89cb0" />
+              <stop offset="100%" stopColor="#d7d0dc" />
             </linearGradient>
           </defs>
 
@@ -118,16 +118,16 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
             strokeLinecap="round"
           />
           {/* Bisel da ponta da agulha */}
-          <polygon points="12,64 16,63 16,65" fill="#f8fafc" />
+          <polygon points="12,64 16,63 16,65" fill="#faf9fb" />
 
           {/* Canhão plástico da agulha (hub laranja/ciano translúcido de insulina) */}
           <polygon
             points="60,54 75,57 75,73 60,76"
-            fill="#0284c7"
-            stroke="#0369a1"
+            fill="#a04165"
+            stroke="#833553"
             strokeWidth="1"
           />
-          <rect x="71" y="56" width="4" height="18" fill="#38bdf8" opacity="0.6" />
+          <rect x="71" y="56" width="4" height="18" fill="#cc809d" opacity="0.6" />
 
           {/* 2. CORPO CILÍNDRICO DE VIDRO (BARREL) */}
           {/* Fundo interno do tubo */}
@@ -138,7 +138,7 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
             height="50"
             rx="5"
             fill="#090d16"
-            stroke="#334155"
+            stroke="#463b4d"
             strokeWidth="1.5"
           />
 
@@ -185,7 +185,7 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
             className="transition-all duration-500 ease-out"
           >
             {/* Triângulo indicador apontando para a linha */}
-            <polygon points="0,7 -5,0 5,0" fill="#38bdf8" />
+            <polygon points="0,7 -5,0 5,0" fill="#cc809d" />
             {/* Badge flutuante acima */}
             <rect
               x="-24"
@@ -193,8 +193,8 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
               width="48"
               height="16"
               rx="4"
-              fill="#0284c7"
-              stroke="#38bdf8"
+              fill="#a04165"
+              stroke="#cc809d"
               strokeWidth="1"
             />
             <text
@@ -222,8 +222,8 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
               width="6"
               height="48"
               rx="1.5"
-              fill="#020617"
-              stroke="#0f172a"
+              fill="#0d0712"
+              stroke="#3f2971"
               strokeWidth="0.8"
             />
             {/* Núcleo central da borracha */}
@@ -241,8 +241,8 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
               width="6"
               height="48"
               rx="1.5"
-              fill="#020617"
-              stroke="#0f172a"
+              fill="#0d0712"
+              stroke="#3f2971"
               strokeWidth="0.8"
             />
 
@@ -254,14 +254,14 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
               height="10"
               rx="2"
               fill="url(#plungerRodGrad)"
-              stroke="#334155"
+              stroke="#463b4d"
               strokeWidth="0.8"
             />
             {/* Ranhuras na haste plástica */}
-            <line x1="35" y1="60" x2="35" y2="70" stroke="#64748b" strokeWidth="1" />
-            <line x1="55" y1="60" x2="55" y2="70" stroke="#64748b" strokeWidth="1" />
-            <line x1="75" y1="60" x2="75" y2="70" stroke="#64748b" strokeWidth="1" />
-            <line x1="95" y1="60" x2="95" y2="70" stroke="#64748b" strokeWidth="1" />
+            <line x1="35" y1="60" x2="35" y2="70" stroke="#796d82" strokeWidth="1" />
+            <line x1="55" y1="60" x2="55" y2="70" stroke="#796d82" strokeWidth="1" />
+            <line x1="75" y1="60" x2="75" y2="70" stroke="#796d82" strokeWidth="1" />
+            <line x1="95" y1="60" x2="95" y2="70" stroke="#796d82" strokeWidth="1" />
 
             {/* Apoio do polegar (Thumb Flange no final da haste) */}
             <rect
@@ -270,8 +270,8 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
               width="6"
               height="40"
               rx="3"
-              fill="#64748b"
-              stroke="#94a3b8"
+              fill="#796d82"
+              stroke="#a89cb0"
               strokeWidth="1"
             />
           </g>
@@ -284,7 +284,7 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
             height="50"
             rx="5"
             fill="url(#syringeGlassBody)"
-            stroke="#475569"
+            stroke="#5a4f61"
             strokeWidth="1.5"
             pointerEvents="none"
           />
@@ -305,7 +305,7 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
                     y1="40"
                     x2={xPos}
                     y2="54"
-                    stroke="#f8fafc"
+                    stroke="#faf9fb"
                     strokeWidth="1.3"
                   />
                   {/* Linha inferior maior */}
@@ -314,14 +314,14 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
                     y1="76"
                     x2={xPos}
                     y2="90"
-                    stroke="#f8fafc"
+                    stroke="#faf9fb"
                     strokeWidth="1.3"
                   />
                   {/* Numeração da escala impressa no vidro */}
                   <text
                     x={xPos}
                     y="104"
-                    fill="#94a3b8"
+                    fill="#a89cb0"
                     fontSize="9"
                     fontWeight="800"
                     fontFamily="monospace"
@@ -341,7 +341,7 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
                 y1="40"
                 x2={xPos}
                 y2="47"
-                stroke="#94a3b8"
+                stroke="#a89cb0"
                 strokeWidth="0.8"
                 strokeOpacity="0.75"
               />
@@ -355,8 +355,8 @@ export const SyringeVisualizer: React.FC<SyringeVisualizerProps> = ({
             width="8"
             height="78"
             rx="4"
-            fill="#334155"
-            stroke="#64748b"
+            fill="#463b4d"
+            stroke="#796d82"
             strokeWidth="1.2"
           />
         </svg>

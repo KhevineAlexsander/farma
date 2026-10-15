@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Trash2, Plus, Minus, ShoppingBag, ArrowRight, ShieldCheck, Tag, Lock, AlertTriangle } from 'lucide-react';
 import { PeptideVial } from './PeptideVial';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useApp } from '../context/AppContext';
 
 export const CartDrawer: React.FC = () => {
@@ -23,6 +24,7 @@ export const CartDrawer: React.FC = () => {
     applyCouponCode,
     removeCoupon,
   } = useApp();
+  useEscapeKey(isCartOpen, () => setIsCartOpen(false));
 
   const [couponInput, setCouponInput] = useState('');
   const [couponFeedback, setCouponFeedback] = useState<{ success?: string; error?: string }>({});
@@ -317,7 +319,7 @@ export const CartDrawer: React.FC = () => {
                 /* Checkout Button */
                 <button
                   onClick={handleProceedToCheckout}
-                  className="w-full py-3.5 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
+                  className="w-full py-3.5 px-6 rounded-xl bg-[#3f2971] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all cursor-pointer group"
                 >
                   <span>Finalizar Pedido</span>
                   <ArrowRight className="w-4 h-4 text-cyan-400 group-hover:translate-x-1 transition-transform" />

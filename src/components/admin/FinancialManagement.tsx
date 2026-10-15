@@ -428,7 +428,7 @@ export const FinancialManagement: React.FC = () => {
   const handleExportExcel = () => {
     const filename = exportCashFlowToExcel({
       periodLabel: dateRange.label,
-      storeName: storeSettings.storeName || 'Peptide Imports Farma',
+      storeName: storeSettings.storeName || 'Glow Slim Peptide Imports',
       metrics: {
         totalSalesRevenue,
         totalExtraIncome,
@@ -459,7 +459,7 @@ export const FinancialManagement: React.FC = () => {
     const timeStr = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     let msg = `*📊 RELATÓRIO DE CONTROLE DE CAIXA*\n`;
-    msg += `🏢 *${storeSettings.storeName || 'Peptide Imports Farma'}*\n`;
+    msg += `🏢 *${storeSettings.storeName || 'Glow Slim Peptide Imports'}*\n`;
     msg += `📅 *Período:* ${dateRange.label}\n`;
     msg += `🕒 *Emitido em:* ${nowStr} às ${timeStr}\n\n`;
 

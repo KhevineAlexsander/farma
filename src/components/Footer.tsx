@@ -4,7 +4,7 @@ import { DnaLogo } from './DnaLogo';
 import { useApp } from '../context/AppContext';
 
 export const Footer: React.FC = () => {
-  const { setInfoModal, setCurrentView, storeSettings, setIsAuthOpen } = useApp();
+  const { setInfoModal, setCurrentView, storeSettings, setIsAuthOpen, setSearchQuery } = useApp();
 
   return (
     <footer className="bg-[#070A0F] text-slate-400 border-t border-slate-800/80 pt-16 pb-24 lg:pb-12 text-xs">
@@ -196,7 +196,7 @@ export const Footer: React.FC = () => {
                   key={idx}
                   onClick={() => {
                     setCurrentView('store');
-                    const query = item.term;
+                    setSearchQuery(item.term);
                     const el = document.getElementById('catalogo');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });
                   }}
@@ -246,7 +246,7 @@ export const Footer: React.FC = () => {
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px] border-t border-slate-800/40 mt-2">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
             <p>
-              © {new Date().getFullYear()} PEPTIDE IMPORTS FARMA. Todos os direitos reservados.
+              © {new Date().getFullYear()} GLOW SLIM PEPTIDE IMPORTS. Todos os direitos reservados.
             </p>
             <span className="hidden sm:inline text-slate-700">•</span>
             <p className="text-slate-400">

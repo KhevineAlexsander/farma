@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { X, Lock, Mail, User as UserIcon, ShieldAlert, Sparkles, Building2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useApp } from '../context/AppContext';
 import { DnaLogo } from './DnaLogo';
 
 export const AuthModal: React.FC = () => {
   const { isAuthOpen, setIsAuthOpen, loginWithGoogle, loginStaffOrAdmin, loginClientWithEmail, registerClientAccount, switchUserRole } = useApp();
+  useEscapeKey(isAuthOpen, () => setIsAuthOpen(false));
   
   // Tabs: 'CLIENTE' (Login Google ou e-mail) | 'STAFF' (Funcionários e Administradores)
   const [activeTab, setActiveTab] = useState<'CLIENTE' | 'STAFF'>('CLIENTE');
@@ -116,7 +118,7 @@ export const AuthModal: React.FC = () => {
         {/* Brand Header */}
         <div className="text-center mb-5">
           <div className="flex justify-center mb-3">
-            <div className="p-3 bg-[#0B0F17] rounded-2xl shadow-md">
+            <div className="p-3 bg-[#120b1c] rounded-2xl shadow-md">
               <DnaLogo size="sm" withText={false} />
             </div>
           </div>
@@ -155,7 +157,7 @@ export const AuthModal: React.FC = () => {
             }}
             className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'STAFF'
-                ? 'bg-[#0F172A] text-white shadow-sm'
+                ? 'bg-[#3f2971] text-white shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
@@ -276,7 +278,7 @@ export const AuthModal: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 px-4 rounded-xl bg-[#0F172A] hover:bg-slate-800 text-white font-bold text-xs tracking-wide shadow-md transition-all cursor-pointer mt-2 disabled:opacity-60"
+                className="w-full py-3 px-4 rounded-xl bg-[#3f2971] hover:bg-slate-800 text-white font-bold text-xs tracking-wide shadow-md transition-all cursor-pointer mt-2 disabled:opacity-60"
               >
                 {isSubmitting
                   ? 'Processando...'

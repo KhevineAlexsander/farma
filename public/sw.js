@@ -1,4 +1,4 @@
-const CACHE_NAME = 'peptide-farma-v1';
+const CACHE_NAME = 'glow-slim-v2';
 const urlsToCache = [
   '/',
   '/index.html',

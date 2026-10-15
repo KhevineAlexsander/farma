@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Check, ShieldCheck, Thermometer, FileText, ShoppingCart, Plus, Minus, Sparkles, Lock, AlertTriangle, Syringe } from 'lucide-react';
 import { PeptideVial } from './PeptideVial';
+import { useEscapeKey } from '../hooks/useEscapeKey';
 import { useApp } from '../context/AppContext';
 
 export const ProductDetailModal: React.FC = () => {
@@ -13,6 +14,7 @@ export const ProductDetailModal: React.FC = () => {
     setCurrentView,
     setSelectedCalculatorProduct,
   } = useApp();
+  useEscapeKey(!!selectedProductDetail, () => setSelectedProductDetail(null));
   const [quantity, setQuantity] = useState(1);
   const isSuspended = Boolean(storeSettings.purchasesSuspended);
 
@@ -92,7 +94,7 @@ export const ProductDetailModal: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Código de Rastreio Farma: <span className="font-mono text-slate-700">{product.id.toUpperCase()}</span>
+                  Código de Rastreio: <span className="font-mono text-slate-700">{product.id.toUpperCase()}</span>
                 </p>
               </div>
 
@@ -187,7 +189,7 @@ export const ProductDetailModal: React.FC = () => {
                 {/* Add to Cart CTA */}
                 <button
                   onClick={handleAddToCart}
-                  className="w-full flex-1 py-3 px-6 rounded-xl bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg cursor-pointer"
+                  className="w-full flex-1 py-3 px-6 rounded-xl bg-[#3f2971] hover:bg-slate-800 active:bg-cyan-600 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-md hover:shadow-lg cursor-pointer"
                 >
                   <ShoppingCart className="w-4 h-4 text-cyan-400" />
                   <span>Adicionar {(quantity > 1 ? `(${quantity})` : '')} por R$ {(product.price * quantity).toFixed(2).replace('.', ',')}</span>

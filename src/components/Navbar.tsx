@@ -90,7 +90,7 @@ export const Navbar: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-[#0B0F17]/95 backdrop-blur-md border-b border-slate-800/80 transition-colors">
+    <header className="sticky top-0 z-40 w-full bg-[#120b1c]/95 backdrop-blur-md border-b border-slate-800/80 transition-colors">
       {/* Top Cashier Closing / Purchases Suspended Alert Banner */}
       {storeSettings.purchasesSuspended ? (
         <div className="bg-gradient-to-r from-amber-950/95 via-rose-950/95 to-amber-950/95 border-b border-amber-500/40 py-2 px-4 text-center shadow-lg animate-in slide-in-from-top duration-300">
@@ -237,6 +237,7 @@ export const Navbar: React.FC = () => {
                     onClick={toggleToolsExpanded}
                     className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                     title="Expandir botões diretamente na barra superior"
+                    aria-label="Expandir botões diretamente na barra superior"
                   >
                     <SlidersHorizontal className="w-3.5 h-3.5" />
                   </button>
@@ -244,7 +245,7 @@ export const Navbar: React.FC = () => {
 
                 {/* Floating Dropdown Panel */}
                 {isToolsDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-2 w-80 bg-[#0B0F17] border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-md">
+                  <div className="absolute top-full left-0 mt-2 w-80 bg-[#120b1c] border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-md">
                     <div className="px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 mb-1 flex items-center justify-between">
                       <span>Recursos Clínicos & Ferramentas</span>
                       <span className="text-cyan-400 text-[9px]">3 Ferramentas</span>
@@ -438,16 +439,20 @@ export const Navbar: React.FC = () => {
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar peptídeo..."
+                    placeholder="Buscar peptídeo…"
+                    aria-label="Buscar peptídeo"
+                    autoComplete="off"
                     autoFocus
                     className="w-full bg-transparent text-sm text-white focus:outline-none placeholder-slate-400"
                   />
                   <button
+                    type="button"
                     onClick={() => {
                       setIsSearchOpen(false);
                       setSearchQuery('');
                     }}
                     className="text-slate-400 hover:text-white ml-1"
+                    aria-label="Fechar busca"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -490,7 +495,7 @@ export const Navbar: React.FC = () => {
                   </button>
 
                   {isUserMenuOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-[#0F172A] border border-slate-700 rounded-xl shadow-2xl py-2 z-50 apple-dropdown-menu">
+                    <div className="absolute right-0 mt-2 w-56 bg-[#3f2971] border border-slate-700 rounded-xl shadow-2xl py-2 z-50 apple-dropdown-menu">
                       <div className="px-4 py-2 border-b border-slate-800">
                         <p className="text-xs text-slate-400">Logado como</p>
                         <p className="text-sm font-semibold text-white truncate">{currentUser.name || 'Usuário'}</p>
@@ -583,7 +588,7 @@ export const Navbar: React.FC = () => {
 
       {/* Mobile Slide-down Navigation Menu */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden bg-[#0B0F17] border-b border-slate-800 px-4 pt-2 pb-6 space-y-3 apple-dropdown-menu">
+        <div className="lg:hidden bg-[#120b1c] border-b border-slate-800 px-4 pt-2 pb-6 space-y-3 apple-dropdown-menu">
           <div className="flex flex-col space-y-2">
             {[
               { id: 'Início', label: 'Início' },

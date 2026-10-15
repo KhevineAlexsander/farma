@@ -665,13 +665,13 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     const cleanPhone = phone.replace(/\D/g, '');
     if (!cleanPhone) return null;
     const fullNumber = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const msg = encodeURIComponent(`Olá ${customerName}, tudo bem? Aqui é da equipe da ${storeSettings.storeName || 'Peptide Imports'}!`);
+    const msg = encodeURIComponent(`Olá ${customerName}, tudo bem? Aqui é da equipe da ${storeSettings.storeName || 'Glow Slim Peptide Imports'}!`);
     return `https://wa.me/${fullNumber}?text=${msg}`;
   };
 
   // WhatsApp Sales Summary Generator (Customer ranking is OPTIONAL)
   const generateSalesSummaryText = () => {
-    const brand = storeSettings.storeName || 'PEPTIDE IMPORTS FARMA';
+    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
     const periodLabel =
       timeFilter === 'caixa_aberto'
         ? 'Caixa Aberto (Sessão Atual / Pós-Fechamento)'
@@ -772,7 +772,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     }
 
     text += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
-    text += `_Peptide Imports ERP - Controle em Tempo Real_`;
+    text += `_Glow Slim ERP - Controle em Tempo Real_`;
     return text;
   };
 
@@ -869,7 +869,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         },
         timeFilterLabel: activePeriodLabel,
         statusFilterLabel: activeStatusLabel,
-        storeName: storeSettings?.storeName || 'Peptide Imports Farma',
+        storeName: storeSettings?.storeName || 'Glow Slim Peptide Imports',
       });
       showToast(`📊 Relatório em Excel baixado: ${filename}`);
     } catch (err: any) {
@@ -896,7 +896,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
         },
         timeFilterLabel: activePeriodLabel,
         statusFilterLabel: activeStatusLabel,
-        storeName: storeSettings?.storeName || 'Peptide Imports Farma',
+        storeName: storeSettings?.storeName || 'Glow Slim Peptide Imports',
       });
       showToast(`📄 Relatório em TXT baixado: ${filename}`);
     } catch (err: any) {
@@ -1015,7 +1015,7 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
     const phoneWithDdi = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
     const orderNum = order.orderNumber || `#${order.id.slice(-6).toUpperCase()}`;
     const message = encodeURIComponent(
-      `Olá ${order.customer?.name || 'Cliente'}, tudo bem? Aqui é da Peptide Imports a respeito do seu pedido ${orderNum}!`
+      `Olá ${order.customer?.name || 'Cliente'}, tudo bem? Aqui é da Glow Slim Peptide Imports a respeito do seu pedido ${orderNum}!`
     );
     return `https://wa.me/${phoneWithDdi}?text=${message}`;
   };

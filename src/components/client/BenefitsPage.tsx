@@ -678,9 +678,9 @@ export const BenefitsPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#070A10] text-slate-100 pb-24">
+    <div className="min-h-screen bg-[#0b0712] text-slate-100 pb-24">
       {/* Top Hero Banner */}
-      <section className="relative overflow-hidden pt-12 pb-16 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#0B0F17] to-[#070A10]">
+      <section className="relative overflow-hidden pt-12 pb-16 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#120b1c] to-[#0b0712]">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-cyan-900/20 via-transparent to-transparent pointer-events-none" />
         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
@@ -694,7 +694,7 @@ export const BenefitsPage: React.FC = () => {
                 Página de <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-300">Benefícios & Protocolos</span>
               </h1>
               <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-                Explore a ação celular, benefícios clínicos validados, dosagens recomendadas e pureza molecular (HPLC) de cada peptídeo da Peptide Imports Farma.
+                Explore a ação celular, benefícios clínicos validados, dosagens recomendadas e pureza molecular (HPLC) de cada peptídeo da Glow Slim Peptide Imports.
               </p>
             </div>
 
@@ -814,7 +814,7 @@ export const BenefitsPage: React.FC = () => {
                       {/* Vial Render */}
                       <div className="shrink-0 bg-slate-950/80 p-3 rounded-2xl border border-slate-800/80 flex items-center justify-center w-24 h-32 sm:w-28 sm:h-36 shadow-inner">
                         <PeptideVial
-                          capColor={product.capColor || '#0088FF'}
+                          capColor={product.capColor || '#ad5cb2'}
                           name={product.name}
                           dosage={product.dosage}
                           size="sm"

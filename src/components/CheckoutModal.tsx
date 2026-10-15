@@ -166,7 +166,7 @@ CEP: ${order.address?.zipCode || ''}`
       `• WhatsApp: ${customerPhone}`,
     ].join('\n');
 
-    const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'PEPTIDE IMPORTS FARMA'}*
+    const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS'}*
 ────────────────────────
 Olá! Acabei de finalizar meu pedido no site.
 
@@ -271,7 +271,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
   // Handle empty cart state
   if (cart.length === 0 && !completedOrder) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center py-16 px-4 bg-[#0B0F17]">
+      <div className="min-h-[70vh] flex items-center justify-center py-16 px-4 bg-[#120b1c]">
         <div className="max-w-md w-full bg-slate-900/90 border border-slate-800 rounded-3xl p-8 text-center space-y-5 shadow-2xl">
           <div className="w-16 h-16 bg-slate-800/80 rounded-full flex items-center justify-center mx-auto text-slate-400">
             <ShoppingBag className="w-8 h-8 text-cyan-400" />
@@ -297,7 +297,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
 
   if (completedOrder) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] py-12 px-4 sm:px-6 lg:px-8 text-slate-900">
+      <div className="min-h-screen bg-[#faf9fb] py-12 px-4 sm:px-6 lg:px-8 text-slate-900">
         <div className="max-w-2xl mx-auto bg-white rounded-3xl border border-slate-200 shadow-xl p-8 sm:p-10 text-center">
           
           <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -391,7 +391,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 text-slate-900">
+    <div className="min-h-screen bg-[#faf9fb] py-8 sm:py-12 px-4 sm:px-6 lg:px-8 text-slate-900">
       <div className="max-w-6xl mx-auto">
         
         {/* Back Link */}

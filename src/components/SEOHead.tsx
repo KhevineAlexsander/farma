@@ -5,7 +5,7 @@ export const SEOHead: React.FC = () => {
   const { currentView, selectedProductDetail, storeSettings } = useApp();
 
   useEffect(() => {
-    const brandName = storeSettings.storeName || 'Peptide Imports Farma';
+    const brandName = storeSettings.storeName || 'Glow Slim Peptide Imports';
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://peptideimportsfarma.com.br';
 
     let title = `${brandName} | Peptídeos Importados de Alta Pureza`;

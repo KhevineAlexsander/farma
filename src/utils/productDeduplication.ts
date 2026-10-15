@@ -304,7 +304,7 @@ export function sanitizeOrderItems(
           dosage: finalDosage,
           category: finalCategory,
           price: finalPrice,
-          capColor: canonicalProd?.capColor || rawProd.capColor || '#0088FF',
+          capColor: canonicalProd?.capColor || rawProd.capColor || '#ad5cb2',
           stock: canonicalProd?.stock !== undefined ? canonicalProd.stock : rawProd.stock,
         },
         quantity: qty,

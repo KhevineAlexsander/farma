@@ -628,9 +628,9 @@ export const DosageCalculatorPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#070A10] text-slate-100 pb-32">
+    <div className="min-h-screen bg-[#0b0712] text-slate-100 pb-32">
       {/* Top Hero Banner */}
-      <section className="relative overflow-hidden pt-10 pb-8 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#0B0F17] to-[#070A10]">
+      <section className="relative overflow-hidden pt-10 pb-8 border-b border-slate-800/80 bg-gradient-to-b from-blue-950/30 via-[#120b1c] to-[#0b0712]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="max-w-3xl space-y-2.5">
@@ -1220,7 +1220,7 @@ export const DosageCalculatorPage: React.FC = () => {
           {/* Right Column: Sticky Result Card (5 cols) */}
           <div ref={resultRef} className="lg:col-span-5 lg:sticky lg:top-24 space-y-5">
             
-            <div className="bg-gradient-to-b from-slate-900 to-[#0B0F17] border-2 border-cyan-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden">
+            <div className="bg-gradient-to-b from-slate-900 to-[#120b1c] border-2 border-cyan-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl space-y-5 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
 
               {/* Header do Card de Resultado */}
@@ -1639,8 +1639,8 @@ export const DosageCalculatorPage: React.FC = () => {
                       const labelVal = (maxLevel * (1 - frac)).toFixed(2);
                       return (
                         <g key={frac}>
-                          <line x1={padL} y1={yVal} x2={W - padR} y2={yVal} stroke="#1e293b" strokeDasharray="3 3" />
-                          <text x={padL - 6} y={yVal + 3} fontSize="9" fill="#64748b" textAnchor="end" fontFamily="monospace">
+                          <line x1={padL} y1={yVal} x2={W - padR} y2={yVal} stroke="#2e2534" strokeDasharray="3 3" />
+                          <text x={padL - 6} y={yVal + 3} fontSize="9" fill="#796d82" textAnchor="end" fontFamily="monospace">
                             {labelVal}
                           </text>
                         </g>
@@ -1673,8 +1673,8 @@ export const DosageCalculatorPage: React.FC = () => {
                       const xVal = scaleX(dayVal);
                       return (
                         <g key={frac}>
-                          <line x1={xVal} y1={H - padB} x2={xVal} y2={H - padB + 4} stroke="#475569" />
-                          <text x={xVal} y={H - padB + 16} fontSize="9" fill="#94a3b8" textAnchor="middle" fontFamily="monospace">
+                          <line x1={xVal} y1={H - padB} x2={xVal} y2={H - padB + 4} stroke="#5a4f61" />
+                          <text x={xVal} y={H - padB + 16} fontSize="9" fill="#a89cb0" textAnchor="middle" fontFamily="monospace">
                             {dayVal}d
                           </text>
                         </g>

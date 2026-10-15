@@ -159,7 +159,7 @@ export const EmployeeManagement: React.FC = () => {
   };
 
   const copyCredentials = (emp: Employee) => {
-    const text = `Acesso Painel Peptide Imports Farma:\nE-mail: ${emp.email}\nSenha: ${emp.password || 'pep@2026'}`;
+    const text = `Acesso Painel Glow Slim Peptide Imports:\nE-mail: ${emp.email}\nSenha: ${emp.password || 'pep@2026'}`;
     navigator.clipboard.writeText(text);
     setCopiedEmpId(emp.id);
     showToast(`Credenciais de ${emp.name} copiadas!`);

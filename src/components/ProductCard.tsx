@@ -46,7 +46,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
       {/* Top Body (Clickable for full details) */}
       <div
+        role="button"
+        data-no-press
+        tabIndex={0}
+        aria-label={`Ver detalhes de ${product.name}`}
         onClick={() => setSelectedProductDetail(product)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setSelectedProductDetail(product);
+          }
+        }}
         className="p-4 sm:p-5 pt-8 cursor-pointer flex flex-col flex-grow"
       >
         <div className="grid grid-cols-12 gap-3 items-center">
@@ -58,6 +68,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
                 src={product.imageUrl}
                 alt={product.name}
                 referrerPolicy="no-referrer"
+                width={192}
+                height={96}
+                loading="lazy"
+                decoding="async"
                 className="w-full h-24 object-contain rounded-lg p-1"
               />
             ) : (
@@ -140,6 +154,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               }}
               className="p-2.5 rounded-xl bg-slate-100 hover:bg-cyan-50 border border-slate-200 hover:border-cyan-300 text-slate-700 hover:text-cyan-700 transition-colors cursor-pointer shrink-0"
               title="Calcular dosagem e seringa para este peptídeo"
+              aria-label={`Calcular dosagem de ${product.name}`}
             >
               <Syringe className="w-4 h-4 text-cyan-600" />
             </button>
@@ -151,7 +166,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               className={`flex-1 py-2.5 px-3 rounded-xl text-white text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 transition-all shadow-sm hover:shadow-md cursor-pointer group/btn ${
                 product.isPromotion
                   ? 'bg-rose-600 hover:bg-rose-700 active:bg-rose-800'
-                  : 'bg-[#0F172A] hover:bg-slate-800 active:bg-cyan-600'
+                  : 'bg-[#3f2971] hover:bg-slate-800 active:bg-cyan-600'
               }`}
             >
               <ShoppingCart className="w-3.5 h-3.5 text-cyan-400 group-hover/btn:translate-x-0.5 transition-transform" />

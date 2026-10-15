@@ -11,6 +11,18 @@ export default defineConfig(() => {
         '@': path.resolve(__dirname, '.'),
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Vendor libraries change rarely; separate chunks stay cached across deploys.
+          manualChunks: {
+            react: ['react', 'react-dom', 'react-dom/client'],
+            firebase: ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+            supabase: ['@supabase/supabase-js'],
+          },
+        },
+      },
+    },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.

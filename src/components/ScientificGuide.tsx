@@ -722,12 +722,12 @@ export const ScientificGuide: React.FC = () => {
   ];
 
   return (
-    <div className="bg-[#0B0F17] text-white min-h-screen pb-20">
+    <div className="bg-[#120b1c] text-white min-h-screen pb-20">
       
       {/* Hero Header */}
-      <section className="relative overflow-hidden pt-12 pb-16 border-b border-slate-800/80 bg-gradient-to-b from-slate-950 via-[#0B0F17] to-[#0B0F17]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(6,182,212,0.15),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(37,99,235,0.1),transparent_50%)]" />
+      <section className="relative overflow-hidden pt-12 pb-16 border-b border-slate-800/80 bg-gradient-to-b from-slate-950 via-[#120b1c] to-[#120b1c]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(176,71,111,0.15),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(117,57,121,0.1),transparent_50%)]" />
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-8">

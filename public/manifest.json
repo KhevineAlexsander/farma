@@ -1,15 +1,20 @@
 {
-  "name": "Peptide Imports Farma",
-  "short_name": "Peptide Farma",
+  "name": "Glow Slim Peptide Imports",
+  "short_name": "Glow Slim",
   "description": "E-commerce e sistema de gestão completo para peptídeos importados de alta pureza",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0B0F17",
-  "theme_color": "#0B0F17",
+  "background_color": "#120b1c",
+  "theme_color": "#120b1c",
   "icons": [
     {
-      "src": "/favicon.png",
-      "sizes": "64x64 192x192 512x512",
+      "src": "/brand/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/icon-512.png",
+      "sizes": "512x512",
       "type": "image/png"
     }
   ]

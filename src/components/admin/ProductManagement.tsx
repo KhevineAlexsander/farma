@@ -200,7 +200,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
           price: priceNum,
           costPrice: Math.round(priceNum * 0.4 * 100) / 100,
           stock: 35,
-          capColor: (category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : (category || '').toLowerCase().includes('beleza') ? '#EC4899' : '#0088FF',
+          capColor: (category || '').toLowerCase().includes('emagrecimento') ? '#22C55E' : (category || '').toLowerCase().includes('beleza') ? '#EC4899' : '#ad5cb2',
           description: `Produto farmacêutico importado de alta pureza (${canonicalName} ${canonicalDosage}).`,
           benefits: ['Laudo HPLC certificado', 'Alta biodisponibilidade'],
           purity: '99.6% HPLC',
@@ -245,7 +245,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
   const [category, setCategory] = useState<'Emagrecimento' | 'Saúde' | 'Beleza' | 'Desempenho' | 'Insumos' | string>('Saúde');
   const [price, setPrice] = useState('');
   const [costPrice, setCostPrice] = useState('');
-  const [capColor, setCapColor] = useState('#0088FF');
+  const [capColor, setCapColor] = useState('#ad5cb2');
   const [imageUrl, setImageUrl] = useState('');
   const [description, setDescription] = useState('');
   const [benefit1, setBenefit1] = useState('');
@@ -264,7 +264,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
     setCategory('Saúde');
     setPrice('150');
     setCostPrice('60');
-    setCapColor('#0088FF');
+    setCapColor('#ad5cb2');
     setImageUrl('');
     setDescription('');
     setBenefit1('Alta biodisponibilidade');
@@ -306,7 +306,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
     setCategory(product.category);
     setPrice(product.price.toString());
     setCostPrice(product.costPrice.toString());
-    setCapColor(product.capColor || '#0088FF');
+    setCapColor(product.capColor || '#ad5cb2');
     setImageUrl(product.imageUrl || '');
     setDescription(product.description);
     setBenefit1(product.benefits[0] || '');
@@ -365,7 +365,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
       price: parsedPrice,
       costPrice: Math.max(0, parseFloat(costPrice) || 0),
       stock: 999,
-      capColor: capColor || '#0088FF',
+      capColor: capColor || '#ad5cb2',
       imageUrl: imageUrl.trim() || undefined,
       description: description.slice(0, 1000) || (isCustomProductMode ? 'Produto farmacêutico importado com controle de qualidade rigoroso.' : 'Peptídeo importado liofilizado com laudo HPLC de pureza superior.'),
       benefits: [benefit1.slice(0, 100), benefit2.slice(0, 100), benefit3.slice(0, 100)].filter(Boolean),
@@ -697,7 +697,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                   return (
                     <div
                       key={req.id}
-                      className="bg-[#070A10] border border-slate-800/90 hover:border-slate-700 rounded-xl p-3 flex items-center justify-between gap-4 transition-colors"
+                      className="bg-[#0b0712] border border-slate-800/90 hover:border-slate-700 rounded-xl p-3 flex items-center justify-between gap-4 transition-colors"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0">
@@ -868,7 +868,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                     </td>
 
                     {/* Action buttons */}
-                    <td className="py-3 px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#161f30] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] space-x-2 transition-colors">
+                    <td className="py-3 px-4 text-right whitespace-nowrap sticky right-0 z-10 bg-slate-900 group-hover:bg-[#22163a] border-l border-slate-800 shadow-[-10px_0_15px_-4px_rgba(0,0,0,0.6)] space-x-2 transition-colors">
                       <button
                         onClick={() => openEditProductModal(product)}
                         className="p-1.5 rounded-lg bg-slate-800 hover:bg-cyan-500 hover:text-slate-950 text-slate-300 transition-colors"

@@ -98,7 +98,7 @@ export function generateBackupPayload(
 
   return {
     version: '2.0',
-    system: 'PEPTIDE IMPORTS FARMA ERP',
+    system: 'GLOW SLIM PEPTIDE IMPORTS ERP',
     timestamp: now.toISOString(),
     dateFormatted,
     source: 'ADMIN_DASHBOARD_BACKUP',
@@ -115,7 +115,7 @@ export function generateBackupPayload(
     storeSettings: options?.storeSettings ? cleanObjectForStorage(options.storeSettings) : undefined,
     financialTransactions: options?.financialTransactions ? cleanObjectForStorage(options.financialTransactions) : undefined,
     metadata: {
-      appName: 'Peptide Imports Farma',
+      appName: 'Glow Slim Peptide Imports',
       generatedAt: dateFormatted,
       exportedBy: options?.userEmail || 'Administrador Master',
     },
@@ -209,7 +209,7 @@ export function parseAndValidateBackupJson(rawText: string): BackupValidationRes
       originalPrice: p.originalPrice ? Number(p.originalPrice) : undefined,
       costPrice: Number(p.costPrice) || 0,
       stock: Number(p.stock) >= 0 ? Number(p.stock) : 25,
-      capColor: String(p.capColor || '#0088FF'),
+      capColor: String(p.capColor || '#ad5cb2'),
       purity: String(p.purity || '99.5% HPLC'),
       storage: String(p.storage || '2°C a 8°C (Refrigerado)'),
       reconstitution: String(p.reconstitution || 'Reconstituir com água bacteriostática estéril'),
@@ -271,7 +271,7 @@ export function parseAndValidateBackupJson(rawText: string): BackupValidationRes
 
   const payload: BackupDataPayload = {
     version: parsed.version || '2.0',
-    system: parsed.system || 'PEPTIDE IMPORTS FARMA ERP',
+    system: parsed.system || 'GLOW SLIM PEPTIDE IMPORTS ERP',
     timestamp: parsed.timestamp || new Date().toISOString(),
     dateFormatted: parsed.dateFormatted || new Date().toLocaleString('pt-BR'),
     source: parsed.source || 'RESTORED_BACKUP_FILE',

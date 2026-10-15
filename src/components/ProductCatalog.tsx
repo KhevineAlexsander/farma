@@ -64,7 +64,7 @@ export const ProductCatalog: React.FC = () => {
     });
 
   return (
-    <section id="catalogo" className="w-full bg-[#F8FAFC] py-12 md:py-16 text-slate-900 scroll-mt-20">
+    <section id="catalogo" className="w-full bg-[#faf9fb] py-12 md:py-16 text-slate-900 scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header: Title + Accent Line + "Ver todos os produtos" */}
@@ -145,7 +145,7 @@ export const ProductCatalog: React.FC = () => {
                 }}
                 className={`px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
                   isSelected
-                    ? 'bg-[#0F172A] text-white shadow-md'
+                    ? 'bg-[#3f2971] text-white shadow-md'
                     : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200/80 hover:border-slate-300 shadow-xs'
                 }`}
               >
