@@ -51,6 +51,7 @@ import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 import { DatabaseBackupModal } from './DatabaseBackupModal';
+import { OrderHistoryTimeline } from './OrderHistoryTimeline';
 import {
   exportOrdersListToExcel,
   exportOrdersListToTxt,
@@ -3135,6 +3136,11 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 </div>
               </div>
             )}
+
+            {/* selectedOrder is a snapshot; read history from the live list so new entries show up immediately */}
+            <OrderHistoryTimeline
+              history={(orders.find((o) => o.id === selectedOrder.id) || selectedOrder).history}
+            />
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-xs mb-4 sm:mb-6">
               {/* Customer Box */}

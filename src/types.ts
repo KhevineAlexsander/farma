@@ -74,6 +74,21 @@ export interface Order {
   closedAt?: string; // Data e hora do fechamento do caixa
   closedSessionId?: string; // ID da sessão de caixa (ex: caixa-1727500000000)
   closedSessionName?: string; // Nome legível do caixa fechado (ex: Caixa #1 - 28/09/2026 14:30)
+  history?: OrderHistoryEntry[]; // Registro de cada alteração no pedido (data/hora, operador, o que mudou)
+}
+
+export interface OrderHistoryChange {
+  field: string; // Rótulo legível do campo (ex: "Status", "Valor pago")
+  from: string;
+  to: string;
+}
+
+export interface OrderHistoryEntry {
+  id: string;
+  at: string; // ISO 8601
+  by: string; // Quem fez a alteração
+  action: string; // Ex: "Status alterado", "Pedido editado"
+  changes?: OrderHistoryChange[];
 }
 
 export interface CashRegisterSession {

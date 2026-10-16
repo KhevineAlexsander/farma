@@ -36,6 +36,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { OrderHistoryTimeline } from './OrderHistoryTimeline';
 import { Order, OrderStatus, CashRegisterSession } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 import { exportOrdersListToExcel, exportOrdersListToTxt } from '../../utils/exportUtils';
@@ -1484,10 +1485,15 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 type="button"
                 onClick={() => setSelectedOrder(null)}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                aria-label="Fechar detalhes do pedido"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            <OrderHistoryTimeline
+              history={(orders.find((o) => o.id === selectedOrder.id) || selectedOrder).history}
+            />
 
             {/* Customer & Address Details */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

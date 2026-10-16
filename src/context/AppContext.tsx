@@ -49,6 +49,7 @@ import {
   BackupDataPayload,
   generateBackupPayload,
 } from '../utils/backupUtils';
+import { appendHistory, createHistoryEntry, diffOrder, mergeOrderHistory, withHistory } from '../utils/orderHistory';
 
 /**
  * Recursively cleans an object to remove any keys with 'undefined' values,
@@ -174,6 +175,8 @@ function mergeOrderHelper(existing: Order, incoming: Order): Order {
     closedSessionId: incoming.closedSessionId || existing.closedSessionId,
     closedSessionName: incoming.closedSessionName || existing.closedSessionName,
     updatedAt: incoming.updatedAt || existing.updatedAt || new Date().toISOString(),
+    // Supabase rows carry no history; union keeps every entry from any source.
+    history: mergeOrderHistory(existing.history, incoming.history),
   };
 }
 
@@ -3448,6 +3451,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'Pendente',
       paymentMethod: orderData.paymentMethod,
       notes: orderData.notes,
+      history: [createHistoryEntry(orderData.customer.name || 'Cliente', 'Pedido criado na loja')],
     };
 
     const supabase = getSupabaseClient();
@@ -3641,6 +3645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes: orderData.notes || 'Pedido manual registrado via painel ERP.',
       clearedManuallyAt: (isPaid || currentStatus === 'Pago Parcial') ? new Date().toLocaleString('pt-BR') : undefined,
       clearedBy: (isPaid || currentStatus === 'Pago Parcial') ? operator : undefined,
+      history: [createHistoryEntry(operator, `Pedido manual criado (status: ${currentStatus})`)],
     };
 
     // Update orders in state and localStorage
@@ -3754,9 +3759,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? updatedData.clearedBy
             : (isPaidStatus ? (order.clearedBy || currentUser?.name || 'Administrador') : order.clearedBy);
 
-          updatedOrderObj = {
+          const { history: _ignoredHistory, ...updatedFields } = updatedData;
+          const editedOrder: Order = {
             ...order,
-            ...updatedData,
+            ...updatedFields,
             status: effectiveStatus,
             clearedManuallyAt: resolvedClearedAt,
             clearedBy: resolvedClearedBy,
@@ -3776,6 +3782,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             total: Number(total.toFixed(2)),
             updatedAt: isoTimestamp,
           };
+          updatedOrderObj = withHistory(order, editedOrder, currentUser?.name || 'Administrador', 'Pedido editado');
           return updatedOrderObj;
         }
         return order;
@@ -3870,7 +3877,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (order.id === orderId) {
           const finalPaid = isPaid ? (order.paidAmount !== undefined && order.paidAmount > 0 ? order.paidAmount : order.total) : order.paidAmount;
           const finalRemaining = isPaid ? Math.max(0, order.total - (finalPaid || order.total)) : order.remainingAmount;
-          return {
+          return withHistory(order, {
             ...order,
             status,
             paidAmount: finalPaid,
@@ -3879,7 +3886,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             clearedBy: isPaid ? (order.clearedBy || operator) : order.clearedBy,
             trackingCode: trackingCode !== undefined ? trackingCode : order.trackingCode,
             updatedAt: isoTimestamp,
-          };
+          }, operator, 'Status alterado');
         }
         return order;
       });
@@ -3945,7 +3952,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (order.id === orderId) {
           const finalPaid = paidAmount !== undefined ? paidAmount : (status === 'Pago' || status === 'Entregue' || status === 'Enviado' ? order.total : order.paidAmount);
           const finalRemaining = remainingAmount !== undefined ? remainingAmount : (finalPaid !== undefined ? Math.max(0, order.total - finalPaid) : order.remainingAmount);
-          return {
+          const cleared: Order = {
             ...order,
             status,
             paidAmount: finalPaid,
@@ -3956,6 +3963,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             notes: noteText,
             updatedAt: isoTimestamp,
           };
+          // A baixa is always logged, even when it only re-confirms the same values.
+          return appendHistory(cleared, createHistoryEntry(operator, 'Baixa manual registrada', diffOrder(order, cleared)), order.history);
         }
         return order;
       });
@@ -4187,18 +4196,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 1. Mark orders as closed
     const activeOrderIds = new Set(activeOrders.map((o) => o.id));
+    const closedBy = currentUser?.name || 'Administrador';
     const updatedOrders = orders.map((o) => {
       if (activeOrderIds.has(o.id)) {
-        return {
-          ...o,
-          isClosed: true,
-          closedAt: now.toISOString(),
-          closedSessionId: sessionId,
-          closedSessionName: sessionName,
-        };
+        return withHistory(
+          o,
+          {
+            ...o,
+            isClosed: true,
+            closedAt: now.toISOString(),
+            closedSessionId: sessionId,
+            closedSessionName: sessionName,
+          },
+          closedBy,
+          'Caixa fechado'
+        );
       }
       return o;
     });
+    const historyById = new Map(updatedOrders.map((o) => [o.id, o.history] as const));
 
     setOrders(updatedOrders);
     localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
@@ -4230,6 +4246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             closedAt: now.toISOString(),
             closedSessionId: sessionId,
             closedSessionName: sessionName,
+            history: cleanUndefinedForFirestore(historyById.get(o.id) || []),
           },
           { merge: true }
         ).catch(() => {});
@@ -4254,13 +4271,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedOrders = orders.map((o) => {
       if (o.id === orderId) {
         prevSessionId = o.closedSessionId;
-        targetOrder = {
-          ...o,
-          isClosed: false,
-          closedAt: undefined,
-          closedSessionId: undefined,
-          closedSessionName: undefined,
-        };
+        targetOrder = withHistory(
+          o,
+          {
+            ...o,
+            isClosed: false,
+            closedAt: undefined,
+            closedSessionId: undefined,
+            closedSessionName: undefined,
+          },
+          currentUser?.name || 'Administrador',
+          'Pedido reaberto no caixa ativo'
+        );
         return targetOrder;
       }
       return o;
@@ -4305,7 +4327,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         await setDoc(
           doc(db, 'orders', orderId),
-          { isClosed: false, closedAt: null, closedSessionId: null, closedSessionName: null },
+          {
+            isClosed: false,
+            closedAt: null,
+            closedSessionId: null,
+            closedSessionName: null,
+            history: cleanUndefinedForFirestore(targetOrder.history || []),
+          },
           { merge: true }
         ).catch(() => {});
       } catch (e) {
@@ -4350,7 +4378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newStatus: OrderStatus = params.status || (newRemainingAmount <= 0 ? 'Pago' : 'Pago Parcial');
     const deltaPaid = newPaidAmount - previousPaid;
 
-    const updatedOrderObj: Order = {
+    const clearedClosedOrder: Order = {
       ...targetOrder,
       isClosed: true,
       status: newStatus,
@@ -4362,6 +4390,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       clearedBy: operator,
       updatedAt: isoTimestamp,
     };
+    const updatedOrderObj = appendHistory(
+      clearedClosedOrder,
+      createHistoryEntry(operator, 'Baixa registrada (caixa fechado)', diffOrder(targetOrder, clearedClosedOrder)),
+      targetOrder.history
+    );
 
     // 1. Update orders in state and localStorage
     const updatedOrders = orders.map((o) => (o.id === orderId ? updatedOrderObj : o));
@@ -4459,14 +4492,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       : (!isOrderPaid && targetOrder.status !== 'Cancelado' ? targetOrder.total : 0);
 
     // 1. Mark order as closed and attach to session
-    const updatedOrderObj: Order = {
-      ...targetOrder,
-      isClosed: true,
-      closedAt: targetSession.closedAt || isoTimestamp,
-      closedSessionId: targetSession.id,
-      closedSessionName: targetSession.name,
-      updatedAt: isoTimestamp,
-    };
+    const updatedOrderObj = withHistory(
+      targetOrder,
+      {
+        ...targetOrder,
+        isClosed: true,
+        closedAt: targetSession.closedAt || isoTimestamp,
+        closedSessionId: targetSession.id,
+        closedSessionName: targetSession.name,
+        updatedAt: isoTimestamp,
+      },
+      currentUser?.name || 'Administrador',
+      'Pedido movido para caixa fechado'
+    );
 
     const updatedOrders = orders.map((o) => (o.id === orderId ? updatedOrderObj : o));
     setOrders(updatedOrders);
@@ -4554,18 +4592,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const sessionOrderIds = new Set(session.orderIds || []);
+    const reopenedBy = currentUser?.name || 'Administrador';
     const updatedOrders = orders.map((o) => {
       if (sessionOrderIds.has(o.id) || o.closedSessionId === sessionId) {
-        return {
-          ...o,
-          isClosed: false,
-          closedAt: undefined,
-          closedSessionId: undefined,
-          closedSessionName: undefined,
-        };
+        return withHistory(
+          o,
+          {
+            ...o,
+            isClosed: false,
+            closedAt: undefined,
+            closedSessionId: undefined,
+            closedSessionName: undefined,
+          },
+          reopenedBy,
+          `Caixa reaberto (${session.name})`
+        );
       }
       return o;
     });
+    const historyById = new Map(updatedOrders.map((o) => [o.id, o.history] as const));
 
     setOrders(updatedOrders);
     localStorage.setItem('peptide_orders', JSON.stringify(updatedOrders));
@@ -4586,7 +4631,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       for (const ordId of Array.from(sessionOrderIds)) {
         await setDoc(
           doc(db, 'orders', String(ordId)),
-          { isClosed: false, closedAt: null, closedSessionId: null, closedSessionName: null },
+          {
+            isClosed: false,
+            closedAt: null,
+            closedSessionId: null,
+            closedSessionName: null,
+            history: cleanUndefinedForFirestore(historyById.get(String(ordId)) || []),
+          },
           { merge: true }
         ).catch(() => {});
       }
