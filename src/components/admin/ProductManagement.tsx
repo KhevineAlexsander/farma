@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   ArrowRight,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
@@ -40,6 +41,7 @@ import {
   normalizeDosage,
 } from '../../utils/productDeduplication';
 import { DatabaseBackupModal } from './DatabaseBackupModal';
+import { exportProductsReportToExcel } from '../../utils/exportUtils';
 
 export const ProductManagement: React.FC = () => {
   const { 
@@ -61,8 +63,23 @@ export const ProductManagement: React.FC = () => {
     deleteProductRequest,
     getProductRequestShareUrl,
     setCurrentView,
-    showToast
+    showToast,
+    storeSettings
   } = useApp();
+
+  const handleExportProductsReport = () => {
+    if (products.length === 0) {
+      showToast('Nenhum produto cadastrado para exportar.');
+      return;
+    }
+    try {
+      const filename = exportProductsReportToExcel(products, orders, storeSettings?.storeName || undefined);
+      showToast(`Relatório de ${products.length} produtos exportado: ${filename}`);
+    } catch (e) {
+      console.error('Error exporting products report:', e);
+      showToast('Não foi possível gerar o Excel. Tente novamente.');
+    }
+  };
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
@@ -410,10 +427,11 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
   return (
     <div className="space-y-6">
       {/* Header Controls: Search, Category Filter, and Add Button */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-3">
+      {/* Filters on one line, actions on the next: the action list is long and must wrap, never push past the screen */}
+      <div className="flex flex-col gap-4 min-w-0">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
           {/* Search */}
-          <div className="relative w-64">
+          <div className="relative w-full sm:w-64">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -476,8 +494,8 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
           </div>
 
           {/* Database Sync Status Indicator */}
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-xs">
-            <span className="relative flex h-2 w-2">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-xs min-w-0">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
@@ -488,7 +506,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
         </div>
 
         {/* Add Product Buttons: Peptides and Other Products with Photo */}
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0">
           {isMasterAdmin && (
             <button
               onClick={async () => {
@@ -606,6 +624,16 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               </button>
             </>
           )}
+
+          <button
+            type="button"
+            onClick={handleExportProductsReport}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-colors cursor-pointer"
+            title="Baixar planilha Excel com todos os produtos: preços, custo, margem, estoque e vendas"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-400" aria-hidden="true" />
+            <span>Relatório Excel</span>
+          </button>
 
           <button
             onClick={openNewPeptideModal}

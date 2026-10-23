@@ -226,10 +226,11 @@ export const AdminDashboard: React.FC = () => {
       {/* Top Admin App Header */}
       <header className="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16 sm:h-20">
+          {/* Wraps instead of overflowing: actions drop to a second line on narrow screens */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 min-h-16 sm:min-h-20">
             
             {/* Brand Logo with Admin Tag */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <DnaLogo size="sm" />
               <div className="hidden sm:flex items-center gap-2 pl-3 border-l border-slate-700">
                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase shadow-xs ${
@@ -239,12 +240,12 @@ export const AdminDashboard: React.FC = () => {
                 }`}>
                   {isMasterAdmin ? 'ADM MASTER' : 'STAFF ERP'}
                 </span>
-                <span className="text-xs text-slate-400 font-semibold font-tech">PAINEL ADMINISTRATIVO</span>
+                <span className="hidden lg:inline text-xs text-slate-400 font-semibold font-tech whitespace-nowrap">PAINEL ADMINISTRATIVO</span>
               </div>
             </div>
 
             {/* Right Header Actions */}
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center justify-end gap-2 min-w-0 [&>button]:whitespace-nowrap">
               {/* Cashier & Purchases Suspension Button (Exclusivo Adm Master) */}
               {isMasterAdmin && (
                 <button
@@ -263,21 +264,21 @@ export const AdminDashboard: React.FC = () => {
                   {isPurchasesSuspended ? (
                     <>
                       <Lock className="w-3.5 h-3.5 text-amber-400" />
-                      <span className="hidden sm:inline">Compras Suspensas</span>
-                      <span className="sm:hidden">Caixa Fechando</span>
+                      <span className="hidden xl:inline">Compras Suspensas</span>
+                      <span className="xl:hidden">Caixa Fechando</span>
                     </>
                   ) : (
                     <>
-                      <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                      <span className="hidden sm:inline">Loja Ativa • Suspender Compras</span>
-                      <span className="sm:hidden">Suspender</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
+                      <span className="hidden xl:inline">Loja Ativa • Suspender Compras</span>
+                      <span className="xl:hidden">Suspender</span>
                     </>
                   )}
                 </button>
               )}
 
               {/* Automatic Real-Time Sync Indicator */}
-              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-xs">
+              <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-semibold shadow-xs whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                 <span>Firestore Conectado</span>
               </div>
@@ -290,8 +291,8 @@ export const AdminDashboard: React.FC = () => {
                   title="Backup e Restauração de Produtos e Pedidos no Banco de Dados (Exclusivo ADM Master)"
                 >
                   <Database className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="hidden sm:inline">Backup & Restaurar</span>
-                  <span className="sm:hidden">Backup</span>
+                  <span className="hidden xl:inline">Backup & Restaurar</span>
+                  <span className="xl:hidden">Backup</span>
                 </button>
               )}
 
@@ -302,8 +303,8 @@ export const AdminDashboard: React.FC = () => {
                   title="Abrir formulário onde o dono solicita cadastro de produtos"
                 >
                   <FilePlus2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="hidden sm:inline">Pedido de Cadastro (Link)</span>
-                  <span className="sm:hidden">Cadastro</span>
+                  <span className="hidden xl:inline">Pedido de Cadastro (Link)</span>
+                  <span className="xl:hidden">Cadastro</span>
                 </button>
               )}
 
@@ -312,20 +313,21 @@ export const AdminDashboard: React.FC = () => {
                 className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 text-xs font-bold flex items-center gap-1.5 transition-colors border border-slate-700/80 cursor-pointer"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Ver Loja Virtual</span>
-                <span className="sm:hidden">Loja</span>
+                <span className="hidden xl:inline">Ver Loja Virtual</span>
+                <span className="xl:hidden">Loja</span>
               </button>
 
               <button
                 onClick={() => logoutUser()}
                 className="px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1.5 transition-colors border border-red-500/20 cursor-pointer"
                 title="Sair do painel com segurança"
+                aria-label="Sair do painel"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Sair</span>
               </button>
 
-              <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+              <div className="flex items-center gap-2 pl-2 border-l border-slate-800 shrink-0">
                 {currentUser?.photoURL ? (
                   <img
                     src={currentUser.photoURL}
@@ -359,13 +361,19 @@ export const AdminDashboard: React.FC = () => {
 
         {/* Tab Navigation Ribbon */}
         <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 border-t border-slate-800/60">
-          <div className="flex space-x-1 sm:space-x-3 overflow-x-auto admin-nav-scrollbar py-1.5 px-1 scroll-smooth">
+          {/* Phones: one scrollable row. md+: tabs wrap so none is ever cut off at the edge. */}
+          <div className="flex gap-1 sm:gap-2 overflow-x-auto md:overflow-visible md:flex-wrap admin-nav-scrollbar py-1.5 px-1 scroll-smooth">
             {visibleTabs.map((tab) => {
               const isActive = activeTab === tab.id;
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={(e) => {
+                    setActiveTab(tab.id as any);
+                    e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                  }}
                   className={`flex items-center gap-2 py-2.5 px-3.5 sm:px-3 text-xs sm:text-sm font-semibold transition-all relative whitespace-nowrap cursor-pointer rounded-xl shrink-0 ${
                     isActive ? 'text-cyan-400 font-bold bg-slate-800/60' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
                   }`}

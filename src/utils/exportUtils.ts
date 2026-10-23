@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Order } from '../types';
+import { Order, Product } from '../types';
 
 export interface ExportSalesReportOptions {
   orders: Order[];
@@ -773,6 +773,165 @@ export function exportCashFlowToExcel(options: ExportCashFlowOptions) {
   XLSX.utils.book_append_sheet(wb, wsTx, 'Extrato Completo');
 
   const filename = `controle_de_caixa_${dateStr}.xlsx`;
+  XLSX.writeFile(wb, filename);
+  return filename;
+}
+
+export const LOW_STOCK_THRESHOLD = 5;
+
+const round2 = (n: number) => Number((n || 0).toFixed(2));
+
+function stockStatus(stock: number): string {
+  if (stock <= 0) return 'Sem estoque';
+  if (stock <= LOW_STOCK_THRESHOLD) return 'Estoque baixo';
+  return 'OK';
+}
+
+/**
+ * Product control report (.xlsx): full product list with prices, cost, margin,
+ * stock value and units sold, plus a summary sheet and a per-category sheet.
+ */
+export function exportProductsReportToExcel(
+  products: Product[],
+  orders: Order[] = [],
+  storeName: string = 'Glow Slim Peptide Imports'
+) {
+  const wb = XLSX.utils.book_new();
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pt-BR').replace(/\//g, '-');
+  const timeStr = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+
+  // Units sold and revenue per product, ignoring cancelled orders.
+  // Older orders may reference a product id that changed (catalog dedup), so fall back to name + dosage.
+  const nameKey = (name?: string, dosage?: string) =>
+    `${(name || '').trim().toLowerCase()}|${(dosage || '').replace(/\s+/g, '').toLowerCase()}`;
+  const productIds = new Set(products.map((p) => p.id));
+  const idByName = new Map(products.map((p) => [nameKey(p.name, p.dosage), p.id] as const));
+  const sold = new Map<string, { qty: number; revenue: number }>();
+  for (const o of orders) {
+    if (o.status === 'Cancelado') continue;
+    for (const it of o.items || []) {
+      const rawId = it.product?.id;
+      const id = rawId && productIds.has(rawId) ? rawId : idByName.get(nameKey(it.product?.name, it.product?.dosage));
+      if (!id) continue;
+      const qty = it.quantity || 1;
+      const prev = sold.get(id) || { qty: 0, revenue: 0 };
+      sold.set(id, { qty: prev.qty + qty, revenue: prev.revenue + (it.product?.price || 0) * qty });
+    }
+  }
+
+  const sorted = [...products].sort(
+    (a, b) => (a.category || '').localeCompare(b.category || '', 'pt-BR') || (a.name || '').localeCompare(b.name || '', 'pt-BR')
+  );
+
+  const productRows = sorted.map((p) => {
+    const price = p.price || 0;
+    const cost = p.costPrice || 0;
+    const stock = p.stock || 0;
+    const margin = price - cost;
+    const s = sold.get(p.id) || { qty: 0, revenue: 0 };
+    return {
+      'Produto': p.name || '',
+      'Dosagem': p.dosage || '',
+      'Categoria': p.category || '',
+      'Preço de Venda (R$)': round2(price),
+      'Preço "De" (R$)': p.originalPrice ? round2(p.originalPrice) : '',
+      'Custo (R$)': round2(cost),
+      'Margem (R$)': round2(margin),
+      'Margem (%)': price > 0 ? round2((margin / price) * 100) : 0,
+      'Estoque (un.)': stock,
+      'Situação do Estoque': stockStatus(stock),
+      'Valor em Estoque - Custo (R$)': round2(stock * cost),
+      'Valor em Estoque - Venda (R$)': round2(stock * price),
+      'Lucro Potencial do Estoque (R$)': round2(stock * margin),
+      'Unidades Vendidas': s.qty,
+      'Faturamento do Produto (R$)': round2(s.revenue),
+      'Em Destaque': p.featured ? 'Sim' : 'Não',
+      'Em Promoção': p.isPromotion ? 'Sim' : 'Não',
+      'Desconto Promo (%)': p.isPromotion && p.promotionDiscount ? p.promotionDiscount : '',
+      'Pureza': p.purity || '',
+      'Armazenamento': p.storage || '',
+      'ID': p.id,
+    };
+  });
+
+  const wsProducts = XLSX.utils.json_to_sheet(productRows);
+  wsProducts['!cols'] = [
+    { wch: 30 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 12 },
+    { wch: 11 }, { wch: 12 }, { wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 24 }, { wch: 16 },
+    { wch: 22 }, { wch: 12 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 22 }, { wch: 22 },
+  ];
+  wsProducts['!autofilter'] = { ref: `A1:U${productRows.length + 1}` };
+
+  // Per-category totals
+  const byCategory = new Map<string, { count: number; units: number; costValue: number; saleValue: number; sold: number }>();
+  for (const p of products) {
+    const key = p.category || 'Sem categoria';
+    const c = byCategory.get(key) || { count: 0, units: 0, costValue: 0, saleValue: 0, sold: 0 };
+    const stock = p.stock || 0;
+    byCategory.set(key, {
+      count: c.count + 1,
+      units: c.units + stock,
+      costValue: c.costValue + stock * (p.costPrice || 0),
+      saleValue: c.saleValue + stock * (p.price || 0),
+      sold: c.sold + (sold.get(p.id)?.qty || 0),
+    });
+  }
+  const categoryRows = Array.from(byCategory.entries())
+    .sort((a, b) => a[0].localeCompare(b[0], 'pt-BR'))
+    .map(([category, c]) => ({
+      'Categoria': category,
+      'Produtos': c.count,
+      'Unidades em Estoque': c.units,
+      'Valor em Estoque - Custo (R$)': round2(c.costValue),
+      'Valor em Estoque - Venda (R$)': round2(c.saleValue),
+      'Lucro Potencial (R$)': round2(c.saleValue - c.costValue),
+      'Unidades Vendidas': c.sold,
+    }));
+  const wsCategories = XLSX.utils.json_to_sheet(categoryRows);
+  wsCategories['!cols'] = [{ wch: 20 }, { wch: 10 }, { wch: 18 }, { wch: 26 }, { wch: 26 }, { wch: 20 }, { wch: 16 }];
+
+  // Summary
+  const totals = productRows.reduce(
+    (acc, r) => ({
+      units: acc.units + (r['Estoque (un.)'] as number),
+      cost: acc.cost + (r['Valor em Estoque - Custo (R$)'] as number),
+      sale: acc.sale + (r['Valor em Estoque - Venda (R$)'] as number),
+    }),
+    { units: 0, cost: 0, sale: 0 }
+  );
+  const outOfStock = products.filter((p) => (p.stock || 0) <= 0);
+  const lowStock = products.filter((p) => (p.stock || 0) > 0 && (p.stock || 0) <= LOW_STOCK_THRESHOLD);
+  const listNames = (list: Product[]) => list.map((p) => `${p.name}${p.dosage ? ` ${p.dosage}` : ''}`).join(', ') || '—';
+
+  const summaryRows: (string | number)[][] = [
+    [`Relatório de Produtos - ${storeName}`],
+    ['Gerado em', now.toLocaleString('pt-BR')],
+    [],
+    ['Total de produtos cadastrados', products.length],
+    ['Unidades em estoque', totals.units],
+    ['Valor do estoque a preço de custo (R$)', round2(totals.cost)],
+    ['Valor do estoque a preço de venda (R$)', round2(totals.sale)],
+    ['Lucro potencial do estoque (R$)', round2(totals.sale - totals.cost)],
+    [],
+    ['Produtos sem estoque', outOfStock.length],
+    ['Quais', listNames(outOfStock)],
+    [`Produtos com estoque baixo (até ${LOW_STOCK_THRESHOLD} un.)`, lowStock.length],
+    ['Quais', listNames(lowStock)],
+    [],
+    ['Produtos em promoção', products.filter((p) => p.isPromotion).length],
+    ['Produtos em destaque', products.filter((p) => p.featured).length],
+    [],
+    ['Unidades vendidas e faturamento por produto consideram todos os pedidos, exceto cancelados.'],
+  ];
+  const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+  wsSummary['!cols'] = [{ wch: 44 }, { wch: 70 }];
+
+  XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo');
+  XLSX.utils.book_append_sheet(wb, wsProducts, 'Produtos');
+  XLSX.utils.book_append_sheet(wb, wsCategories, 'Por Categoria');
+
+  const filename = `relatorio_produtos_${dateStr}_${timeStr}.xlsx`;
   XLSX.writeFile(wb, filename);
   return filename;
 }
