@@ -46,12 +46,14 @@ import {
   Database,
   ChevronDown,
   SlidersHorizontal,
+  Printer,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus, CartItem, Product } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 import { DatabaseBackupModal } from './DatabaseBackupModal';
 import { OrderHistoryTimeline } from './OrderHistoryTimeline';
+import { ThermalPrintModal } from './ThermalPrintModal';
 import {
   exportOrdersListToExcel,
   exportOrdersListToTxt,
@@ -125,7 +127,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     }
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const menuHeight = 310;
+    const menuHeight = 450;
     const showAbove = rect.bottom + menuHeight > window.innerHeight && rect.top > menuHeight;
 
     setActiveMenuOrder(order);
@@ -780,6 +782,9 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
   const [summaryOrder, setSummaryOrder] = useState<Order | null>(null);
   const [summaryWhatsAppPhone, setSummaryWhatsAppPhone] = useState('');
   const [summaryCopied, setSummaryCopied] = useState(false);
+
+  // Impressão térmica (cupom do pedido)
+  const [printOrder, setPrintOrder] = useState<Order | null>(null);
 
   // WhatsApp Debt Collection (Cobrança de Pagamento Parcial & Vencimento) Modal State
   const [chargeOrder, setChargeOrder] = useState<Order | null>(null);
@@ -3091,6 +3096,14 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                   <span>Relatório WhatsApp</span>
                 </button>
                 <button
+                  onClick={() => setPrintOrder(selectedOrder)}
+                  className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-md cursor-pointer transition-colors"
+                  title="Imprimir cupom do pedido na impressora térmica"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>Imprimir</span>
+                </button>
+                <button
                   onClick={() => handleOpenDeleteModal(selectedOrder)}
                   className="px-3 py-1.5 rounded-xl bg-red-500/15 hover:bg-red-600 text-red-400 hover:text-white text-xs font-bold flex items-center gap-1 transition-all border border-red-500/30 cursor-pointer"
                   title="Excluir este pedido definitivamente (requer senha 8817)"
@@ -5073,6 +5086,11 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
         </div>
       )}
 
+      {/* Modal: Impressão do Pedido em Impressora Térmica */}
+      {printOrder && (
+        <ThermalPrintModal order={printOrder} onClose={() => setPrintOrder(null)} />
+      )}
+
       {/* Modal: Alerta de Vencimento & Cobrança WhatsApp (Pago Parcial / Pendente) */}
       {chargeOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
@@ -5841,6 +5859,25 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                 <div className="flex-1">
                   <span className="font-bold block text-slate-200 group-hover:text-teal-300">Relatório WhatsApp</span>
                   <span className="text-[10px] text-slate-500 block">Resumo formatado em texto</span>
+                </div>
+              </button>
+
+              {/* Imprimir (Impressora Térmica) */}
+              <button
+                type="button"
+                onClick={() => {
+                  const o = activeMenuOrder;
+                  handleCloseMenu();
+                  setPrintOrder(o);
+                }}
+                className="w-full px-3.5 py-2 flex items-center gap-2.5 hover:bg-blue-950/50 hover:text-blue-300 text-left transition-colors cursor-pointer group"
+              >
+                <div className="p-1 rounded-lg bg-blue-500/15 text-blue-400 group-hover:bg-blue-500/25 shrink-0 transition-colors">
+                  <Printer className="w-4 h-4" />
+                </div>
+                <div className="flex-1">
+                  <span className="font-bold block text-slate-200 group-hover:text-blue-300">Imprimir Pedido</span>
+                  <span className="text-[10px] text-slate-500 block">Cupom p/ impressora térmica</span>
                 </div>
               </button>
             </div>
