@@ -64,7 +64,7 @@ export function exportSalesReportToExcel(options: ExportSalesReportOptions) {
     metrics,
     timeFilterLabel,
     statusFilterLabel,
-    storeName = 'Glow Slim Peptide Imports',
+    storeName = 'Glow Imports Farma',
   } = options;
 
   const wb = XLSX.utils.book_new();
@@ -309,7 +309,7 @@ export function exportSalesReportToTxt(options: ExportSalesReportOptions) {
     metrics,
     timeFilterLabel,
     statusFilterLabel,
-    storeName = 'Glow Slim Peptide Imports',
+    storeName = 'Glow Imports Farma',
   } = options;
 
   const nowFormatted = new Date().toLocaleString('pt-BR');
@@ -483,7 +483,7 @@ export function exportSalesReportToTxt(options: ExportSalesReportOptions) {
 export function exportOrdersListToExcel(
   orders: Order[],
   title: string = 'Pedidos',
-  storeName: string = 'Glow Slim Peptide Imports'
+  storeName: string = 'Glow Imports Farma'
 ) {
   const wb = XLSX.utils.book_new();
   const dateStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
@@ -576,7 +576,7 @@ export function exportOrdersListToExcel(
 export function exportOrdersListToTxt(
   orders: Order[],
   title: string = 'Pedidos',
-  storeName: string = 'Glow Slim Peptide Imports'
+  storeName: string = 'Glow Imports Farma'
 ) {
   const line = '═'.repeat(80);
   const subline = '─'.repeat(80);
@@ -698,7 +698,7 @@ export interface ExportCashFlowOptions {
 export function exportCashFlowToExcel(options: ExportCashFlowOptions) {
   const {
     periodLabel,
-    storeName = 'Glow Slim Peptide Imports',
+    storeName = 'Glow Imports Farma',
     metrics,
     expenses,
     transactions,
@@ -794,7 +794,7 @@ function stockStatus(stock: number): string {
 export function exportProductsReportToExcel(
   products: Product[],
   orders: Order[] = [],
-  storeName: string = 'Glow Slim Peptide Imports'
+  storeName: string = 'Glow Imports Farma'
 ) {
   const wb = XLSX.utils.book_new();
   const now = new Date();

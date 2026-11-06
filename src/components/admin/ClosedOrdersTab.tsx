@@ -101,7 +101,7 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
   };
 
   const generateOrderSummaryText = (order: Order): string => {
-    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
+    const brand = storeSettings.storeName || 'GLOW IMPORTS FARMA';
     const customerName = order.customer?.name || 'Cliente';
     const totalItems = (order.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
     const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
@@ -559,7 +559,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
     const filename = exportOrdersListToExcel(
       filteredClosedOrders,
       `Relatório de Pedidos Fechados - ${sessionLabel}`,
-      storeSettings?.storeName || 'Glow Slim Peptide Imports'
+      storeSettings?.storeName || 'Glow Imports Farma'
     );
     showToast(`📊 Planilha Excel baixada com sucesso: ${filename}`);
   };
@@ -574,7 +574,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
     const filename = exportOrdersListToTxt(
       filteredClosedOrders,
       `Relatório de Pedidos Fechados - ${sessionLabel}`,
-      storeSettings?.storeName || 'Glow Slim Peptide Imports'
+      storeSettings?.storeName || 'Glow Imports Farma'
     );
     showToast(`📄 Relatório TXT baixado com sucesso: ${filename}`);
   };
@@ -1168,7 +1168,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                       const cleanPhone = (order.customer?.phone || '').replace(/\D/g, '');
 
                       const chargeMsg = encodeURIComponent(
-                        `Olá, ${order.customer?.name || 'Cliente'}! Tudo bem? Passando para lembrar sobre o saldo pendente de R$ ${remaining.toFixed(2).replace('.', ',')} referente ao seu pedido ${order.orderNumber} na ${storeSettings?.storeName || 'Glow Slim Peptide Imports'}. Qualquer dúvida estamos à disposição!`
+                        `Olá, ${order.customer?.name || 'Cliente'}! Tudo bem? Passando para lembrar sobre o saldo pendente de R$ ${remaining.toFixed(2).replace('.', ',')} referente ao seu pedido ${order.orderNumber} na ${storeSettings?.storeName || 'Glow Imports Farma'}. Qualquer dúvida estamos à disposição!`
                       );
 
                       return (

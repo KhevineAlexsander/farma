@@ -74,6 +74,27 @@ function cleanUndefinedForFirestore<T>(data: T): T {
   return data;
 }
 
+const BRAND_NAME = 'Glow Imports Farma';
+const LEGACY_BRAND_RE = /glow\s*slim\s*peptide\s*imports|peptide\s*imports\s*farma|peptide\s*imports|glow\s*slim/gi;
+const LEGACY_URL_RE = /peptideimports\.vercel\.app|peptideimportsfarma\.com\.br/gi;
+
+/**
+ * Replaces legacy brand names/URLs still stored in the database settings
+ * (e.g. storeName "Peptide Imports Farma") with the current brand.
+ * Saving the settings tab once persists the new values.
+ */
+export function applyCurrentBrand(settings: StoreSettings): StoreSettings {
+  const out: Record<string, any> = { ...settings };
+  for (const [key, value] of Object.entries(out)) {
+    if (typeof value !== 'string' || value.includes('@')) continue;
+    let v = value.replace(LEGACY_URL_RE, 'glowfarma.vercel.app');
+    v = v.replace(LEGACY_BRAND_RE, (m) => (m === m.toUpperCase() ? BRAND_NAME.toUpperCase() : BRAND_NAME));
+    out[key] = v;
+  }
+  if (!out.storeName || !String(out.storeName).trim()) out.storeName = BRAND_NAME.toUpperCase();
+  return out as StoreSettings;
+}
+
 const BLACKLISTED_ORDER_DIGITS = ['7464', '9842', '9841', '9838', '9830'];
 
 /**
@@ -4897,6 +4918,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const brandedStoreSettings = React.useMemo(() => applyCurrentBrand(storeSettings), [storeSettings]);
+
   return (
     <AppContext.Provider
       value={{
@@ -4971,7 +4994,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         applyCouponCode,
         removeCoupon,
         couponDiscount,
-        storeSettings,
+        storeSettings: brandedStoreSettings,
         updateStoreSettings,
         toggleStorePurchasesSuspension,
         deliveryFee,

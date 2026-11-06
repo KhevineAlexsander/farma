@@ -29,7 +29,7 @@ export const LabelGeneratorModal: React.FC<LabelGeneratorModalProps> = ({ isOpen
   const [search, setSearch] = useState('');
   const [bulkQty, setBulkQty] = useState(String(DEFAULT_QTY));
   const [options, setOptions] = useState<LabelOptions>({
-    storeName: storeName || 'Peptide Imports',
+    storeName: storeName || 'Glow Imports Farma',
     subtitle: 'Premium Peptides',
     sideText: '99% Purity',
     footerText: 'Research Use Only',

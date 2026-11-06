@@ -919,7 +919,7 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
     dueDateVal?: string,
     pixKeyVal?: string
   ): string => {
-    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
+    const brand = storeSettings.storeName || 'GLOW IMPORTS FARMA';
     const customerName = order.customer?.name || 'Prezado(a) Cliente';
     const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
     const paidStr = (order.paidAmount || 0).toFixed(2).replace('.', ',');
@@ -1257,7 +1257,7 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
     const rawPhone = order.customer?.phone || '';
     const cleanPhone = rawPhone.replace(/\D/g, '');
     const phoneWithDDI = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
-    const text = encodeURIComponent(`Olá ${order.customer?.name || 'Cliente'}, referente ao seu pedido ${order.orderNumber} na ${storeSettings.storeName || 'Glow Slim Peptide Imports'}:`);
+    const text = encodeURIComponent(`Olá ${order.customer?.name || 'Cliente'}, referente ao seu pedido ${order.orderNumber} na ${storeSettings.storeName || 'Glow Imports Farma'}:`);
     return `https://wa.me/${phoneWithDDI}?text=${text}`;
   };
 
@@ -1440,7 +1440,7 @@ Aguardamos o envio do comprovante para baixa no sistema. Obrigado!`;
   };
 
   const generateOrderSummaryText = (order: Order): string => {
-    const brand = storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS';
+    const brand = storeSettings.storeName || 'GLOW IMPORTS FARMA';
     const customerName = order.customer?.name || 'Cliente';
     const totalItems = (order.items || []).reduce((s, i) => s + (i.quantity || 0), 0);
     const totalStr = (order.total || 0).toFixed(2).replace('.', ',');
@@ -1538,7 +1538,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
   const handleExportOrdersExcel = () => {
     try {
       const title = statusFilter === 'Todos' ? 'todos_pedidos' : statusFilter.toLowerCase().replace(/\s+/g, '_');
-      const filename = exportOrdersListToExcel(filteredOrders, title, storeSettings?.storeName || 'Glow Slim Peptide Imports');
+      const filename = exportOrdersListToExcel(filteredOrders, title, storeSettings?.storeName || 'Glow Imports Farma');
       showToast(`📊 Planilha Excel com ${filteredOrders.length} pedidos baixada: ${filename}`);
     } catch (err: any) {
       console.error(err);
@@ -1549,7 +1549,7 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
   const handleExportOrdersTxt = () => {
     try {
       const title = statusFilter === 'Todos' ? 'todos_pedidos' : statusFilter.toLowerCase().replace(/\s+/g, '_');
-      const filename = exportOrdersListToTxt(filteredOrders, title, storeSettings?.storeName || 'Glow Slim Peptide Imports');
+      const filename = exportOrdersListToTxt(filteredOrders, title, storeSettings?.storeName || 'Glow Imports Farma');
       showToast(`📄 Arquivo TXT com ${filteredOrders.length} pedidos baixado: ${filename}`);
     } catch (err: any) {
       console.error(err);

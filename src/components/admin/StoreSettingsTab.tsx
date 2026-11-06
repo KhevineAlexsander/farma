@@ -69,7 +69,7 @@ export const StoreSettingsTab: React.FC = () => {
   });
 
   const [formData, setFormData] = useState({
-    storeName: storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS',
+    storeName: storeSettings.storeName || 'GLOW IMPORTS FARMA',
     whatsappNumber: storeSettings.whatsappNumber || '5511993456789',
     whatsappDisplay: storeSettings.whatsappDisplay || '(11) 99345-6789',
     supportEmail: storeSettings.supportEmail || 'contato@peptideimports.com.br',
@@ -83,8 +83,8 @@ export const StoreSettingsTab: React.FC = () => {
     pickupAddress: storeSettings.pickupAddress || 'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
     pickupEstimatedTime: storeSettings.pickupEstimatedTime || 'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',
     couponsEnabled: storeSettings.couponsEnabled ?? true,
-    siteUrl: storeSettings.siteUrl || 'https://peptideimports.vercel.app',
-    vercelDomain: storeSettings.vercelDomain || 'peptideimports.vercel.app',
+    siteUrl: storeSettings.siteUrl || 'https://glowfarma.vercel.app',
+    vercelDomain: storeSettings.vercelDomain || 'glowfarma.vercel.app',
     customDomainNotes: storeSettings.customDomainNotes || '',
     purchasesSuspended: storeSettings.purchasesSuspended ?? false,
     suspensionTitle: storeSettings.suspensionTitle || 'Estamos Fechando o Caixa',
@@ -252,7 +252,7 @@ export const StoreSettingsTab: React.FC = () => {
                           handleChange('vercelDomain', clean);
                         } catch {}
                       }}
-                      placeholder="https://peptideimports.vercel.app ou https://seusite.com.br"
+                      placeholder="https://glowfarma.vercel.app ou https://seusite.com.br"
                       className="w-full pl-3.5 pr-4 py-2.5 bg-slate-950 border border-cyan-500/40 rounded-xl text-cyan-300 font-mono text-xs focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-500/50"
                     />
                   </div>
@@ -291,7 +291,7 @@ export const StoreSettingsTab: React.FC = () => {
                   type="text"
                   value={formData.vercelDomain}
                   onChange={(e) => handleChange('vercelDomain', e.target.value)}
-                  placeholder="Ex: peptideimports.vercel.app"
+                  placeholder="Ex: glowfarma.vercel.app"
                   className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 text-xs font-mono focus:outline-none focus:border-cyan-500"
                 />
               </div>
@@ -1024,7 +1024,7 @@ export const StoreSettingsTab: React.FC = () => {
             <div className="p-5 flex-1 overflow-y-auto bg-slate-950 font-mono text-xs text-slate-300 select-all space-y-1">
               <pre className="whitespace-pre-wrap text-emerald-300 leading-relaxed font-mono">
 {`-- ==============================================================================
--- GLOW SLIM PEPTIDE IMPORTS - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
+-- GLOW IMPORTS FARMA - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
 -- ==============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -1119,7 +1119,7 @@ CREATE TABLE IF NOT EXISTS public.financial_transactions (
 -- 6. TABELA DE CONFIGURAÇÕES DA LOJA
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id TEXT PRIMARY KEY DEFAULT 'config',
-  store_name TEXT NOT NULL DEFAULT 'GLOW SLIM PEPTIDE IMPORTS',
+  store_name TEXT NOT NULL DEFAULT 'GLOW IMPORTS FARMA',
   whatsapp_number TEXT NOT NULL DEFAULT '5511993456789',
   whatsapp_display TEXT NOT NULL DEFAULT '(11) 99345-6789',
   support_email TEXT NOT NULL DEFAULT 'contato@peptideimports.com.br',
@@ -1135,8 +1135,8 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
   pickup_address TEXT NOT NULL DEFAULT 'Av. Paulista, 1842 - Conjunto 114, Bela Vista, São Paulo - SP',
   pickup_estimated_time TEXT NOT NULL DEFAULT 'Pronto em 2 horas úteis',
   coupons_enabled BOOLEAN NOT NULL DEFAULT true,
-  site_url TEXT DEFAULT 'https://peptideimports.vercel.app',
-  vercel_domain TEXT DEFAULT 'peptideimports.vercel.app',
+  site_url TEXT DEFAULT 'https://glowfarma.vercel.app',
+  vercel_domain TEXT DEFAULT 'glowfarma.vercel.app',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

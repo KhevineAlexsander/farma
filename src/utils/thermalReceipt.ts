@@ -47,7 +47,7 @@ const row = (label: string, value: string, className = ''): string =>
  */
 export function buildThermalReceiptHtml(order: Order, options: ThermalReceiptOptions): string {
   const { paperWidth, storeSettings, printedBy } = options;
-  const storeName = storeSettings?.storeName || 'Glow Slim Peptide Imports';
+  const storeName = storeSettings?.storeName || 'Glow Imports Farma';
   const site = (storeSettings?.siteUrl || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
   const contactLines = [
     storeSettings?.whatsappDisplay ? `WhatsApp: ${storeSettings.whatsappDisplay}` : '',

@@ -1,5 +1,5 @@
 -- ==============================================================================
--- GLOW SLIM PEPTIDE IMPORTS - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
+-- GLOW IMPORTS FARMA - SCHEMA COMPLETO DO BANCO DE DADOS SUPABASE (POSTGRESQL)
 -- ==============================================================================
 -- Copie e cole este script integralmente no SQL Editor do seu Supabase Dashboard:
 -- https://supabase.com/dashboard/project/_/sql
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS public.financial_transactions (
 -- 7. TABELA DE CONFIGURAÇÕES DA LOJA
 CREATE TABLE IF NOT EXISTS public.store_settings (
   id TEXT PRIMARY KEY DEFAULT 'config',
-  store_name TEXT NOT NULL DEFAULT 'GLOW SLIM PEPTIDE IMPORTS',
+  store_name TEXT NOT NULL DEFAULT 'GLOW IMPORTS FARMA',
   whatsapp_number TEXT NOT NULL DEFAULT '5511993456789',
   whatsapp_display TEXT NOT NULL DEFAULT '(11) 99345-6789',
   support_email TEXT NOT NULL DEFAULT 'contato@peptideimports.com.br',
@@ -121,8 +121,8 @@ CREATE TABLE IF NOT EXISTS public.store_settings (
   pickup_address TEXT NOT NULL DEFAULT 'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
   pickup_estimated_time TEXT NOT NULL DEFAULT 'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',
   coupons_enabled BOOLEAN NOT NULL DEFAULT true,
-  site_url TEXT DEFAULT 'https://peptideimports.vercel.app',
-  vercel_domain TEXT DEFAULT 'peptideimports.vercel.app',
+  site_url TEXT DEFAULT 'https://glowfarma.vercel.app',
+  vercel_domain TEXT DEFAULT 'glowfarma.vercel.app',
   custom_domain_notes TEXT DEFAULT '',
   purchases_suspended BOOLEAN NOT NULL DEFAULT false,
   suspension_title TEXT DEFAULT 'Estamos Fechando o Caixa',
@@ -140,8 +140,8 @@ ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS due_date TEXT DEFAULT NULL;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS last_reminder_sent_at TIMESTAMPTZ DEFAULT NULL;
 ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS reminders_count INTEGER DEFAULT 0;
 
-ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS site_url TEXT DEFAULT 'https://peptideimports.vercel.app';
-ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS vercel_domain TEXT DEFAULT 'peptideimports.vercel.app';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS site_url TEXT DEFAULT 'https://glowfarma.vercel.app';
+ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS vercel_domain TEXT DEFAULT 'glowfarma.vercel.app';
 ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS custom_domain_notes TEXT DEFAULT '';
 ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS purchases_suspended BOOLEAN DEFAULT false;
 ALTER TABLE public.store_settings ADD COLUMN IF NOT EXISTS suspension_title TEXT DEFAULT 'Estamos Fechando o Caixa';
@@ -238,7 +238,7 @@ INSERT INTO public.store_settings (
 )
 VALUES (
   'config',
-  'GLOW SLIM PEPTIDE IMPORTS',
+  'GLOW IMPORTS FARMA',
   '5511993456789',
   '(11) 99345-6789',
   'contato@peptideimports.com.br',
@@ -254,8 +254,8 @@ VALUES (
   'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
   'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',
   true,
-  'https://peptideimports.vercel.app',
-  'peptideimports.vercel.app'
+  'https://glowfarma.vercel.app',
+  'glowfarma.vercel.app'
 )
 ON CONFLICT (id) DO UPDATE SET
   store_name = EXCLUDED.store_name,

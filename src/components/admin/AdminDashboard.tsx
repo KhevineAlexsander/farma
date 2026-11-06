@@ -594,7 +594,7 @@ export const AdminDashboard: React.FC = () => {
       {/* Admin Panel Footer */}
       <footer className="border-t border-slate-800/60 bg-slate-950/80 py-4 px-4 sm:px-8 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>GLOW SLIM ERP • Painel de Gestão Farmacêutica</span>
+          <span>GLOW IMPORTS ERP • Painel de Gestão Farmacêutica</span>
           <span>
             Sistema criado por{' '}
             <a

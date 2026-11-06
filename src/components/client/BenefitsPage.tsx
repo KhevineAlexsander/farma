@@ -694,7 +694,7 @@ export const BenefitsPage: React.FC = () => {
                 Página de <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-300">Benefícios & Protocolos</span>
               </h1>
               <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
-                Explore a ação celular, benefícios clínicos validados, dosagens recomendadas e pureza molecular (HPLC) de cada peptídeo da Glow Slim Peptide Imports.
+                Explore a ação celular, benefícios clínicos validados, dosagens recomendadas e pureza molecular (HPLC) de cada peptídeo da Glow Imports Farma.
               </p>
             </div>
 

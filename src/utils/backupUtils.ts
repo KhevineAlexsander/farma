@@ -98,7 +98,7 @@ export function generateBackupPayload(
 
   return {
     version: '2.0',
-    system: 'GLOW SLIM PEPTIDE IMPORTS ERP',
+    system: 'GLOW IMPORTS FARMA ERP',
     timestamp: now.toISOString(),
     dateFormatted,
     source: 'ADMIN_DASHBOARD_BACKUP',
@@ -115,7 +115,7 @@ export function generateBackupPayload(
     storeSettings: options?.storeSettings ? cleanObjectForStorage(options.storeSettings) : undefined,
     financialTransactions: options?.financialTransactions ? cleanObjectForStorage(options.financialTransactions) : undefined,
     metadata: {
-      appName: 'Glow Slim Peptide Imports',
+      appName: 'Glow Imports Farma',
       generatedAt: dateFormatted,
       exportedBy: options?.userEmail || 'Administrador Master',
     },
@@ -271,7 +271,7 @@ export function parseAndValidateBackupJson(rawText: string): BackupValidationRes
 
   const payload: BackupDataPayload = {
     version: parsed.version || '2.0',
-    system: parsed.system || 'GLOW SLIM PEPTIDE IMPORTS ERP',
+    system: parsed.system || 'GLOW IMPORTS FARMA ERP',
     timestamp: parsed.timestamp || new Date().toISOString(),
     dateFormatted: parsed.dateFormatted || new Date().toLocaleString('pt-BR'),
     source: parsed.source || 'RESTORED_BACKUP_FILE',

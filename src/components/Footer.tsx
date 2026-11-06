@@ -246,7 +246,7 @@ export const Footer: React.FC = () => {
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-slate-500 text-[11px] border-t border-slate-800/40 mt-2">
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-1 sm:gap-3 text-center sm:text-left">
             <p>
-              © {new Date().getFullYear()} GLOW SLIM PEPTIDE IMPORTS. Todos os direitos reservados.
+              © {new Date().getFullYear()} GLOW IMPORTS FARMA. Todos os direitos reservados.
             </p>
             <span className="hidden sm:inline text-slate-700">•</span>
             <p className="text-slate-400">

@@ -5,8 +5,8 @@ export const SEOHead: React.FC = () => {
   const { currentView, selectedProductDetail, storeSettings } = useApp();
 
   useEffect(() => {
-    const brandName = storeSettings.storeName || 'Glow Slim Peptide Imports';
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://peptideimportsfarma.com.br';
+    const brandName = storeSettings.storeName || 'Glow Imports Farma';
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://glowfarma.vercel.app';
 
     let title = `${brandName} | Peptídeos Importados de Alta Pureza`;
     let description = 'E-commerce e sistema de gestão completo para peptídeos importados de alta pureza com catálogo, carrinho e painel administrativo ERP.';

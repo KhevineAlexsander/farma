@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Paleta Glow Slim: as escalas usadas no app são remapeadas para as cores da marca
+/* Paleta Glow Imports Farma: as escalas usadas no app são remapeadas para as cores da marca
    (framboesa #b0476f, ameixa #753979, roxo #3f2971, pêssego #ec8f63, menta #bddac6). */
 @theme {
   --color-cyan-50: #faf5f7;

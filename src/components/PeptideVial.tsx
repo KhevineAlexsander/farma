@@ -192,12 +192,12 @@ export const PeptideVial: React.FC<PeptideVialProps> = ({
             y="11"
             textAnchor="middle"
             fill="#FFFFFF"
-            fontSize="5.2"
+            fontSize="4.4"
             fontWeight="bold"
             fontFamily="Space Grotesk, sans-serif"
-            letterSpacing="0.8"
+            letterSpacing="0.4"
           >
-            GLOW SLIM
+            GLOW IMPORTS
           </text>
           <text
             x="0"

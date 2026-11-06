@@ -264,8 +264,8 @@ export interface StoreSettings {
   pickupEstimatedTime: string; // Prazo para retirada (ex: "Pronto em 2 horas úteis")
   couponsEnabled?: boolean; // Habilitar ou desabilitar cupons no site
   // Domínio da Vercel / Domínio Personalizado
-  siteUrl?: string; // Ex: "https://peptideimports.vercel.app" ou "https://seusite.com.br"
-  vercelDomain?: string; // Ex: "peptideimports.vercel.app"
+  siteUrl?: string; // Ex: "https://glowfarma.vercel.app" ou "https://seusite.com.br"
+  vercelDomain?: string; // Ex: "glowfarma.vercel.app"
   customDomainNotes?: string;
   // Suspensão Temporária de Compras / Fechamento de Caixa
   purchasesSuspended?: boolean; // Se true, compras no site ficam temporariamente suspensas

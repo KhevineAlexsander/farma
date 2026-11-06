@@ -31,14 +31,14 @@ export const InfoModals: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-xl font-extrabold text-slate-900 font-tech">
-                  SOBRE A GLOW SLIM PEPTIDE IMPORTS
+                  SOBRE A GLOW IMPORTS FARMA
                 </h3>
                 <p className="text-xs text-slate-500">Excelência e Rigor Científico em Biotecnologia</p>
               </div>
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              A <strong>GLOW SLIM PEPTIDE IMPORTS</strong> nasceu com a missão de disponibilizar os mais puros e avançados peptídeos e bioreguladores sintéticos do mundo diretamente para o mercado nacional.
+              A <strong>GLOW IMPORTS FARMA</strong> nasceu com a missão de disponibilizar os mais puros e avançados peptídeos e bioreguladores sintéticos do mundo diretamente para o mercado nacional.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">

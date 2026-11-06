@@ -166,7 +166,7 @@ CEP: ${order.address?.zipCode || ''}`
       `• WhatsApp: ${customerPhone}`,
     ].join('\n');
 
-    const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'GLOW SLIM PEPTIDE IMPORTS'}*
+    const message = `🧬 *NOVO PEDIDO - ${storeSettings.storeName || 'GLOW IMPORTS FARMA'}*
 ────────────────────────
 Olá! Acabei de finalizar meu pedido no site.
 

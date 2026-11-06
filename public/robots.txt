@@ -1,5 +1,5 @@
-# robots.txt for Peptide Imports Farma
-# https://peptideimportsfarma.com.br
+# robots.txt for Glow Imports Farma
+# https://glowfarma.vercel.app
 
 User-agent: *
 Allow: /
@@ -16,4 +16,4 @@ Disallow: /?view=admin
 Disallow: /api/
 
 # Sitemap location
-Sitemap: https://peptideimportsfarma.com.br/sitemap.xml
+Sitemap: https://glowfarma.vercel.app/sitemap.xml

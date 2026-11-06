@@ -7,7 +7,7 @@ interface DnaLogoProps {
 }
 
 // Brand assets live in /public/brand (generated from the original Glow Slim logo, background removed).
-// Intrinsic sizes: logo-mark 256x193, logo-wordmark 720x168.
+// Intrinsic size: logo-mark 256x193.
 export const DnaLogo: React.FC<DnaLogoProps> = ({
   className = '',
   size = 'md',
@@ -20,18 +20,19 @@ export const DnaLogo: React.FC<DnaLogoProps> = ({
     xl: 'h-14',
   };
 
-  const wordmarkHeights = {
-    sm: 'h-6',
-    md: 'h-7 sm:h-8',
-    lg: 'h-10',
-    xl: 'h-12',
+  // Wordmark desenhado em texto (a imagem antiga trazia o nome anterior da marca).
+  const wordmarkSizes = {
+    sm: { main: 'text-[15px]', sub: 'text-[7px]' },
+    md: { main: 'text-[17px] sm:text-[20px]', sub: 'text-[8px] sm:text-[9px]' },
+    lg: { main: 'text-[26px]', sub: 'text-[11px]' },
+    xl: { main: 'text-[32px]', sub: 'text-[13px]' },
   };
 
   return (
     <div className={`flex items-center gap-2 select-none ${className}`}>
       <img
         src="/brand/logo-mark.webp"
-        alt={withText ? '' : 'Glow Slim Peptide Imports'}
+        alt={withText ? '' : 'Glow Imports Farma'}
         width={256}
         height={193}
         decoding="async"
@@ -40,15 +41,32 @@ export const DnaLogo: React.FC<DnaLogoProps> = ({
       />
 
       {withText && (
-        <img
-          src="/brand/logo-wordmark.webp"
-          alt="Glow Slim Peptide Imports"
-          width={720}
-          height={168}
-          decoding="async"
-          draggable={false}
-          className={`w-auto ${wordmarkHeights[size]}`}
-        />
+        <div
+          className="flex flex-col items-center leading-none"
+          role="img"
+          aria-label="Glow Imports Farma"
+          style={{ fontFamily: "'Space Grotesk', 'Plus Jakarta Sans', sans-serif" }}
+        >
+          <span className={`font-bold italic tracking-tight whitespace-nowrap ${wordmarkSizes[size].main}`} aria-hidden="true">
+            <span
+              className="bg-clip-text text-transparent"
+              style={{ backgroundImage: 'linear-gradient(180deg, #ffffff 0%, #d7dde4 45%, #8f99a6 55%, #eef2f6 100%)' }}
+            >
+              GLOW{' '}
+            </span>
+            <span
+              className="bg-clip-text text-transparent pr-[0.12em]"
+              style={{ backgroundImage: 'linear-gradient(180deg, #7fd3ff 0%, #1ea0ff 50%, #0a6fd6 100%)' }}
+            >
+              IMPORTS
+            </span>
+          </span>
+          <span className="flex items-center gap-1.5 w-full mt-0.5" aria-hidden="true">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-sky-400" />
+            <span className={`font-bold tracking-[0.35em] text-sky-400 ${wordmarkSizes[size].sub}`}>FARMA</span>
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-sky-400" />
+          </span>
+        </div>
       )}
     </div>
   );

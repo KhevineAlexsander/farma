@@ -1393,7 +1393,7 @@ export const INITIAL_COUPONS: Coupon[] = [
 ];
 
 export const INITIAL_SETTINGS: StoreSettings = {
-  storeName: 'GLOW SLIM PEPTIDE IMPORTS',
+  storeName: 'GLOW IMPORTS FARMA',
   whatsappNumber: '5511993456789',
   whatsappDisplay: '(11) 99345-6789',
   supportEmail: 'contato@peptideimports.com.br',
@@ -1409,8 +1409,8 @@ export const INITIAL_SETTINGS: StoreSettings = {
   pickupAddress: 'Av. Paulista, 1842 - Conjunto 114 (Edifício Horizon), Bela Vista, São Paulo - SP',
   pickupEstimatedTime: 'Pronto em 2 horas úteis (Seg a Sex das 09h às 18h)',
   couponsEnabled: true,
-  siteUrl: 'https://peptideimports.vercel.app',
-  vercelDomain: 'peptideimports.vercel.app',
+  siteUrl: 'https://glowfarma.vercel.app',
+  vercelDomain: 'glowfarma.vercel.app',
   customDomainNotes: 'Para configurar seu domínio próprio na Vercel: adicione o registro CNAME apontando para cname.vercel-dns.com e adicione o domínio na aba Authorized Domains do Firebase.',
   purchasesSuspended: false,
   suspensionTitle: 'Estamos Fechando o Caixa',
