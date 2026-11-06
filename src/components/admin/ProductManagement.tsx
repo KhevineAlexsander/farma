@@ -41,6 +41,8 @@ import {
   normalizeDosage,
 } from '../../utils/productDeduplication';
 import { DatabaseBackupModal } from './DatabaseBackupModal';
+import { LabelGeneratorModal } from './LabelGeneratorModal';
+import { Tags } from 'lucide-react';
 import { exportProductsReportToExcel } from '../../utils/exportUtils';
 
 export const ProductManagement: React.FC = () => {
@@ -88,6 +90,7 @@ export const ProductManagement: React.FC = () => {
   const [isSavingProducts, setIsSavingProducts] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+  const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
   const [copiedShareLink, setCopiedShareLink] = useState(false);
   const [showRequestsPanel, setShowRequestsPanel] = useState(true);
 
@@ -341,9 +344,39 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (typeof reader.result === 'string') {
-          setImageUrl(reader.result);
-        }
+        if (typeof reader.result !== 'string') return;
+        const original = reader.result;
+        // Resize/compress: a raw phone photo as base64 is several MB, which makes the
+        // product save fail (Firestore limit is 1 MB per document) and bloats orders.
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const MAX = 800;
+            const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              setImageUrl(original);
+              return;
+            }
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            let quality = 0.82;
+            let out = canvas.toDataURL('image/jpeg', quality);
+            while (out.length > 300_000 && quality > 0.4) {
+              quality -= 0.1;
+              out = canvas.toDataURL('image/jpeg', quality);
+            }
+            setImageUrl(out);
+          } catch {
+            setImageUrl(original);
+          }
+        };
+        img.onerror = () => setImageUrl(original);
+        img.src = original;
       };
       reader.readAsDataURL(file);
     }
@@ -633,6 +666,16 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
           >
             <FileSpreadsheet className="w-4 h-4 text-emerald-400" aria-hidden="true" />
             <span>Relatório Excel</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsLabelModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-amber-300 hover:text-white border border-amber-500/30 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md transition-colors cursor-pointer"
+            title="Gerar PDF com etiquetas 4 x 2 cm (A4) com o nome do site e dos produtos cadastrados"
+          >
+            <Tags className="w-4 h-4 text-amber-400" aria-hidden="true" />
+            <span>Etiquetas PDF</span>
           </button>
 
           <button
@@ -1630,6 +1673,14 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
           </div>
         </div>
       )}
+
+      <LabelGeneratorModal
+        isOpen={isLabelModalOpen}
+        onClose={() => setIsLabelModalOpen(false)}
+        products={products}
+        storeName={storeSettings?.storeName || ''}
+        showToast={showToast}
+      />
 
       {/* Database Backup & Restore Modal */}
       <DatabaseBackupModal
