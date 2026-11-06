@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, CheckCircle2, QrCode, CreditCard, ShieldCheck, Truck, MessageSquare, ExternalLink, Store, Tag, ShoppingBag, Lock, AlertTriangle, User, Mail, Info, CheckCircle } from 'lucide-react';
-import { useApp } from '../context/AppContext';
+import { useApp, waitForOrderSave } from '../context/AppContext';
 import { PeptideVial } from './PeptideVial';
 import { Order } from '../types';
 
@@ -194,7 +194,7 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
     return `https://wa.me/${cleanNumber}?text=${encodeURIComponent(message)}`;
   };
 
-  const handlePlaceOrder = (e: React.FormEvent) => {
+  const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSuspended) {
       showToast(storeSettings.suspensionMessage || '⚠️ Estamos fechando o caixa no momento. As compras estão temporariamente suspensas e voltaremos em breve!');
@@ -255,9 +255,26 @@ Por favor, confirme os dados do pedido ${order.orderNumber} para liberação e e
     setWhatsappLink(link);
     setCompletedOrder(order);
 
-    // Open WhatsApp in new tab automatically
+    // Wait for the database to confirm the order BEFORE leaving for WhatsApp.
+    // Previously WhatsApp opened immediately; on phones the browser was suspended
+    // while the save was still in flight, so the order never reached the panel.
+    // The blank tab is opened synchronously so popup blockers allow it.
+    let waTab: Window | null = null;
     try {
-      window.open(link, '_blank');
+      waTab = window.open('', '_blank');
+    } catch {
+      waTab = null;
+    }
+    const saved = await waitForOrderSave(order.id, 6000);
+    if (!saved) {
+      console.warn(`Pedido ${order.orderNumber} ainda não confirmado pelo banco; ficará na fila de reenvio.`);
+    }
+    try {
+      if (waTab && !waTab.closed) {
+        waTab.location.href = link;
+      } else {
+        window.location.href = link;
+      }
     } catch {
       // Handled by explicit button in the success view
     }

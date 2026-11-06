@@ -74,21 +74,143 @@ function cleanUndefinedForFirestore<T>(data: T): T {
   return data;
 }
 
+const BLACKLISTED_ORDER_DIGITS = ['7464', '9842', '9841', '9838', '9830'];
+
+/**
+ * Generates an order number that does not collide with known orders nor with
+ * blacklisted legacy numbers. Supabase has a UNIQUE constraint on order_number,
+ * so a collision made the whole insert fail.
+ */
+export function generateUniqueOrderNumber(existing: { orderNumber?: string }[]): string {
+  const used = new Set((existing || []).map((o) => (o.orderNumber || '').toUpperCase().trim()));
+  for (let i = 0; i < 100; i++) {
+    const candidate = `#PI-${Math.floor(1000 + Math.random() * 9000)}`;
+    if (!used.has(candidate) && !BLACKLISTED_ORDER_DIGITS.includes(candidate.replace(/\D/g, ''))) {
+      return candidate;
+    }
+  }
+  return `#PI-${Date.now().toString().slice(-6)}`;
+}
+
+/**
+ * Removes heavy fields (base64 images, long texts) from order items.
+ * Firestore rejects documents over 1 MB, and a single uploaded product photo
+ * stored as a data: URL can exceed that on its own.
+ */
+export function stripHeavyItemFields(items: CartItem[]): CartItem[] {
+  return (items || []).map((it) => {
+    const p: any = { ...(it.product || {}) };
+    if (typeof p.imageUrl === 'string' && p.imageUrl.startsWith('data:')) delete p.imageUrl;
+    delete p.description;
+    delete p.benefits;
+    delete p.reconstitution;
+    delete p.storage;
+    return { ...it, product: p };
+  });
+}
+
+// --- Pending order outbox (survives tab suspension / reload) ---
+const PENDING_ORDERS_KEY = 'peptide_pending_order_sync';
+const pendingOrderSaves = new Map<string, Promise<boolean>>();
+
+const readPendingOutbox = (): Order[] => {
+  try {
+    const raw = localStorage.getItem(PENDING_ORDERS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const writePendingOutbox = (list: Order[]) => {
+  try {
+    localStorage.setItem(PENDING_ORDERS_KEY, JSON.stringify(list));
+  } catch {}
+};
+
+export const addToPendingOrderOutbox = (order: Order) => {
+  const list = readPendingOutbox().filter((o) => o.id !== order.id);
+  list.push(order);
+  writePendingOutbox(list);
+};
+
+const removeFromPendingOrderOutbox = (orderId: string) => {
+  writePendingOutbox(readPendingOutbox().filter((o) => o.id !== orderId));
+};
+
+const CLOSED_ORDER_COLUMNS = ['is_closed', 'closed_at', 'closed_session_id', 'closed_session_name'];
+
+/** Saves an order to Firestore and Supabase. Resolves true if at least one confirmed. */
+export async function persistOrderRemote(order: Order): Promise<boolean> {
+  let ok = false;
+
+  const firestoreSave = setDoc(doc(db, 'orders', order.id), cleanUndefinedForFirestore(order))
+    .then(() => {
+      ok = true;
+    })
+    .catch((e) => {
+      console.error(`[pedido ${order.orderNumber}] Falha ao salvar no Firestore:`, e);
+    });
+
+  const supabaseSave = (async () => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return;
+    let payload: Record<string, any> = mapOrderToDB(order);
+    let { error } = await supabase.from('orders').upsert(payload);
+    // Older databases were created without the closed_* columns (see
+    // src/db/supabase-schema.sql). Retry without them instead of losing the order.
+    if (error && /column|schema cache|PGRST204/i.test(`${error.code} ${error.message}`)) {
+      payload = { ...payload };
+      CLOSED_ORDER_COLUMNS.forEach((c) => delete payload[c]);
+      ({ error } = await supabase.from('orders').upsert(payload));
+    }
+    if (error) {
+      console.error(`[pedido ${order.orderNumber}] Falha ao salvar no Supabase:`, error.message);
+    } else {
+      ok = true;
+    }
+  })().catch((e) => console.error(`[pedido ${order.orderNumber}] Erro Supabase:`, e));
+
+  await Promise.all([firestoreSave, supabaseSave]);
+  if (ok) removeFromPendingOrderOutbox(order.id);
+  return ok;
+}
+
+export const trackOrderSave = (order: Order): Promise<boolean> => {
+  const existing = pendingOrderSaves.get(order.id);
+  if (existing) return existing;
+  const p = persistOrderRemote(order).finally(() => pendingOrderSaves.delete(order.id));
+  pendingOrderSaves.set(order.id, p);
+  return p;
+};
+
+/** Waits until the order is confirmed by a database, or the timeout expires. */
+export const waitForOrderSave = (orderId: string, timeoutMs = 6000): Promise<boolean> => {
+  const p = pendingOrderSaves.get(orderId);
+  if (!p) return Promise.resolve(!readPendingOutbox().some((o) => o.id === orderId));
+  return Promise.race([p, new Promise<boolean>((r) => setTimeout(() => r(false), timeoutMs))]);
+};
+
+export const flushPendingOrderOutbox = () => {
+  readPendingOutbox().forEach((o) => {
+    if (o && o.id) trackOrderSave(o);
+  });
+};
+
 export function isBlacklistedOrder(o: { id?: string; orderNumber?: string }): boolean {
   if (!o) return false;
   const id = o.id || '';
-  const num = (o.orderNumber || '').toUpperCase().trim();
+  // Exact match only: a substring match used to hide real new orders whose
+  // random number happened to contain these digits.
+  const digits = (o.orderNumber || '').replace(/\D/g, '');
   return (
     id === 'ord-1001' ||
     id === 'ord-1002' ||
     id === 'ord-1003' ||
     id === 'ord-1004' ||
     id === 'ord-7464' ||
-    num.includes('7464') ||
-    num.includes('9842') ||
-    num.includes('9841') ||
-    num.includes('9838') ||
-    num.includes('9830')
+    BLACKLISTED_ORDER_DIGITS.includes(digits)
   );
 }
 
@@ -541,6 +663,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return s;
   };
 
+  // --- Retry orders that were created but never confirmed by a database ---
+  useEffect(() => {
+    flushPendingOrderOutbox();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') flushPendingOrderOutbox();
+    };
+    window.addEventListener('online', flushPendingOrderOutbox);
+    document.addEventListener('visibilitychange', onVisible);
+    const interval = window.setInterval(flushPendingOrderOutbox, 30000);
+    return () => {
+      window.removeEventListener('online', flushPendingOrderOutbox);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.clearInterval(interval);
+    };
+  }, []);
+
   // --- Products State ---
   const [products, setProducts] = useState<Product[]>(() => {
     try {
@@ -823,6 +961,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let supabaseChannel: any = null;
     const supabase = getSupabaseClient();
 
+    // Products are read from Supabase first. When Supabase is not configured
+    // (missing VITE_SUPABASE_ANON_KEY on the deploy) or the query fails, read the
+    // Firestore copy so products saved there still show up in the store/panel.
+    const loadProductsFromFirestore = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'products'));
+        if (snap.empty) return;
+        const list: Product[] = [];
+        snap.forEach((d) => list.push({ ...(d.data() as Product), id: d.id }));
+        setProducts((prev) => {
+          const byId = new Map<string, Product>();
+          prev.forEach((p) => byId.set(p.id, p));
+          list.forEach((p) => byId.set(p.id, { ...byId.get(p.id), ...p }));
+          const merged = mergeProductsWithCatalog(Array.from(byId.values()), getLatestDeletedSet());
+          localStorage.setItem('peptide_products', JSON.stringify(merged));
+          return merged;
+        });
+      } catch (e) {
+        console.error('Erro ao carregar produtos do Firestore:', e);
+      }
+    };
+    if (!supabase || !isSupabaseConfigured()) {
+      loadProductsFromFirestore();
+    }
+
     if (supabase && isSupabaseConfigured()) {
       setIsSupabaseActive(true);
       setSupabaseConfigured(true);
@@ -834,6 +997,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Fetch Products from Supabase (Primary Database)
           const { data: prodData, error: prodErr } = await supabase.from('products').select('*');
+          if (prodErr) {
+            console.error('Erro ao carregar produtos do Supabase, usando Firestore:', prodErr.message);
+            loadProductsFromFirestore();
+          }
           if (!prodErr && prodData) {
             const mapped = prodData.map(mapDBToProduct);
             const merged = mergeProductsWithCatalog(mapped, currentDeleted);
@@ -1096,11 +1263,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (docSnap.exists()) {
           const data = docSnap.data();
           if (Array.isArray(data?.ids)) {
-            setDeletedProductIds((prev) => {
-              const combined = Array.from(new Set([...prev, ...data.ids]));
-              localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(combined));
-              return combined;
-            });
+            // Firestore is authoritative. Merging with the local list kept stale
+            // tombstones forever, hiding products that were re-created later.
+            const remoteIds: string[] = Array.from(new Set(data.ids as string[]));
+            deletedProductIdsRef.current = new Set(remoteIds);
+            localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(remoteIds));
+            setDeletedProductIds(remoteIds);
           }
         }
       }, () => {});
@@ -1887,12 +2055,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: newId,
     };
 
-    // If re-creating a previously deleted product, un-tombstone it
+    // If re-creating a previously deleted product, un-tombstone it.
+    // The tombstone must also be removed from Firestore: otherwise the
+    // settings/deleted_products listener re-adds the key and the new product
+    // is filtered out again on the next load (it "disappears").
     const newKey = getProductDeduplicationKey(canonicalName, canonicalDosage);
-    if (deletedProductIds.includes(newId) || deletedProductIds.includes(newKey)) {
-      const nextDeleted = deletedProductIds.filter((x) => x !== newId && x !== newKey);
+    const latestDeleted = getLatestDeletedSet();
+    if (latestDeleted.has(newId) || latestDeleted.has(newKey)) {
+      const nextDeleted = Array.from(latestDeleted).filter((x) => x !== newId && x !== newKey);
       setDeletedProductIds(nextDeleted);
+      deletedProductIdsRef.current = new Set(nextDeleted);
       localStorage.setItem('peptide_deleted_product_ids', JSON.stringify(nextDeleted));
+      setDoc(doc(db, 'settings', 'deleted_products'), { ids: nextDeleted, updatedAt: new Date().toISOString() }, { merge: true })
+        .catch((e) => console.error('Erro ao remover produto da lista de excluídos no Firestore:', e));
     }
 
     setProducts((prev) => {
@@ -1900,22 +2075,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('peptide_products', JSON.stringify(updated));
       return updated;
     });
-    showToast(`Produto "${newProduct.name}" (${newProduct.dosage || 'Padrão'}) cadastrado com sucesso!`);
-
-    // Save to Supabase
+    // Save to Supabase (primary product database). supabase-js does NOT throw on
+    // failure, it returns { error } — previously ignored, so a failed save still
+    // showed "cadastrado com sucesso" and the product vanished on reload.
+    let supabaseOk = false;
+    let supabaseErrMsg = '';
+    const supabase = getSupabaseClient();
     try {
-      const supabase = getSupabaseClient();
       if (supabase) {
-        await supabase.from('products').upsert(mapProductToDB(newProduct));
+        const { error } = await supabase.from('products').upsert(mapProductToDB(newProduct));
+        if (error) {
+          supabaseErrMsg = error.message;
+          console.error('Erro ao salvar produto no Supabase:', error);
+        } else {
+          supabaseOk = true;
+        }
       }
-    } catch (e) {
-      console.log('Error adding product to Supabase:', e);
+    } catch (e: any) {
+      supabaseErrMsg = e?.message || String(e);
+      console.error('Erro ao salvar produto no Supabase:', e);
     }
 
+    let firestoreOk = false;
     try {
       await setDoc(doc(db, 'products', newId), cleanUndefinedForFirestore(newProduct));
+      firestoreOk = true;
     } catch (e) {
-      console.log('Error adding product to Firestore:', e);
+      console.error('Erro ao salvar produto no Firestore:', e);
+    }
+
+    if (supabase ? supabaseOk : firestoreOk) {
+      showToast(`Produto "${newProduct.name}" (${newProduct.dosage || 'Padrão'}) cadastrado com sucesso!`);
+    } else {
+      showToast(
+        `⚠️ "${newProduct.name}" NÃO foi salvo no banco de dados${supabaseErrMsg ? `: ${supabaseErrMsg}` : ''}. Ele aparece só neste navegador — tente novamente.`
+      );
     }
   };
 
@@ -3439,11 +3633,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const sanitizedItems = sanitizeOrderItems([...cart], products);
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
-      orderNumber: `#PI-${Math.floor(1000 + Math.random() * 9000)}`,
+      orderNumber: generateUniqueOrderNumber(orders),
       createdAt: new Date().toISOString(),
       customer: orderData.customer,
       address: orderData.address,
-      items: sanitizedItems,
+      items: stripHeavyItemFields(sanitizedItems),
       subtotal,
       shipping,
       discount,
@@ -3459,17 +3653,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Save order
     setOrders((prev) => [newOrder, ...prev]);
 
-    // Save order to Supabase
-    if (supabase) {
-      supabase.from('orders').insert(mapOrderToDB(newOrder)).then();
-    }
-
-    // Save to Firestore fallback
-    try {
-      setDoc(doc(db, 'orders', newOrder.id), cleanUndefinedForFirestore(newOrder));
-    } catch (e) {
-      console.log('Error saving order to Firestore:', e);
-    }
+    // Persist remotely (Firestore + Supabase). The order is kept in a local outbox
+    // until at least one database confirms, and retried if the tab was suspended
+    // (e.g. the customer switched to the WhatsApp app before the write finished).
+    addToPendingOrderOutbox(newOrder);
+    trackOrderSave(newOrder);
 
     // Automatic 12-day coupon calculation and user profile update:
     // If client paid shipping fee (shipping > 0), grant / refresh their 12-day automatic free delivery coupon!
@@ -3614,7 +3802,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
-      orderNumber: `#PI-${Math.floor(1000 + Math.random() * 9000)}`,
+      orderNumber: generateUniqueOrderNumber(orders),
       createdAt: new Date().toISOString(),
       customer: {
         name: orderData.customer.name.trim(),

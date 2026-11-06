@@ -91,26 +91,26 @@ const CANONICAL_NAME_ALIASES: Array<{ regex: RegExp; canonical: string }> = [
   { regex: /^(ELORATIDE|ELORALINTIDE|ELORATINDE|ELORATID)$/i, canonical: 'Eloratide' },
 
   // SS-31 variations
-  { regex: /^(SS-31.*|SS31.*|ELAMIPRETIDE.*)$/i, canonical: 'SS-31 (Elamipretide)' },
+  { regex: /^(SS-?31|ELAMIPRETIDE)(\s*\(.*\))?$/i, canonical: 'SS-31 (Elamipretide)' },
 
   // PT-141 variations
-  { regex: /^(PT-141.*|PT141.*|BREMELANOTIDE.*)$/i, canonical: 'PT-141 (Bremelanotide)' },
+  { regex: /^(PT-?141|BREMELANOTIDE)(\s*\(.*\))?$/i, canonical: 'PT-141 (Bremelanotide)' },
 
   // Melanotan variations
-  { regex: /^(MELANOTAN\s*2.*|MELANOTAN\s*II.*|MELANOTAN2.*)$/i, canonical: 'Melanotan 2 (Melanotan II)' },
-  { regex: /^(MELANOTAN\s*1.*|MELANOTAN\s*I.*|MELANOTAN1.*)$/i, canonical: 'Melanotan 1' },
+  { regex: /^(MELANOTAN\s*(2|II))(\s*\(.*\))?$/i, canonical: 'Melanotan 2 (Melanotan II)' },
+  { regex: /^(MELANOTAN\s*(1|I))(\s*\(.*\))?$/i, canonical: 'Melanotan 1' },
 
   // TB-500 variations
-  { regex: /^(TB-500.*|TB500.*|THYMOSIN\s*BETA-?4.*)$/i, canonical: 'TB-500 (Thymosin Beta-4)' },
+  { regex: /^(TB-?\s?500|THYMOSIN\s*BETA-?4)(\s*\(.*\))?$/i, canonical: 'TB-500 (Thymosin Beta-4)' },
 
   // Thymosin Alpha-1
-  { regex: /^(THYMOSIN\s*ALPHA-?1.*)$/i, canonical: 'Thymosin Alpha-1' },
+  { regex: /^(THYMOSIN\s*ALPHA-?1)(\s*\(.*\))?$/i, canonical: 'Thymosin Alpha-1' },
 
   // Thymulin
   { regex: /^(THYMULIN|TIMULINA)$/i, canonical: 'Thymulin' },
 
   // HGH
-  { regex: /^(HGH.*|SOMATROPINA.*)$/i, canonical: 'HGH Somatropina' },
+  { regex: /^(HGH|SOMATROPINA|HGH\s*SOMATROPINA)(\s*\(.*\))?$/i, canonical: 'HGH Somatropina' },
 
   // 5-Amino-1MQ
   { regex: /^(5-AMINO-?1MQ|5\s*AMINO\s*1MQ)$/i, canonical: '5-Amino-1MQ' },
@@ -120,13 +120,13 @@ const CANONICAL_NAME_ALIASES: Array<{ regex: RegExp; canonical: string }> = [
   { regex: /^(KLOW)$/i, canonical: 'KLOW' },
 
   // Vitamina B12
-  { regex: /^(VITAMINA\s*B12.*|METILCOBALAMINA.*)$/i, canonical: 'Vitamina B12 (Metilcobalamina)' },
+  { regex: /^(VITAMINA\s*B12|METILCOBALAMINA)(\s*\(.*\))?$/i, canonical: 'Vitamina B12 (Metilcobalamina)' },
 
   // Lemon Bottle
   { regex: /^(LEMON\s*BOTTLE)$/i, canonical: 'Lemon Bottle' },
 
   // L-Carnitina
-  { regex: /^(L-CARNITINA.*|L-CARNITINE.*)$/i, canonical: 'L-Carnitina Injetável' },
+  { regex: /^(L-?CARNITINA|L-?CARNITINE)(\s*INJETAVEL)?(\s*\(.*\))?$/i, canonical: 'L-Carnitina Injetável' },
 ];
 
 /**
