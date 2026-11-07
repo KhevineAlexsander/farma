@@ -89,6 +89,7 @@ export const ProductManagement: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingProducts, setIsSavingProducts] = useState(false);
   const [isSavingProduct, setIsSavingProduct] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
@@ -278,6 +279,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
   const [featured, setFeatured] = useState(false);
 
   const openNewPeptideModal = () => {
+    setFormError(null);
     setEditingProductId(null);
     setIsCustomProductMode(false);
     setName('');
@@ -299,6 +301,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
   };
 
   const openNewOtherProductModal = () => {
+    setFormError(null);
     setEditingProductId(null);
     setIsCustomProductMode(true);
     setName('');
@@ -320,6 +323,7 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
   };
 
   const openEditProductModal = (product: Product) => {
+    setFormError(null);
     setEditingProductId(product.id);
     setIsCustomProductMode(!!product.imageUrl);
     setName(product.name);
@@ -385,55 +389,85 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+
+    // Validações explícitas com feedback imediato
+    if (!name.trim()) {
+      setFormError('Por favor, informe o nome do produto.');
+      return;
+    }
+
+    if (!dosage.trim()) {
+      setFormError('Por favor, informe a apresentação / dosagem do produto (ex: 10 MG).');
+      return;
+    }
+
+    if (isCustomProductMode && !imageUrl.trim()) {
+      setFormError('Por favor, carregue uma foto ou informe o link da imagem do produto.');
+      return;
+    }
+
+    const cleanPrice = price.toString().replace('R$', '').replace(/\s/g, '').replace(',', '.').trim();
+    const rawPrice = parseFloat(cleanPrice);
+    if (isNaN(rawPrice) || rawPrice <= 0) {
+      setFormError('Por favor, informe um preço de venda válido maior que zero (R$).');
+      return;
+    }
+    const parsedPrice = Math.max(0, Math.min(1000000, rawPrice));
+
+    const cleanCost = costPrice.toString().replace('R$', '').replace(/\s/g, '').replace(',', '.').trim();
+    const rawCost = parseFloat(cleanCost);
+    const parsedCost = isNaN(rawCost) ? 0 : Math.max(0, Math.min(1000000, rawCost));
+
+    const cleanOrigPrice = originalPrice.toString().replace('R$', '').replace(/\s/g, '').replace(',', '.').trim();
+    const rawOrigPrice = parseFloat(cleanOrigPrice);
+    const parsedOrigPrice = !isNaN(rawOrigPrice) && rawOrigPrice > 0 
+      ? Math.max(0, Math.min(1000000, rawOrigPrice)) 
+      : (isPromotion ? parsedPrice * 1.25 : undefined);
+
+    const validation = validateProductForCreation(
+      {
+        name: name.trim().slice(0, 100),
+        dosage: dosage.trim().slice(0, 50),
+        id: editingProductId || undefined,
+      },
+      products
+    );
+
+    const canonicalName = validation.suggestedName || normalizeProductName(name.trim().slice(0, 100).toUpperCase());
+    const canonicalDosage = validation.suggestedDosage || normalizeDosage(dosage.trim().slice(0, 50).toUpperCase());
+
+    if (!validation.isValid && validation.isDuplicate) {
+      const msg = validation.message || `Atenção: Já existe um produto cadastrado com o nome "${canonicalName}" e dosagem "${canonicalDosage}". Altere o nome ou dosagem para salvar.`;
+      setFormError(msg);
+      showToast(msg);
+      return;
+    }
+
+    const productPayload: Omit<Product, 'id'> = {
+      name: canonicalName,
+      dosage: canonicalDosage,
+      category,
+      price: parsedPrice,
+      costPrice: parsedCost,
+      stock: 999,
+      capColor: capColor || '#ad5cb2',
+      imageUrl: imageUrl.trim() || undefined,
+      description: description.slice(0, 1000) || (isCustomProductMode ? 'Produto farmacêutico importado com controle de qualidade rigoroso.' : 'Peptídeo importado liofilizado com laudo HPLC de pureza superior.'),
+      benefits: [benefit1.slice(0, 100), benefit2.slice(0, 100), benefit3.slice(0, 100)].filter(Boolean),
+      purity: '99.6% HPLC',
+      storage: '2°C a 8°C (Refrigerado).',
+      reconstitution: isCustomProductMode ? 'Seguir instruções da bula ou rotulagem.' : 'Reconstituir com água bacteriostática.',
+      isPromotion,
+      originalPrice: isPromotion ? parsedOrigPrice : undefined,
+      promotionDiscount: isPromotion ? Math.max(1, Math.min(99, parseInt(promotionDiscount, 10) || 15)) : undefined,
+      featured,
+    };
+
     if (isSavingProduct) return;
     setIsSavingProduct(true);
 
     try {
-      const rawPrice = parseFloat(price);
-      const parsedPrice = isNaN(rawPrice) ? 0 : Math.max(0, Math.min(1000000, rawPrice));
-      const rawOrigPrice = parseFloat(originalPrice);
-      const parsedOrigPrice = !isNaN(rawOrigPrice) && rawOrigPrice > 0 
-        ? Math.max(0, Math.min(1000000, rawOrigPrice)) 
-        : (isPromotion ? parsedPrice * 1.25 : undefined);
-
-      const validation = validateProductForCreation(
-        {
-          name: name.trim().slice(0, 100),
-          dosage: dosage.trim().slice(0, 50),
-          id: editingProductId || undefined,
-        },
-        products
-      );
-
-      if (!validation.isValid && validation.isDuplicate) {
-        showToast(validation.message || 'Atenção: Produto com mesma especificação já cadastrado!');
-        setIsSavingProduct(false);
-        return;
-      }
-
-      const canonicalName = validation.suggestedName || normalizeProductName(name.trim().slice(0, 100).toUpperCase());
-      const canonicalDosage = validation.suggestedDosage || normalizeDosage(dosage.trim().slice(0, 50).toUpperCase());
-
-      const productPayload: Omit<Product, 'id'> = {
-        name: canonicalName,
-        dosage: canonicalDosage,
-        category,
-        price: parsedPrice,
-        costPrice: Math.max(0, parseFloat(costPrice) || 0),
-        stock: 999,
-        capColor: capColor || '#ad5cb2',
-        imageUrl: imageUrl.trim() || undefined,
-        description: description.slice(0, 1000) || (isCustomProductMode ? 'Produto farmacêutico importado com controle de qualidade rigoroso.' : 'Peptídeo importado liofilizado com laudo HPLC de pureza superior.'),
-        benefits: [benefit1.slice(0, 100), benefit2.slice(0, 100), benefit3.slice(0, 100)].filter(Boolean),
-        purity: '99.6% HPLC',
-        storage: '2°C a 8°C (Refrigerado).',
-        reconstitution: isCustomProductMode ? 'Seguir instruções da bula ou rotulagem.' : 'Reconstituir com água bacteriostática.',
-        isPromotion,
-        originalPrice: isPromotion ? parsedOrigPrice : undefined,
-        promotionDiscount: isPromotion ? Math.max(1, Math.min(99, parseInt(promotionDiscount, 10) || 15)) : undefined,
-        featured,
-      };
-
       let success = false;
       if (editingProductId) {
         success = await updateProduct(editingProductId, productPayload);
@@ -442,10 +476,14 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
       }
 
       if (success) {
+        setFormError(null);
         setIsModalOpen(false);
+      } else {
+        setFormError('Não foi possível salvar o produto. Verifique os dados e tente novamente.');
       }
     } catch (err) {
       console.error('Falha ao salvar produto:', err);
+      setFormError('Ocorreu um erro ao gravar o produto no banco. Tente novamente.');
       showToast('Ocorreu um erro ao salvar o produto.');
     } finally {
       setIsSavingProduct(false);
@@ -1081,7 +1119,17 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                 : 'Preencha os dados de dosagem, cor da tampa crimp, custos e laudo para o catálogo e ERP.'}
             </p>
 
-            <form onSubmit={handleSaveProduct} className="space-y-4 text-xs">
+            <form onSubmit={handleSaveProduct} noValidate className="space-y-4 text-xs">
+              {formError && (
+                <div className="p-3.5 rounded-2xl bg-rose-950/50 border border-rose-500/60 text-rose-200 text-xs flex items-start gap-3 shadow-lg shadow-rose-950/40">
+                  <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <strong className="block font-bold text-rose-300">Não foi possível salvar o produto:</strong>
+                    <span className="text-[11px] leading-relaxed text-rose-100">{formError}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Product Photo Upload / Link Input (Mandatory/Highlighted if isCustomProductMode) */}
               <div className={`p-3.5 rounded-2xl border ${isCustomProductMode ? 'bg-indigo-950/30 border-indigo-700/50' : 'bg-slate-950 border-slate-800'} space-y-2.5`}>
                 <div className="flex items-center justify-between">
@@ -1226,22 +1274,22 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Preço de Venda (R$) *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    required
+                    type="text"
+                    inputMode="decimal"
                     value={price}
                     onChange={(e) => setPrice(e.target.value)}
+                    placeholder="Ex: 150,00"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white font-bold focus:border-cyan-500"
                   />
                 </div>
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1">Preço de Custo (R$) *</label>
                   <input
-                    type="number"
-                    step="0.01"
-                    required
+                    type="text"
+                    inputMode="decimal"
                     value={costPrice}
                     onChange={(e) => setCostPrice(e.target.value)}
+                    placeholder="Ex: 60,00"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white focus:border-cyan-500"
                   />
                 </div>
@@ -1287,18 +1335,19 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                     <div>
                       <label className="block text-slate-300 font-semibold mb-1">Preço Original "De R$"</label>
                       <input
-                        type="number"
-                        step="0.01"
+                        type="text"
+                        inputMode="decimal"
                         value={originalPrice}
                         onChange={(e) => setOriginalPrice(e.target.value)}
-                        placeholder="Ex: 199.00"
+                        placeholder="Ex: 199,00"
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-white focus:border-cyan-500"
                       />
                     </div>
                     <div>
                       <label className="block text-slate-300 font-semibold mb-1">Desconto (%)</label>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         value={promotionDiscount}
                         onChange={(e) => setPromotionDiscount(e.target.value)}
                         placeholder="Ex: 15"

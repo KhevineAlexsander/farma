@@ -36,6 +36,20 @@ const ViewFallback: React.FC = () => (
   </div>
 );
 
+const GlobalToast: React.FC = () => {
+  const { toastMessage } = useApp();
+  if (!toastMessage) return null;
+
+  return (
+    <div className="fixed top-6 right-6 z-[9999] max-w-sm sm:max-w-md animate-fade-in pointer-events-none">
+      <div className="bg-slate-900/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl border border-cyan-500/50 flex items-center gap-3 pointer-events-auto">
+        <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+        <span className="text-xs font-semibold leading-relaxed text-slate-100">{toastMessage}</span>
+      </div>
+    </div>
+  );
+};
+
 const MainLayout: React.FC = () => {
   const { currentView, currentUser, isAdminLoading } = useApp();
 
@@ -152,6 +166,7 @@ export default function App() {
   return (
     <AppProvider>
       <MainLayout />
+      <GlobalToast />
     </AppProvider>
   );
 }
