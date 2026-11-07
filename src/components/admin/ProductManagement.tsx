@@ -88,6 +88,7 @@ export const ProductManagement: React.FC = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isSavingProducts, setIsSavingProducts] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
   const [isLabelModalOpen, setIsLabelModalOpen] = useState(false);
@@ -382,58 +383,73 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
     }
   };
 
-  const handleSaveProduct = (e: React.FormEvent) => {
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const rawPrice = parseFloat(price);
-    const parsedPrice = isNaN(rawPrice) ? 0 : Math.max(0, Math.min(1000000, rawPrice));
-    const rawOrigPrice = parseFloat(originalPrice);
-    const parsedOrigPrice = !isNaN(rawOrigPrice) && rawOrigPrice > 0 
-      ? Math.max(0, Math.min(1000000, rawOrigPrice)) 
-      : (isPromotion ? parsedPrice * 1.25 : undefined);
+    if (isSavingProduct) return;
+    setIsSavingProduct(true);
 
-    const validation = validateProductForCreation(
-      {
-        name: name.trim().slice(0, 100),
-        dosage: dosage.trim().slice(0, 50),
-        id: editingProductId || undefined,
-      },
-      products
-    );
+    try {
+      const rawPrice = parseFloat(price);
+      const parsedPrice = isNaN(rawPrice) ? 0 : Math.max(0, Math.min(1000000, rawPrice));
+      const rawOrigPrice = parseFloat(originalPrice);
+      const parsedOrigPrice = !isNaN(rawOrigPrice) && rawOrigPrice > 0 
+        ? Math.max(0, Math.min(1000000, rawOrigPrice)) 
+        : (isPromotion ? parsedPrice * 1.25 : undefined);
 
-    if (!validation.isValid && validation.isDuplicate) {
-      showToast(validation.message || 'Atenção: Produto com mesma especificação já cadastrado!');
-      return;
+      const validation = validateProductForCreation(
+        {
+          name: name.trim().slice(0, 100),
+          dosage: dosage.trim().slice(0, 50),
+          id: editingProductId || undefined,
+        },
+        products
+      );
+
+      if (!validation.isValid && validation.isDuplicate) {
+        showToast(validation.message || 'Atenção: Produto com mesma especificação já cadastrado!');
+        setIsSavingProduct(false);
+        return;
+      }
+
+      const canonicalName = validation.suggestedName || normalizeProductName(name.trim().slice(0, 100).toUpperCase());
+      const canonicalDosage = validation.suggestedDosage || normalizeDosage(dosage.trim().slice(0, 50).toUpperCase());
+
+      const productPayload: Omit<Product, 'id'> = {
+        name: canonicalName,
+        dosage: canonicalDosage,
+        category,
+        price: parsedPrice,
+        costPrice: Math.max(0, parseFloat(costPrice) || 0),
+        stock: 999,
+        capColor: capColor || '#ad5cb2',
+        imageUrl: imageUrl.trim() || undefined,
+        description: description.slice(0, 1000) || (isCustomProductMode ? 'Produto farmacêutico importado com controle de qualidade rigoroso.' : 'Peptídeo importado liofilizado com laudo HPLC de pureza superior.'),
+        benefits: [benefit1.slice(0, 100), benefit2.slice(0, 100), benefit3.slice(0, 100)].filter(Boolean),
+        purity: '99.6% HPLC',
+        storage: '2°C a 8°C (Refrigerado).',
+        reconstitution: isCustomProductMode ? 'Seguir instruções da bula ou rotulagem.' : 'Reconstituir com água bacteriostática.',
+        isPromotion,
+        originalPrice: isPromotion ? parsedOrigPrice : undefined,
+        promotionDiscount: isPromotion ? Math.max(1, Math.min(99, parseInt(promotionDiscount, 10) || 15)) : undefined,
+        featured,
+      };
+
+      let success = false;
+      if (editingProductId) {
+        success = await updateProduct(editingProductId, productPayload);
+      } else {
+        success = await addProduct(productPayload);
+      }
+
+      if (success) {
+        setIsModalOpen(false);
+      }
+    } catch (err) {
+      console.error('Falha ao salvar produto:', err);
+      showToast('Ocorreu um erro ao salvar o produto.');
+    } finally {
+      setIsSavingProduct(false);
     }
-
-    const canonicalName = validation.suggestedName || normalizeProductName(name.trim().slice(0, 100).toUpperCase());
-    const canonicalDosage = validation.suggestedDosage || normalizeDosage(dosage.trim().slice(0, 50).toUpperCase());
-
-    const productPayload: Omit<Product, 'id'> = {
-      name: canonicalName,
-      dosage: canonicalDosage,
-      category,
-      price: parsedPrice,
-      costPrice: Math.max(0, parseFloat(costPrice) || 0),
-      stock: 999,
-      capColor: capColor || '#ad5cb2',
-      imageUrl: imageUrl.trim() || undefined,
-      description: description.slice(0, 1000) || (isCustomProductMode ? 'Produto farmacêutico importado com controle de qualidade rigoroso.' : 'Peptídeo importado liofilizado com laudo HPLC de pureza superior.'),
-      benefits: [benefit1.slice(0, 100), benefit2.slice(0, 100), benefit3.slice(0, 100)].filter(Boolean),
-      purity: '99.6% HPLC',
-      storage: '2°C a 8°C (Refrigerado).',
-      reconstitution: isCustomProductMode ? 'Seguir instruções da bula ou rotulagem.' : 'Reconstituir com água bacteriostática.',
-      isPromotion,
-      originalPrice: isPromotion ? parsedOrigPrice : undefined,
-      promotionDiscount: isPromotion ? Math.max(1, Math.min(99, parseInt(promotionDiscount, 10) || 15)) : undefined,
-      featured,
-    };
-
-    if (editingProductId) {
-      updateProduct(editingProductId, productPayload);
-    } else {
-      addProduct(productPayload);
-    }
-    setIsModalOpen(false);
   };
 
   const filteredProducts = products.filter((p) => {
@@ -1101,12 +1117,12 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                   {/* URL Input & File Upload */}
                   <div className="sm:col-span-9 space-y-2">
                     <input
-                      type="url"
+                      type="text"
                       value={imageUrl}
                       onChange={(e) => setImageUrl(e.target.value)}
-                      placeholder="Cole o link da imagem (https://...)"
+                      placeholder="Cole o link da imagem (https://...) ou carregue do computador"
                       className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:border-cyan-500 text-xs"
-                      required={isCustomProductMode}
+                      required={isCustomProductMode && !imageUrl}
                     />
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -1310,16 +1326,27 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700"
+                  disabled={isSavingProduct}
+                  className="px-4 py-2 bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700 disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 font-bold rounded-xl hover:from-cyan-400 hover:to-blue-500 flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20"
+                  disabled={isSavingProduct}
+                  className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 disabled:opacity-50 text-slate-950 font-bold rounded-xl hover:from-cyan-400 hover:to-blue-500 flex items-center gap-2 cursor-pointer shadow-lg shadow-cyan-500/20"
                 >
-                  <UploadCloud className="w-4 h-4" />
-                  <span>Salvar no Banco & Atualizar Site</span>
+                  {isSavingProduct ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Gravando no Banco...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Salvar no Banco & Atualizar Site</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

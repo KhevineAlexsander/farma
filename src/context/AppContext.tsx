@@ -325,8 +325,8 @@ function mergeOrderHelper(existing: Order, incoming: Order): Order {
 
 interface AppContextType {
   products: Product[];
-  addProduct: (product: Omit<Product, 'id'>) => void;
-  updateProduct: (id: string, product: Partial<Product>) => void;
+  addProduct: (product: Omit<Product, 'id'>) => Promise<boolean>;
+  updateProduct: (id: string, product: Partial<Product>) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<boolean>;
   refreshProductsFromDatabase: () => Promise<{ success: boolean; count: number; message: string }>;
   deletedProductIds: string[];
@@ -627,6 +627,32 @@ export const mergeProductsWithCatalog = (
         }
       }
     });
+  }
+
+  // 1.5. If incoming came from remote (like Supabase) but custom products exist in localStorage,
+  // ensure we do not drop valid user-created products that haven't synced yet or aren't in Supabase.
+  if (typeof window !== 'undefined') {
+    try {
+      const storedLocal = localStorage.getItem('peptide_products');
+      if (storedLocal) {
+        const parsedLocal: Product[] = JSON.parse(storedLocal);
+        if (Array.isArray(parsedLocal)) {
+          parsedLocal.forEach((lp) => {
+            if (!lp || !lp.name) return;
+            const targetId = ID_ALIASES[lp.id] || lp.id;
+            const dedupeKey = getProductDeduplicationKey(lp.name, lp.dosage);
+            if (deletedSet.has(lp.id) || deletedSet.has(targetId) || deletedSet.has(dedupeKey)) {
+              return;
+            }
+            if (processedKeys.has(dedupeKey)) {
+              return;
+            }
+            processedKeys.add(dedupeKey);
+            result.push(lp);
+          });
+        }
+      }
+    } catch {}
   }
 
   // 2. Add any official catalog products that have not yet been added AND have not been deleted
@@ -2056,13 +2082,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // --- Product CRUD & Promotion Toggles ---
-  const addProduct = async (productData: Omit<Product, 'id'>) => {
+  const addProduct = async (productData: Omit<Product, 'id'>): Promise<boolean> => {
     // Proactive anti-duplication validation
     const validation = validateProductForCreation(productData, products);
     if (!validation.isValid && validation.isDuplicate) {
       const msg = validation.message || 'Produto com mesma especificação já cadastrado no catálogo!';
       showToast(msg);
-      return;
+      return false;
     }
 
     const canonicalName = validation.suggestedName || normalizeProductName(productData.name);
@@ -2125,16 +2151,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.error('Erro ao salvar produto no Firestore:', e);
     }
 
-    if (supabase ? supabaseOk : firestoreOk) {
+    if (supabaseOk || firestoreOk) {
       showToast(`Produto "${newProduct.name}" (${newProduct.dosage || 'Padrão'}) cadastrado com sucesso!`);
+      return true;
     } else {
       showToast(
-        `⚠️ "${newProduct.name}" NÃO foi salvo no banco de dados${supabaseErrMsg ? `: ${supabaseErrMsg}` : ''}. Ele aparece só neste navegador — tente novamente.`
+        `⚠️ "${newProduct.name}" salvo no navegador. Sincronização remota pendente${supabaseErrMsg ? `: ${supabaseErrMsg}` : ''}.`
       );
+      return true;
     }
   };
 
-  const updateProduct = async (id: string, updatedFields: Partial<Product>) => {
+  const updateProduct = async (id: string, updatedFields: Partial<Product>): Promise<boolean> => {
     const cleanedFields = { ...updatedFields };
     if (cleanedFields.name) {
       cleanedFields.name = normalizeProductName(cleanedFields.name);
@@ -2163,11 +2191,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       try {
-        await setDoc(doc(db, 'products', id), target, { merge: true });
+        await setDoc(doc(db, 'products', id), cleanUndefinedForFirestore(target), { merge: true });
       } catch (e) {
         console.log('Error updating product in Firestore:', e);
       }
     }
+    return true;
   };
 
   const deleteProduct = async (id: string): Promise<boolean> => {
