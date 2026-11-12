@@ -36,6 +36,8 @@ import {
 import { useApp } from '../../context/AppContext';
 import { FinancialTransaction, Order } from '../../types';
 import { exportCashFlowToExcel, formatCurrency } from '../../utils/exportUtils';
+import { ReportPrintModal } from './ReportPrintModal';
+import { buildFinancialReportHtml } from '../../utils/reportPrintUtils';
 
 export const FinancialManagement: React.FC = () => {
   const {
@@ -48,6 +50,8 @@ export const FinancialManagement: React.FC = () => {
     showToast,
     refreshSalesData,
   } = useApp();
+
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Period Filter State (Padrão: Caixa Aberto / Pós-Fechamento)
   const [timeFilter, setTimeFilter] = useState<'caixa_aberto' | 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'year' | 'all' | 'custom'>('caixa_aberto');
@@ -593,6 +597,15 @@ export const FinancialManagement: React.FC = () => {
             >
               <Plus className="w-4 h-4" />
               <span>Lançar Entrada Extra</span>
+            </button>
+
+            <button
+              onClick={() => setIsPrintModalOpen(true)}
+              className="p-2.5 sm:px-3.5 sm:py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
+              title="Imprimir relatório financeiro e fluxo de caixa (A4, 80mm ou 50mm)"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Imprimir Relatório</span>
             </button>
 
             <button
@@ -1636,6 +1649,32 @@ export const FinancialManagement: React.FC = () => {
 
           </div>
         </div>
+      )}
+      {/* Modal de Impressão Financeira (A4, 80mm, 50mm) */}
+      {isPrintModalOpen && (
+        <ReportPrintModal
+          title="Relatório de Fluxo de Caixa"
+          subtitle={`Período: ${dateRange.label}`}
+          onClose={() => setIsPrintModalOpen(false)}
+          generateHtml={(format) =>
+            buildFinancialReportHtml(
+              {
+                storeSettings,
+                printedBy: currentUser?.name,
+                periodLabel: dateRange.label,
+                totals: {
+                  totalSalesRevenue,
+                  totalOtherIncome: totalExtraIncome,
+                  totalExpenses,
+                  netBalance: netCashBalance,
+                },
+                transactions: periodTransactions,
+                expenseCategoryBreakdown: expensesByCategory,
+              },
+              format
+            )
+          }
+        />
       )}
     </div>
   );

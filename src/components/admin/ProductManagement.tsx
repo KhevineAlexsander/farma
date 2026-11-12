@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   ArrowRight,
   FileSpreadsheet,
+  Printer,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
@@ -42,6 +43,8 @@ import {
 } from '../../utils/productDeduplication';
 import { DatabaseBackupModal } from './DatabaseBackupModal';
 import { LabelGeneratorModal } from './LabelGeneratorModal';
+import { ReportPrintModal } from './ReportPrintModal';
+import { buildProductsReportHtml } from '../../utils/reportPrintUtils';
 import { Tags } from 'lucide-react';
 import { exportProductsReportToExcel } from '../../utils/exportUtils';
 
@@ -83,6 +86,7 @@ export const ProductManagement: React.FC = () => {
     }
   };
   const isMasterAdmin = currentUser?.isMaster || currentUser?.email?.toLowerCase().trim() === 'khevineoliveira@gmail.com';
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todos');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -711,6 +715,16 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
               </button>
             </>
           )}
+
+          <button
+            type="button"
+            onClick={() => setIsPrintModalOpen(true)}
+            className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/20 transition-all cursor-pointer active:scale-95"
+            title="Imprimir relatório completo de estoque e produtos (A4, 80mm ou 50mm)"
+          >
+            <Printer className="w-4 h-4" aria-hidden="true" />
+            <span>Imprimir Estoque</span>
+          </button>
 
           <button
             type="button"
@@ -1763,6 +1777,26 @@ Hormonais & Outros,MOTS-C,10,mg,80.00`);
         isOpen={isBackupModalOpen}
         onClose={() => setIsBackupModalOpen(false)}
       />
+
+      {/* Modal de Impressão de Estoque (A4, 80mm, 50mm) */}
+      {isPrintModalOpen && (
+        <ReportPrintModal
+          title="Relatório de Produtos & Estoque"
+          subtitle={`Categoria: ${categoryFilter} • Total de ${products.length} itens`}
+          onClose={() => setIsPrintModalOpen(false)}
+          generateHtml={(format) =>
+            buildProductsReportHtml(
+              {
+                storeSettings,
+                printedBy: currentUser?.name,
+                products,
+                categoryFilter,
+              },
+              format
+            )
+          }
+        />
+      )}
     </div>
   );
 };

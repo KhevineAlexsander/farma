@@ -40,6 +40,9 @@ import { OrderHistoryTimeline } from './OrderHistoryTimeline';
 import { Order, OrderStatus, CashRegisterSession } from '../../types';
 import { PeptideVial } from '../PeptideVial';
 import { exportOrdersListToExcel, exportOrdersListToTxt } from '../../utils/exportUtils';
+import { ReportPrintModal } from './ReportPrintModal';
+import { ThermalPrintModal } from './ThermalPrintModal';
+import { buildClosedOrdersReportHtml } from '../../utils/reportPrintUtils';
 
 export interface ClosedOrdersTabProps {
   onReturnToOrders?: () => void;
@@ -61,6 +64,10 @@ export const ClosedOrdersTab: React.FC<ClosedOrdersTabProps> = ({ onReturnToOrde
 
   // Sub-views: 'closed' | 'pending' | 'report'
   const [subView, setSubView] = useState<'closed' | 'pending' | 'report'>('closed');
+
+  // Print modals
+  const [isPrintReportModalOpen, setIsPrintReportModalOpen] = useState<boolean>(false);
+  const [orderToPrint, setOrderToPrint] = useState<Order | null>(null);
 
   // Active / Selected session filter
   const [selectedSessionId, setSelectedSessionId] = useState<string>('all');
@@ -672,6 +679,15 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
           </button>
 
           <button
+            onClick={() => setIsPrintReportModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/25 cursor-pointer min-h-[36px] active:scale-95"
+            title="Imprimir relatório dos pedidos fechados / caixa (A4, 80mm ou 50mm)"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Imprimir Relatório</span>
+          </button>
+
+          <button
             onClick={handleExportExcel}
             className="px-3 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-emerald-300 hover:text-white border border-emerald-500/30 font-bold text-xs flex items-center gap-1.5 transition-all shadow-md cursor-pointer min-h-[36px]"
             title="Exportar pedidos fechados para planilha Excel (.xlsx)"
@@ -1215,6 +1231,19 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
                               <span>Relatório WhatsApp</span>
                             </button>
 
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOrderToPrint(order);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600/90 hover:bg-blue-500 text-white font-semibold text-xs transition-colors shadow-xs cursor-pointer"
+                              title="Imprimir cupom/recibo do pedido (A4, 80mm ou 50mm)"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Imprimir</span>
+                            </button>
+
                             {cleanPhone && (
                               <a
                                 href={`https://wa.me/55${cleanPhone}?text=${chargeMsg}`}
@@ -1274,6 +1303,14 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
               </div>
 
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIsPrintReportModalOpen(true)}
+                  className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-blue-500/25 active:scale-95"
+                  title="Imprimir demonstrativo de fechamento de caixa (A4, 80mm ou 50mm)"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir Caixa</span>
+                </button>
                 <button
                   onClick={handleExportExcel}
                   className="px-3.5 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
@@ -1581,6 +1618,16 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             {/* Footer Buttons */}
             <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setOrderToPrint(selectedOrder)}
+                  className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/25 flex items-center gap-1.5 cursor-pointer"
+                  title="Imprimir cupom/recibo do pedido (A4, 80mm ou 50mm)"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Imprimir Pedido</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => handleOpenOrderSummaryModal(selectedOrder)}
@@ -2064,6 +2111,41 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
             </div>
           </div>
         </div>
+      )}
+      {/* Modal de Impressão do Relatório de Caixa (A4, 80mm, 50mm) */}
+      {isPrintReportModalOpen && (
+        <ReportPrintModal
+          title={`Fechamento de Caixa: ${activeSessionDetails?.name || 'Todos os Caixas'}`}
+          subtitle={`Total de ${filteredClosedOrders.length} pedidos apurados`}
+          onClose={() => setIsPrintReportModalOpen(false)}
+          generateHtml={(format) =>
+            buildClosedOrdersReportHtml(
+              {
+                storeSettings,
+                printedBy: currentUser?.name,
+                sessionTitle: activeSessionDetails?.name || 'Todos os Caixas Fechados',
+                session: activeSessionDetails,
+                orders: filteredClosedOrders,
+                totals: {
+                  totalRevenue: metrics.totalRevenue,
+                  totalPaid: metrics.totalPaid,
+                  totalPending: metrics.totalPending,
+                  ordersCount: metrics.totalOrders,
+                  paymentMethodsBreakdown: metrics.paymentMethodsMap,
+                },
+              },
+              format
+            )
+          }
+        />
+      )}
+
+      {/* Modal de Impressão de Pedido Individual (A4, 80mm, 50mm) */}
+      {orderToPrint && (
+        <ThermalPrintModal
+          order={orderToPrint}
+          onClose={() => setOrderToPrint(null)}
+        />
       )}
     </div>
   );

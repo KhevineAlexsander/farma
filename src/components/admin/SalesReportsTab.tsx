@@ -39,6 +39,7 @@ import {
   FileSpreadsheet,
   FileText,
   Download,
+  Printer,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Order } from '../../types';
@@ -46,6 +47,8 @@ import {
   exportSalesReportToExcel,
   exportSalesReportToTxt,
 } from '../../utils/exportUtils';
+import { ReportPrintModal } from './ReportPrintModal';
+import { buildSalesReportHtml } from '../../utils/reportPrintUtils';
 import {
   normalizeProductName,
   normalizeDosage,
@@ -58,7 +61,9 @@ export interface SalesReportsTabProps {
 }
 
 export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrder }) => {
-  const { orders, products, storeSettings, saveAllOrdersToCloud, refreshSalesData, showToast, updateOrderStatus } = useApp();
+  const { orders, products, storeSettings, saveAllOrdersToCloud, refreshSalesData, showToast, updateOrderStatus, currentUser } = useApp();
+
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
 
   // Period and Status filters (Padrão: Caixa Aberto / Pós-Fechamento)
   const [timeFilter, setTimeFilter] = useState<'caixa_aberto' | 'today' | 'yesterday' | 'week' | 'month' | 'last_month' | 'all'>('caixa_aberto');
@@ -1111,8 +1116,17 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
               ))}
             </div>
 
-            {/* Action Buttons: WhatsApp, Excel, TXT & Refresh */}
+            {/* Action Buttons: Imprimir, WhatsApp, Excel, TXT & Refresh */}
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto shrink-0">
+              <button
+                onClick={() => setIsPrintModalOpen(true)}
+                className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-400 text-white font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-blue-500/25 cursor-pointer min-h-[38px] whitespace-nowrap active:scale-95"
+                title="Imprimir relatório completo de vendas (A4, 80mm ou 50mm)"
+              >
+                <Printer className="w-3.5 h-3.5 shrink-0" />
+                <span>Imprimir Relatório</span>
+              </button>
+
               <button
                 onClick={() => setIsWhatsAppModalOpen(true)}
                 className="flex-1 sm:flex-initial px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-black text-xs flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-500/20 cursor-pointer min-h-[38px] whitespace-nowrap"
@@ -2823,6 +2837,32 @@ export const SalesReportsTab: React.FC<SalesReportsTabProps> = ({ onOpenEditOrde
             </div>
           </div>
         </div>
+      )}
+      {/* Modal de Impressão (A4, 80mm, 50mm) */}
+      {isPrintModalOpen && (
+        <ReportPrintModal
+          title="Relatório de Vendas"
+          subtitle={`Período: ${activePeriodLabel} • Filtro: ${activeStatusLabel}`}
+          onClose={() => setIsPrintModalOpen(false)}
+          generateHtml={(format) =>
+            buildSalesReportHtml(
+              {
+                storeSettings,
+                printedBy: currentUser?.name,
+                periodLabel: activePeriodLabel,
+                statusFilterLabel: activeStatusLabel,
+                orders: filteredOrders,
+                rankedProducts:
+                  allPeriodRankedProducts && allPeriodRankedProducts.length > 0
+                    ? allPeriodRankedProducts
+                    : rankedProducts,
+                rankedCustomers,
+                metrics,
+              },
+              format
+            )
+          }
+        />
       )}
     </div>
   );
