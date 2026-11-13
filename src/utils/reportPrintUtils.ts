@@ -1409,3 +1409,363 @@ export function buildOrderPrintHtml(order: Order, options: OrderPrintOptions, fo
 </html>`;
 }
 
+// =========================================================================
+// 6. RELATÓRIO DE PREPARAÇÃO / SEPARAÇÃO DE PEDIDOS ATIVOS DO CAIXA
+// =========================================================================
+export interface ActiveOrdersReportPrintOptions extends BasePrintOptions {
+  orders: Order[];
+  title?: string;
+  subtitle?: string;
+  metrics?: {
+    totalRevenue: number;
+    totalPaid: number;
+    totalPending: number;
+  };
+}
+
+export function buildActiveOrdersPreparationReportHtml(
+  options: ActiveOrdersReportPrintOptions,
+  format: ReportPrintFormat
+): string {
+  const {
+    orders,
+    storeSettings,
+    storeName = storeSettings?.storeName || 'Glow Imports Farma',
+    printedBy,
+    title = 'RELATÓRIO DE PEDIDOS ATIVOS (CAIXA ABERTO)',
+    subtitle = 'Guia de Preparação e Separação de Pedidos dos Clientes',
+    metrics,
+  } = options;
+
+  const nowFormatted = formatDateTime(new Date());
+  const css = getBaseCss(format);
+  const contacts = [
+    storeSettings?.whatsappDisplay ? `WhatsApp: ${storeSettings.whatsappDisplay}` : '',
+  ].filter(Boolean);
+
+  // Consolidação de Produtos a Separar / Fazer
+  const productMap = new Map<
+    string,
+    { name: string; dosage: string; totalQty: number; ordersCount: number; orderNumbers: string[] }
+  >();
+
+  let totalItemsCount = 0;
+  orders.forEach((o) => {
+    (o.items || []).forEach((item) => {
+      const pName = item.product?.name || 'Produto sem nome';
+      const pDosage = item.product?.dosage || '';
+      const key = `${pName.trim().toLowerCase()}_${pDosage.trim().toLowerCase()}`;
+      const qty = item.quantity || 1;
+      totalItemsCount += qty;
+
+      if (!productMap.has(key)) {
+        productMap.set(key, {
+          name: pName,
+          dosage: pDosage,
+          totalQty: 0,
+          ordersCount: 0,
+          orderNumbers: [],
+        });
+      }
+      const pData = productMap.get(key)!;
+      pData.totalQty += qty;
+      pData.ordersCount += 1;
+      if (!pData.orderNumbers.includes(o.orderNumber)) {
+        pData.orderNumbers.push(o.orderNumber);
+      }
+    });
+  });
+
+  const consolidatedProducts = Array.from(productMap.values()).sort((a, b) => b.totalQty - a.totalQty);
+
+  const totalRevenue =
+    metrics?.totalRevenue ?? orders.reduce((acc, o) => acc + (o.status !== 'Cancelado' ? Number(o.total || 0) : 0), 0);
+  const totalPaid =
+    metrics?.totalPaid ??
+    orders.reduce((acc, o) => {
+      if (o.status === 'Cancelado') return acc;
+      return acc + (o.paidAmount ?? (['Pago', 'Entregue', 'Enviado'].includes(o.status) ? Number(o.total || 0) : 0));
+    }, 0);
+  const totalPending =
+    metrics?.totalPending ??
+    orders.reduce((acc, o) => {
+      if (o.status === 'Cancelado') return acc;
+      const paid = o.paidAmount ?? (['Pago', 'Entregue', 'Enviado'].includes(o.status) ? Number(o.total || 0) : 0);
+      return acc + Math.max(0, Number(o.total || 0) - paid);
+    }, 0);
+
+  if (format === 'a4') {
+    return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)} - ${escapeHtml(storeName)}</title>
+  <style>
+    ${css}
+    .prep-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: #fff;
+      page-break-inside: avoid;
+    }
+    .prep-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+    }
+    .check-box {
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid #0f172a;
+      display: inline-block;
+      border-radius: 3px;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    .badge-status {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border: 1px solid #0f172a;
+    }
+  </style>
+</head>
+<body>
+  <div class="page-container">
+    <div class="report-header">
+      <div>
+        <div class="brand-title">${escapeHtml(storeName)}</div>
+        <div class="brand-subtitle">${escapeHtml(contacts.join(' • '))}</div>
+      </div>
+      <div>
+        <div class="report-badge">${escapeHtml(title)}</div>
+        <div class="meta-box">${escapeHtml(subtitle)}</div>
+        <div class="meta-box">Emissão: ${escapeHtml(nowFormatted)}${printedBy ? ` • Operador: ${escapeHtml(printedBy)}` : ''}</div>
+      </div>
+    </div>
+
+    <!-- KPIs do Caixa Aberto -->
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-title">Pedidos no Caixa</div>
+        <div class="kpi-value">${orders.length} pedidos</div>
+        <div class="kpi-sub">Sessão ativa em andamento</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Itens / Frascos a Fazer</div>
+        <div class="kpi-value" style="color:#0284c7">${totalItemsCount} unidades</div>
+        <div class="kpi-sub">${consolidatedProducts.length} produtos diferentes</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Faturamento do Caixa</div>
+        <div class="kpi-value">${formatCurrency(totalRevenue)}</div>
+        <div class="kpi-sub">Total bruto dos pedidos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-title">Quitado / Pendente</div>
+        <div class="kpi-value" style="color:#059669">${formatCurrency(totalPaid)}</div>
+        <div class="kpi-sub" style="color:#e11d48">Pendente: ${formatCurrency(totalPending)}</div>
+      </div>
+    </div>
+
+    <!-- SEÇÃO 1: ROMANEIO DE SEPARAÇÃO (PRODUTOS CONSOLIDADOS A PREPARAR) -->
+    <div class="section-heading">
+      <span>📦 1. GUIA DE SEPARAÇÃO & PRODUÇÃO CONSOLIDADA (TOTAL A SEPARAR)</span>
+      <span style="font-size:9.5px;color:#64748b;text-transform:none">Marque [X] conforme for separando do estoque</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:40px" class="text-center">Sep.</th>
+          <th>Produto & Substância</th>
+          <th style="width:130px">Dosagem</th>
+          <th class="text-center" style="width:100px">QTD TOTAL</th>
+          <th class="text-center" style="width:90px">Em Pedidos</th>
+          <th>Nos Pedidos Nº</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${consolidatedProducts.map((p) => `<tr>
+          <td class="text-center"><span class="check-box"></span></td>
+          <td class="font-bold">${escapeHtml(p.name)}</td>
+          <td>${escapeHtml(p.dosage || '—')}</td>
+          <td class="text-center font-bold" style="font-size:12px;color:#0284c7;">${p.totalQty} un</td>
+          <td class="text-center">${p.ordersCount}x</td>
+          <td style="font-size:9px;color:#475569;">${escapeHtml(p.orderNumbers.join(', '))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+
+    <!-- SEÇÃO 2: DETALHAMENTO DE CADA PEDIDO DOS CLIENTES -->
+    <div class="section-heading" style="margin-top:20px;">
+      <span>📋 2. RELAÇÃO INDIVIDUAL DE PEDIDOS ATIVOS (${orders.length} PEDIDOS)</span>
+      <span style="font-size:9.5px;color:#64748b;text-transform:none">Separar, etiquetar e montar pacotes</span>
+    </div>
+
+    ${orders.map((o, idx) => {
+      const a = o.address;
+      const addrStr = [
+        [a?.street, a?.number].filter(Boolean).join(', ') + (a?.complement ? ` (${a.complement})` : ''),
+        [a?.neighborhood, a?.city, a?.state].filter(Boolean).join(' - '),
+        a?.zipCode ? `CEP: ${a.zipCode}` : '',
+      ].filter(Boolean).join(' | ');
+
+      const orderItems = o.items || [];
+      const orderUnits = orderItems.reduce((acc, it) => acc + (it.quantity || 1), 0);
+
+      return `
+        <div class="prep-box">
+          <div class="prep-header">
+            <div>
+              <span class="check-box"></span>
+              <strong style="font-size:12px;">#${idx + 1} • Pedido ${escapeHtml(o.orderNumber)}</strong>
+              <span style="color:#64748b;font-size:10px;margin-left:8px;">${formatDateTime(o.createdAt)}</span>
+            </div>
+            <div>
+              <span class="badge-status">${escapeHtml(o.status)}</span>
+              <span style="margin-left:8px;font-weight:800;font-size:12px;">${formatCurrency(o.total || 0)}</span>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:10px;margin-bottom:6px;font-size:10px;">
+            <div>
+              <div><strong>Cliente:</strong> ${escapeHtml(o.customer?.name || 'Cliente')}</div>
+              ${o.customer?.phone ? `<div><strong>WhatsApp/Tel:</strong> ${escapeHtml(o.customer.phone)}</div>` : ''}
+              ${o.customer?.cpf ? `<div><strong>CPF:</strong> ${escapeHtml(o.customer.cpf)}</div>` : ''}
+            </div>
+            <div>
+              <div><strong>Entrega:</strong> ${escapeHtml(addrStr || 'Retirada no balcão')}</div>
+              <div><strong>Pagamento:</strong> ${escapeHtml(o.paymentMethod || 'A Combinar')}</div>
+            </div>
+          </div>
+
+          <table style="margin-bottom:4px;font-size:10px;">
+            <thead>
+              <tr>
+                <th style="width:30px" class="text-center">OK</th>
+                <th style="width:50px" class="text-center">Qtd</th>
+                <th>Item / Descrição</th>
+                <th style="width:110px">Dosagem</th>
+                <th class="text-right" style="width:90px">Total Item</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orderItems.map((it) => {
+                const qty = it.quantity || 1;
+                const pPrice = it.product?.price || 0;
+                return `<tr>
+                  <td class="text-center"><span class="check-box" style="width:12px;height:12px;"></span></td>
+                  <td class="text-center font-bold" style="color:#0284c7;">${qty}x</td>
+                  <td class="font-bold">${escapeHtml(it.product?.name || 'Produto')}</td>
+                  <td>${escapeHtml(it.product?.dosage || '—')}</td>
+                  <td class="text-right">${formatCurrency(pPrice * qty)}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+
+          ${o.notes ? `
+            <div style="margin-top:4px;padding:4px 8px;background:#f8fafc;border-left:3px solid #0284c7;font-size:9.5px;color:#334155;">
+              <strong>Observação do Pedido:</strong> ${escapeHtml(o.notes)}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('')}
+
+    <div class="footer-note">
+      <span>Relatório de separação e expedição para o caixa ativo da farmácia.</span>
+      <span>Impresso em ${escapeHtml(nowFormatted)}</span>
+    </div>
+
+    <div class="signature-block">
+      <div class="signature-line">Conferência / Separação</div>
+      <div class="signature-line">Expedição / Entrega</div>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  // Térmicas (80mm ou 50mm)
+  return `<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)}</title>
+  <style>${css}</style>
+</head>
+<body>
+  <div class="center">
+    <div class="store">${escapeHtml(storeName)}</div>
+    ${contacts.map((c) => `<div class="muted">${escapeHtml(c)}</div>`).join('')}
+    <div class="report-title">PEDIDOS DO CAIXA ATIVO</div>
+    <div class="muted">GUIA DE SEPARAÇÃO / PRODUÇÃO</div>
+    <div class="muted">${orders.length} pedidos • ${totalItemsCount} itens</div>
+    <div class="muted">Impresso: ${escapeHtml(nowFormatted)}</div>
+  </div>
+
+  <div class="divider-double"></div>
+
+  <div class="section-title">RESUMO DO CAIXA</div>
+  <div class="row large"><span>FATURAMENTO:</span><span class="val">${formatCurrency(totalRevenue)}</span></div>
+  <div class="row"><span>Total Recebido:</span><span class="val">${formatCurrency(totalPaid)}</span></div>
+  <div class="row"><span>Saldo a Receber:</span><span class="val">${formatCurrency(totalPending)}</span></div>
+  <div class="row bold"><span>Total de Frascos:</span><span class="val">${totalItemsCount} un</span></div>
+
+  <div class="divider"></div>
+  <div class="section-title">1. TOTAL A SEPARAR (ROMANEIO)</div>
+  ${consolidatedProducts.map((p) => `
+    <div class="item-block">
+      <div class="row small">
+        <span class="item-name">[ ] ${p.totalQty}x ${escapeHtml(p.name)}</span>
+        <span class="val">${escapeHtml(p.dosage || '')}</span>
+      </div>
+      <div class="muted" style="font-size:0.82em">P/ pedidos: ${escapeHtml(p.orderNumbers.join(', '))}</div>
+    </div>
+  `).join('')}
+
+  <div class="divider-double"></div>
+  <div class="section-title">2. PEDIDOS DOS CLIENTES (${orders.length})</div>
+  ${orders.map((o) => `
+    <div class="item-block" style="border-bottom:1px dashed #000;padding-bottom:1.5mm;margin-bottom:2mm;">
+      <div class="row">
+        <span class="item-name">#${escapeHtml(o.orderNumber)} - ${escapeHtml(o.customer?.name || 'Cliente')}</span>
+        <span class="val">${formatCurrency(o.total || 0)}</span>
+      </div>
+      <div class="muted" style="font-size:0.82em">${escapeHtml(o.status)} • ${escapeHtml(o.paymentMethod || 'A Combinar')}</div>
+      ${o.customer?.phone ? `<div class="muted" style="font-size:0.82em">Tel: ${escapeHtml(o.customer.phone)}</div>` : ''}
+      <div style="margin-top:1mm;">
+        ${(o.items || []).map((it) => `
+          <div class="row small">
+            <span>[ ] ${it.quantity}x ${escapeHtml(it.product?.name || 'Item')} ${it.product?.dosage ? `(${escapeHtml(it.product.dosage)})` : ''}</span>
+          </div>
+        `).join('')}
+      </div>
+      ${o.notes ? `<div class="muted" style="font-size:0.8em;font-style:italic;margin-top:0.5mm;">Obs: ${escapeHtml(o.notes)}</div>` : ''}
+    </div>
+  `).join('')}
+
+  <div class="divider"></div>
+  <div class="center muted">
+    <div>Fim da Listagem de Preparação</div>
+    <div>${escapeHtml(nowFormatted)}${printedBy ? ` • ${escapeHtml(printedBy)}` : ''}</div>
+  </div>
+
+  <div class="footer-signatures">
+    <div class="line-sign"></div>
+    <div class="muted">Conferente / Farmacêutico</div>
+  </div>
+</body>
+</html>`;
+}
+
+

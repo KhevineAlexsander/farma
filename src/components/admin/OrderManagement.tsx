@@ -54,6 +54,8 @@ import { PeptideVial } from '../PeptideVial';
 import { DatabaseBackupModal } from './DatabaseBackupModal';
 import { OrderHistoryTimeline } from './OrderHistoryTimeline';
 import { ThermalPrintModal } from './ThermalPrintModal';
+import { ReportPrintModal } from './ReportPrintModal';
+import { buildActiveOrdersPreparationReportHtml } from '../../utils/reportPrintUtils';
 import {
   exportOrdersListToExcel,
   exportOrdersListToTxt,
@@ -785,6 +787,8 @@ export const OrderManagement: React.FC<OrderManagementProps> = ({
 
   // Impressão térmica (cupom do pedido)
   const [printOrder, setPrintOrder] = useState<Order | null>(null);
+  // Modal de impressão do relatório de pedidos do caixa ativo (preparação e separação)
+  const [isPrintActiveOrdersModalOpen, setIsPrintActiveOrdersModalOpen] = useState(false);
 
   // WhatsApp Debt Collection (Cobrança de Pagamento Parcial & Vencimento) Modal State
   const [chargeOrder, setChargeOrder] = useState<Order | null>(null);
@@ -1693,6 +1697,15 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
           </button>
 
           <button
+            onClick={() => setIsPrintActiveOrdersModalOpen(true)}
+            className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-md shadow-blue-500/25 cursor-pointer min-h-[36px] active:scale-95"
+            title="Imprimir relatório e guia de separação de todos os pedidos ativos do caixa (A4, 80mm ou 50mm)"
+          >
+            <Printer className="w-3.5 h-3.5" />
+            <span>Imprimir Caixa</span>
+          </button>
+
+          <button
             onClick={handleExportOrdersExcel}
             className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer min-h-[36px]"
             title="Exportar pedidos da listagem em planilha Excel (.xlsx)"
@@ -1765,6 +1778,15 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
           </div>
 
           <div className="flex items-center gap-2 self-stretch sm:self-auto shrink-0 flex-wrap">
+            <button
+              onClick={() => setIsPrintActiveOrdersModalOpen(true)}
+              className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-500 hover:from-blue-500 hover:to-indigo-400 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md shadow-blue-500/25 cursor-pointer min-h-[36px] transition-all active:scale-95"
+              title="Imprimir relatório e guia de separação de todos os pedidos ativos do caixa para fazer os pedidos dos clientes (A4, 80mm ou 50mm)"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Imprimir Pedidos Ativos</span>
+            </button>
+
             <button
               onClick={() => {
                 setCloseCashPassword('');
@@ -5089,6 +5111,32 @@ ${order.notes ? `📝 *Observações:* ${order.notes}\n` : ''}Atenciosamente,
       {/* Modal: Impressão do Pedido em Impressora Térmica */}
       {printOrder && (
         <ThermalPrintModal order={printOrder} onClose={() => setPrintOrder(null)} />
+      )}
+
+      {/* Modal: Relatório de Impressão dos Pedidos do Caixa Ativo (A4, 80mm, 50mm) */}
+      {isPrintActiveOrdersModalOpen && (
+        <ReportPrintModal
+          title="Pedidos do Caixa Ativo • Separação de Pedidos"
+          subtitle={`Total de ${activeOrders.length} pedidos ativos • R$ ${activeOrdersRevenue.toFixed(2).replace('.', ',')}`}
+          onClose={() => setIsPrintActiveOrdersModalOpen(false)}
+          generateHtml={(format) =>
+            buildActiveOrdersPreparationReportHtml(
+              {
+                orders: activeOrders,
+                storeSettings,
+                printedBy: currentUser?.name,
+                title: 'RELATÓRIO DE PEDIDOS DO CAIXA ATIVO',
+                subtitle: 'Guia de Preparação e Separação de Pedidos dos Clientes',
+                metrics: {
+                  totalRevenue: activeOrdersRevenue,
+                  totalPaid: activeOrdersPaid,
+                  totalPending: activeOrdersPending,
+                },
+              },
+              format
+            )
+          }
+        />
       )}
 
       {/* Modal: Alerta de Vencimento & Cobrança WhatsApp (Pago Parcial / Pendente) */}
